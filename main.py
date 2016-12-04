@@ -1,5 +1,10 @@
 """
 Update Wikidata and Wikipedia entries using data from github
+
+For free software projects with a github repository listed in wikidata, this script collects will collect the following
+metadata from the github API
+ - latest release + release date
+ - project website
 """
 
 import json
@@ -32,7 +37,91 @@ class Settings:
 
     @staticmethod
     def github_repo_to_api(url):
-        return url.replace("https://github.com/", "https://api.github.com/repos/")
+        """Converts a github repoository url to the api entry with the general information"""
+        return Settings.normalize_url(url) \
+            .replace("https://github.com/", "https://api.github.com/repos/")
+
+    @staticmethod
+    def github_repo_to_api_releases(url):
+        """Converts a github repoository url to the api entry with the releases"""
+        return Settings.normalize_url(url) \
+                   .replace("https://github.com/", "https://api.github.com/repos/") + "/releases"
+
+    @staticmethod
+    def normalize_url(url):
+        """
+        Canonical urls be like: no slash, no file extension
+
+        :param url:
+        :return:
+        """
+        url = url.strip("/")
+        if url.endswith('.git'):
+            url = url[:-4]
+        return url
+
+    @staticmethod
+    def normalize_version(version):
+        if version[0] == "v":
+            version = version[1:]
+        return version
+
+    @staticmethod
+    def get_or_create_claim(repo, item, p_value, new_value):
+        if p_value in item.claims:
+            all_claims = item.claims[p_value]
+        else:
+            all_claims = []
+
+        for claim in all_claims:
+            if claim.getTarget() == new_value:
+                break
+        else:
+            print("Adding {}".format(p_value))
+            claim = pywikibot.Claim(repo, p_value)
+            claim.setTarget(new_value)
+            item.addClaim(claim)
+
+        return claim
+
+    @staticmethod
+    def get_or_create_qualifiers(repo, claim, p_value, new_value):
+        if p_value in claim.qualifiers:
+            all_qualifiers = claim.qualifiers[p_value]
+        else:
+            all_qualifiers = []
+
+        for qualifier in all_qualifiers:
+            if qualifier.getTarget() == new_value:
+                break
+        else:
+            print("Adding {}".format(p_value))
+            qualifier = pywikibot.Claim(repo, p_value)
+            qualifier.setTarget(new_value)
+            claim.addQualifier(qualifier)
+
+        return qualifier
+
+    @staticmethod
+    def get_or_create_sources(repo, claim, p_value, new_value):
+        if claim.sources and p_value in claim.sources[0]:
+            all_sources = claim.sources[0][p_value]
+        else:
+            all_sources = []
+
+        print(all_sources)
+        for source in all_sources:
+            print(source.getTarget())
+            print(new_value)
+            if source.getTarget() == new_value:
+                break
+        else:
+            print("Adding {}".format(p_value))
+            source = pywikibot.Claim(repo, p_value)
+            source.setTarget(new_value)
+            claim.addSource(source)
+
+        return source
 
 
 def get_path_from_url(url_raw):
@@ -53,6 +142,7 @@ def get_path_from_url(url_raw):
 
 
 def get_request_cached(url):
+    print("Loading from cache {}".format(url))
     filepath = get_path_from_url(url)
     if os.path.isfile(filepath):
         with open(filepath) as f:
@@ -93,45 +183,55 @@ def query_projects():
 
 
 def get_data_from_github(url):
+    """
+    Retrieve the following data from github. Sets it to None if none was given
+     - website / homepage
+     - version number string and release date of all stable releases
+     - version number string and release date of all prereleases
+
+    :param url: The url of the github repository
+    :return: array with dicts
+    """
     github_properties = {}
 
     # General project information
-    project_info = get_request_cached(url)
+    project_info = get_request_cached(Settings.github_repo_to_api(url))
     github_properties["website"] = project_info["homepage"]
 
-    # Latest stable release
-    releases = get_request_cached(url + "/releases")
-
-    github_properties["stable_release_version"] = None
-    github_properties["stable_release_date"] = None
-    for i in releases:
-        if not i["prerelease"]:
-            github_properties["stable_release_version"] = i["name"]
-            github_properties["stable_release_date"] = i["published_at"]
+    # Get all pages of the release information
+    url = Settings.github_repo_to_api_releases(url)
+    page_number = 1
+    releases = []
+    while 1:
+        page = get_request_cached(url + "?page=" + str(page_number))
+        if not page:
             break
+        page_number += 1
+        releases += page
 
-    # Find the latest prelease
-    github_properties["pre_release_version"] = None
-    github_properties["pre_release_date"] = None
-    for i in releases:
-        if i["prerelease"]:
-            github_properties["pre_release_version"] = i["name"]
-            github_properties["pre_release_date"] = i["published_at"]
-            break
+    github_properties["stable_release"] = []
+    github_properties["pre_release"] = []
 
-    # Parse release date
-    for key in ["stable_release", "pre_release"]:
-        if not github_properties[key + "_date"]:
-            continue
+    # (pre)release versions and dates
+    for release in releases:
+        if release["prerelease"]:
+            prefix = "pre_release"
+        else:
+            prefix = "stable_release"
 
-        print(" --- " + key)
+        version = release["name"]
+        if version == "":
+            version = release["tag_name"]
+        version = Settings.normalize_version(version)
 
-        date = pywikibot.WbTime.fromTimestr(github_properties[key + "_date"])
+        # Convert github's timestamps to wikidata dates
+        date = pywikibot.WbTime.fromTimestr(release["published_at"])
         date.hour = 0
         date.minute = 0
         date.second = 0
         date.precision = pywikibot.WbTime.PRECISION["day"]
-        github_properties[key + "_date"] = date
+
+        github_properties[prefix].append({"version": version, "date": date})
 
     return github_properties
 
@@ -143,13 +243,9 @@ def update_wikidata(combined_properties):
     :param combined_properties: dict
     :return:
     """
-    print(" - " + combined_properties["projectLabel"])
+    print("### Wikidata")
     url_raw = combined_properties["repo"]
-
-    # Canonical urls be like: no slash, no file extension
-    url_normalized = url_raw.strip("/")
-    if url_normalized.endswith('.git'):
-        url_normalized = url_normalized[:-4]
+    url_normalized = Settings.normalize_url(url_raw)
 
     site = Settings.get_wikidata()
     repo = site.data_repository()
@@ -157,11 +253,9 @@ def update_wikidata(combined_properties):
     item = pywikibot.ItemPage(repo, title=q_value)
     item.get()
 
-    url_api = url_normalized.replace("https://github.com/", "https://api.github.com/repos/")
-
     # Canonicalize the github url
     if url_raw != url_normalized:
-        print("Adding GitHub url")
+        print("Normalizing GitHub url")
 
         if Settings.source_code_repo_p in item.claims and \
                         len(item.claims[Settings.source_code_repo_p]) != 1:
@@ -172,50 +266,26 @@ def update_wikidata(combined_properties):
         claim = pywikibot.Claim(repo, Settings.source_code_repo_p)
         claim.setTarget(url_normalized)
         claim.setSnakType('value')
-        print(claim)
         item.addClaim(claim)
         if len(item.claims[Settings.source_code_repo_p]) > 1:
             print("Removing old item")
             item.removeClaims(item.claims[Settings.source_code_repo_p][0])
 
-    # Add website from github
-    if Settings.website_p in item.claims:
-        websites = [i.getTarget() for i in item.claims[Settings.website_p]]
-    else:
-        websites = []
+    if combined_properties["website"] != "":
+        claim = Settings.get_or_create_claim(repo, item, Settings.website_p,
+                                             combined_properties["website"])
+        Settings.get_or_create_sources(repo, claim, Settings.reference_url_p,
+                                       Settings.github_repo_to_api(url_normalized))
 
-    if combined_properties["website"] not in websites:
-        print("Adding Website")
-        # Don't remove existing website, they might also be true
-        claim = pywikibot.Claim(repo, Settings.website_p)
-        claim.setTarget(combined_properties["website"])
-        print(claim)
-        item.addClaim(claim)
+    # Add latest stable release
+    for release in combined_properties["stable_release"]:
+        claim = Settings.get_or_create_claim(repo, item, Settings.software_version_p,
+                                             release["version"])
 
-        source_claim = pywikibot.Claim(repo, Settings.reference_url_p)
-        source_claim.setTarget(url_api)
-        claim.addSources([source_claim])
-
-    # Add latest release
-    if combined_properties["stable_release_version"]:
-        print("Adding latest release")
-        claim = pywikibot.Claim(repo, Settings.software_version_p)
-        claim.setTarget(combined_properties["stable_release_version"])
-        item.addClaim(claim)
-        print(claim)
-
-        # Add release data
-        qualifier = pywikibot.Claim(repo, Settings.release_date_p)
-        pprint(combined_properties["stable_release_date"])
-        qualifier.setTarget(combined_properties["stable_release_date"])
-        print(qualifier)
-        claim.addQualifier(qualifier)
-
-        # Add github as source
-        source_claim = pywikibot.Claim(repo, Settings.reference_url_p)
-        source_claim.setTarget(url_api)
-        print(source_claim)
-        claim.addSources([source_claim])
+        Settings.get_or_create_qualifiers(repo, claim, Settings.release_date_p,
+                                          release["date"])
+        Settings.get_or_create_sources(repo, claim, Settings.reference_url_p,
+                                       Settings.github_repo_to_api_releases(url_normalized))
 
 
 def update_wikipedia(combined_properties):
@@ -225,32 +295,34 @@ def update_wikipedia(combined_properties):
     :param combined_properties: dict
     :return:
     """
-    wikipedia_tag = combined_properties["article"].replace("https://en.wikipedia.org/wiki/", "")
+    print("### Wikipedia")
+
+    q_value = combined_properties["article"].replace("https://en.wikipedia.org/wiki/", "")
     site = Settings.get_wikipedia()
-    page = pywikibot.Page(site, wikipedia_tag)
+    page = pywikibot.Page(site, q_value)
     text = page.text
     wikitext = mwparserfromhell.parse(text)
     templates = wikitext.filter_templates(recursive=True)
 
+    # Find the software info box
     for template in templates:
-        print(template.name)
         if template.name.matches("Infobox software"):
             break
     else:
-        print("No 'Infobox software' found! Skipping {}".format(wikipedia_tag))
+        print("No 'Infobox software' found! Skipping {}".format(q_value))
         return
 
     template_before_edit = str(template)
     print(template)
 
-    if combined_properties["stable_release_version"]:
-        srv = " " + combined_properties["stable_release_version"] + "\n"
+    if combined_properties["stable_release"]:
+        srv = " " + combined_properties["stable_release"][0]["version"] + "\n"
         if template.has("latest release version"):
             template.get("latest release version").value = srv
         else:
             template.add("latest release version", srv)
 
-        date = combined_properties["stable_release_date"]
+        date = combined_properties["stable_release"][0]["date"]
         date_text = "{{{{release date|{}|{}|{}}}}}".format(date.year, date.month, date.day)
         if template.has("latest release date"):
             template.get("latest release date").value = " " + date_text + "\n"
@@ -265,36 +337,34 @@ def update_wikipedia(combined_properties):
             template.add("website", srv)
 
     if str(template) != template_before_edit:
-        print("\n --- Template has been edited --- \n")
+        print("\nThe template has been edited:\n")
         print(template)
 
 
 def main():
     projects_github, projects_no_github = query_projects()
-    pprint(projects_github)
-
-    print("Processing projects without github link:")
-    for project in projects_no_github:
-        print(" - " + project["projectLabel"])
 
     print()
-    print("Processing projects with github link:")
-
-    pprint(projects_github)
+    print("Fetching data from github:")
+    combined_properties = []
 
     for project in projects_github:
         # For test wikidata
         project["project"] = "http://www.wikidata.org/entity/Q33832"
         print(" - " + project["projectLabel"])
 
-        repo = Settings.github_repo_to_api(project["repo"])
-        project_github = get_data_from_github(repo)
-        combined_properties = {**project, **project_github}
-        pprint(combined_properties)
+        project_github = get_data_from_github(project["repo"])
+        combined_properties.append({**project, **project_github})
+        pprint(combined_properties, indent=4)
 
-        update_wikidata(combined_properties)
-        update_wikipedia(combined_properties)
+    print("Updating wikidata and wikipedia")
+    for combined_property in combined_properties:
+        update_wikidata(combined_property)
+        update_wikipedia(combined_property)
 
+    print("Processing projects without github link:")
+    for project in projects_no_github:
+        print("## " + project["projectLabel"])
 
 if __name__ == '__main__':
     main()
