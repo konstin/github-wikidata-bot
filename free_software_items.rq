@@ -1,0 +1,21 @@
+PREFIX schema: <http://schema.org/>
+
+SELECT ?project ?projectLabel ?article ?repo WHERE {
+  # Free Software projects
+  ?project p:P31/ps:P31 wd:Q341.
+
+  OPTIONAL { ?project wdt:P1324 ?repo. }
+
+  # Exclude projects not hosted on github
+  # FILTER(!BOUND(?repo) || STRSTARTS(STR(?repo), "https://github.com/")).
+  FILTER(STRSTARTS(STR(?repo), "https://github.com/Leaflet")).
+
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
+
+  # Get the corresponding wikipedia page
+  ?article schema:about ?project .
+  ?article schema:inLanguage "en" .
+  ?article schema:isPartOf <https://en.wikipedia.org/>
+}
+ORDER BY ?project
+LIMIT 20
