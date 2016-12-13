@@ -1,4 +1,4 @@
-## github to wikidata bot
+## Github to wikidata bot
 
 Update Wikidata and Wikipedia entries using metadata from github
 
