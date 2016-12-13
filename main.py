@@ -1,16 +1,27 @@
+#!/usr/bin/env python3.5
 """
-Update Wikidata and Wikipedia entries using data from github
+Update Wikidata and Wikipedia entries using metadata from github
 
-For free software projects with a github repository listed in wikidata, this script will collect the following
-metadata from the github API
+For free software projects with a github repository listed in wikidata,
+this script will collect the following metadata from the github API
  - all stable releases + release dates
  - the project website
+ - [disabled] normalize the github link
+ - [WIP] edit the wikipedia entry accordingly
+
+# Setup
+
+Generate a personal access token on github and paste it to a file called
+"github_oath_token.txt". Then run this script in a terminal and enter the
+password for the bot account.
+
+This script uses an idiomatic file cache, so if you want to get new information
+from github, delete the cache folder.
 """
 
 import json
 import os
 import re
-from pprint import pprint
 from urllib.parse import urlparse, parse_qs, urlencode
 
 import mwparserfromhell
@@ -21,9 +32,8 @@ from pywikibot.data import sparql
 
 class Settings:
     cachedir = "/home/konsti/wikidata-github/cache"
-    version_regex = r"[\w\s]*\d+(\.\d+){0,4}\w*(\s|-)?" \
-                    + r"([Bb]uild|B|rc|RC|[Aa]lpha|[Bb]eta|[Uu]pdate|RTM)?" \
-                    + r"(\s|-)?\d*(\s|-)?(\([\w\s]+\d*\))?"
+    repo_regex = re.compile(r"https://github.com/[^/]+/[^/]+")
+    version_regex = re.compile(r"\d+(\.\d+)+")
     properties = {
         "source code repository": "P1324",
         "official website": "P856",
@@ -52,8 +62,10 @@ class Settings:
     @staticmethod
     def github_repo_to_api_releases(url):
         """Converts a github repoository url to the api entry with the releases"""
-        return Settings.normalize_url(url) \
-            .replace("https://github.com/", "https://api.github.com/repos/") + "/releases"
+        url = Settings.normalize_url(url)
+        url = url.replace("https://github.com/", "https://api.github.com/repos/")
+        url += "/releases"
+        return url
 
     @staticmethod
     def normalize_url(url):
@@ -70,6 +82,13 @@ class Settings:
 
     @staticmethod
     def normalize_version(version, name):
+        """
+        Removes some of the bloat in the version strings. Note that this function is mostly useless as it has become
+        superseeded by the regex.
+        """
+        if not version:
+            return ""
+
         for i in [re.escape(name), "release", "stable", "version", "patch", r"  +"]:
             insensitive = re.compile(i, re.IGNORECASE)
             version = insensitive.sub("", version)
@@ -84,18 +103,15 @@ class Settings:
         """
         Adds a value `value` with the property `p_value` if it doesn't exist, otherwise retrives it.
         """
-        for object in all_objects:
-            if object.getTarget() == value:
-                print("Found {}".format(p_value))
+        for requested in all_objects:
+            if requested.getTarget() == value:
                 break
         else:
-            print("Adding {}".format(p_value))
-            object = pywikibot.Claim(repo, p_value)
-            object.setTarget(value)
-            return object  # TODO: Doesn't save just yet
-            method(object)
+            requested = pywikibot.Claim(repo, p_value)
+            requested.setTarget(value)
+            method(requested)
 
-        return object
+        return requested
 
     @staticmethod
     def get_or_create_claim(repo, item, p_value, value):
@@ -152,18 +168,26 @@ def get_path_from_url(url_raw):
 
 
 def get_request_cached(url, oath_token=None):
+    """
+    :param url: the url, will be serialized with all parameters and fragments
+    :param oath_token: The github personal access token
+    :return:
+    """
     filepath = get_path_from_url(url)
     if os.path.isfile(filepath):
         # print("Loading from cache {}".format(url))
         with open(filepath) as f:
             return json.load(f)
 
+    else:
+        print("not found in cache {}".format(url))
+
     response = requests.get(url, {"access_token": oath_token})
     response.raise_for_status()
     response_json = response.json()
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, 'w') as f:
-        # print("Adding to cache {}".format(url))
+        print("Adding to cache {}".format(url))
         json.dump(response_json, f)
 
     return response_json
@@ -195,7 +219,7 @@ def query_projects():
 
 def get_data_from_github(url):
     """
-    Retrieve the following data from github. Sets it to None if none was given
+    Retrieve the following data from github. Sets it to None if none was given by github
      - website / homepage
      - version number string and release date of all stable releases
      - version number string and release date of all prereleases
@@ -207,6 +231,9 @@ def get_data_from_github(url):
 
     # General project information
     project_info = get_request_cached(Settings.github_repo_to_api(url), oath_token=Settings.github_oath_token)
+    if type(project_info) == list:
+        project_info = project_info[0]
+
     github_properties["website"] = project_info["homepage"]
 
     # Get all pages of the release information
@@ -225,14 +252,17 @@ def get_data_from_github(url):
 
     # (pre)release versions and dates
     for release in releases:
+        # Heuristics to find the version number
         release_name = Settings.normalize_version(release["name"], project_info["name"])
         release_tag_name = Settings.normalize_version(release["tag_name"], project_info["name"])
-        if re.match(Settings.version_regex, release_name):
-            version = release_name
-        elif re.match(Settings.version_regex, release_tag_name):
-            version = release_tag_name
+        match_name = re.search(Settings.version_regex, release_name)
+        match_tag_name = re.search(Settings.version_regex, release_tag_name)
+        if match_name:
+            version = match_name.group(0)
+        elif match_tag_name:
+            version = match_tag_name.group(0)
         else:
-            print(" - Invalid version strings '{}' '{}'".format(release["name"], release["tag_name"]))
+            print(" - Invalid version strings '{}'".format(release["name"]))
             continue
 
         # Convert github's timestamps to wikidata dates
@@ -246,7 +276,6 @@ def get_data_from_github(url):
             prefix = "pre_release"
         else:
             prefix = "stable_release"
-            print(version)
         github_properties[prefix].append({"version": version, "date": date})
 
     return github_properties
@@ -259,23 +288,24 @@ def update_wikidata(combined_properties):
     :param combined_properties: dict
     :return:
     """
-    print("### Wikidata")
     url_raw = combined_properties["repo"]
     url_normalized = Settings.normalize_url(url_raw)
 
+    # Wikidata boilerplate
     site = Settings.get_wikidata()
     repo = site.data_repository()
     q_value = combined_properties["project"].replace("http://www.wikidata.org/entity/", "")
     item = pywikibot.ItemPage(repo, title=q_value)
     item.get()
 
+    # This does not work with a normal account
     """
     # Canonicalize the github url
     if url_raw != url_normalized:
         print("Normalizing GitHub url")
 
         if Settings.properties["source code repository"] in item.claims and \
-                        len(item.claims[Settings.properties["source code repository"]]) != 1:
+                len(item.claims[Settings.properties["source code repository"]]) != 1:
             print("Error: Multiple source code repositories")
             return
 
@@ -298,7 +328,8 @@ def update_wikidata(combined_properties):
                                        Settings.github_repo_to_api(url_normalized))
 
     # Add all stable releases
-    print("Adding all {} stable releases:".format(len(combined_properties["stable_release"])))
+    if len(combined_properties["stable_release"]) > 0:
+        print("Adding all {} stable releases:".format(len(combined_properties["stable_release"])))
     for release in combined_properties["stable_release"]:
         print(" - '{}'".format(release["version"]))
         claim = Settings.get_or_create_claim(repo, item, Settings.properties["software version"],
@@ -309,7 +340,7 @@ def update_wikidata(combined_properties):
         Settings.get_or_create_sources(repo, claim, Settings.properties["reference URL"],
                                        Settings.github_repo_to_api_releases(url_normalized))
 
-    # TODO give the latest release the preferred rank
+        # TODO give the latest release the preferred rank
 
 
 def update_wikipedia(combined_properties):
@@ -319,8 +350,6 @@ def update_wikipedia(combined_properties):
     :param combined_properties: dict
     :return:
     """
-    print("### Wikipedia")
-
     q_value = combined_properties["article"].replace("https://en.wikipedia.org/wiki/", "")
     site = Settings.get_wikipedia()
     page = pywikibot.Page(site, q_value)
@@ -366,10 +395,9 @@ def update_wikipedia(combined_properties):
 
 
 def main():
-    do_update_wikidata = False
+    do_update_wikidata = True
     do_update_wikipedia = False
 
-    print()
     print("# Query Projects")
     projects_github, projects_no_github = query_projects()
 
@@ -378,6 +406,10 @@ def main():
     print("# Projects with github link")
     for project in projects_github:
         print("## " + project["projectLabel"])
+
+        if not Settings.repo_regex.match(project["repo"]):
+            print("Skipping: {}".format(project["repo"]))
+            continue
 
         project_github = get_data_from_github(project["repo"])
         combined_property = {**project, **project_github}

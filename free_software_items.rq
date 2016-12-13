@@ -16,4 +16,4 @@ SELECT ?project ?projectLabel ?article ?repo WHERE {
   ?article schema:inLanguage "en" .
   ?article schema:isPartOf <https://en.wikipedia.org/>
 }
-ORDER BY ?project
+ORDER BY ?projectLabel
