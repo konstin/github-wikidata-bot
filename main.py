@@ -1,18 +1,22 @@
 #!/usr/bin/env python3.5
 
-import json
-import os
 import re
-from urllib.parse import urlparse, parse_qs, urlencode
 
 import mwparserfromhell
 import pywikibot
 import requests
+from cachecontrol import CacheControl
+from cachecontrol.caches import FileCache
 from pywikibot.data import sparql
+from cachecontrol.heuristics import LastModified
 
 
 class Settings:
-    cachedir = "/home/konsti/wikidata-github/cache"
+    cached_session = CacheControl(
+        requests.Session(),
+        cache=FileCache('cache', forever=True),
+        heuristic=LastModified()
+    )
     repo_regex = re.compile(r"https://github.com/[^/]+/[^/]+")
     version_regex = re.compile(r"\d+(\.\d+)+")
     properties = {
@@ -23,7 +27,9 @@ class Settings:
         "publication date": "P577"
     }
     sparql_free_software_items = "".join(open("free_software_items.rq").readlines())
-    github_oath_token = open("github_oauth_token.txt").readline().strip()
+    oauth_token_file = "github_oauth_token.txt"
+    # pywikibot is too stupid to cache the calendar model, so let's do this manually
+    calendarmodel = pywikibot.Site().data_repository().calendarmodel()
 
     @staticmethod
     def get_wikidata():
@@ -131,47 +137,10 @@ class Settings:
         return Settings._get_or_create(qualifier.addSource, all_sources, repo, p_value, value)
 
 
-def get_path_from_url(url_raw):
-    """
-    :param url_raw:
-    :return: the path to where the corresponding url is cached
-    """
-    url = urlparse(url_raw)
-    url_options = url.params
-    query = parse_qs(url.query)
-    if query != {}:
-        url_options += "?" + urlencode(query)
-    if url.fragment != "":
-        url_options += "#" + url.fragment
-    x = url.scheme + ":" + url.netloc
-    y = url.path[1:] + url_options + ".json"
-    return os.path.join(Settings.cachedir, x, y)
-
-
-def get_request_cached(url, oath_token=None):
-    """
-    :param url: the url, will be serialized with all parameters and fragments
-    :param oath_token: The github personal access token
-    :return:
-    """
-    filepath = get_path_from_url(url)
-    if os.path.isfile(filepath):
-        # print("Loading from cache {}".format(url))
-        with open(filepath) as f:
-            return json.load(f)
-
-    else:
-        print("not found in cache {}".format(url))
-
-    response = requests.get(url, {"access_token": oath_token})
+def get_json_cached(url):
+    response = Settings.cached_session.get(url)
     response.raise_for_status()
-    response_json = response.json()
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(filepath, 'w') as f:
-        print("Adding to cache {}".format(url))
-        json.dump(response_json, f)
-
-    return response_json
+    return response.json()
 
 
 def query_projects():
@@ -211,18 +180,19 @@ def get_data_from_github(url):
     github_properties = {}
 
     # General project information
-    project_info = get_request_cached(Settings.github_repo_to_api(url), oath_token=Settings.github_oath_token)
+    project_info = get_json_cached(Settings.github_repo_to_api(url))
     if type(project_info) == list:
         project_info = project_info[0]
 
-    github_properties["website"] = project_info["homepage"]
+    if "homepage" in project_info:
+        github_properties["website"] = project_info["homepage"]
 
     # Get all pages of the release information
     url = Settings.github_repo_to_api_releases(url)
     page_number = 1
     releases = []
     while 1:
-        page = get_request_cached(url + "?page=" + str(page_number), oath_token=Settings.github_oath_token)
+        page = get_json_cached(url + "?page=" + str(page_number))
         if not page:
             break
         page_number += 1
@@ -247,7 +217,7 @@ def get_data_from_github(url):
             continue
 
         # Convert github's timestamps to wikidata dates
-        date = pywikibot.WbTime.fromTimestr(release["published_at"])
+        date = pywikibot.WbTime.fromTimestr(release["published_at"], calendarmodel=Settings.calendarmodel)
         date.hour = 0
         date.minute = 0
         date.second = 0
@@ -379,6 +349,9 @@ def main():
     do_update_wikidata = True
     do_update_wikipedia = False
 
+    github_oath_token = open(Settings.oauth_token_file).readline().strip()
+    Settings.cached_session.headers.update({"Authorization": "token " + github_oath_token})
+
     print("# Query Projects")
     projects_github, projects_no_github = query_projects()
 
@@ -392,7 +365,11 @@ def main():
             print("Skipping: {}".format(project["repo"]))
             continue
 
-        project_github = get_data_from_github(project["repo"])
+        try:
+            project_github = get_data_from_github(project["repo"])
+        except requests.exceptions.HTTPError:
+            print("HTTP request for {} failed".format(project["projectLabel"]))
+            continue
         combined_property = {**project, **project_github}
 
         if do_update_wikidata:
