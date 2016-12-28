@@ -1,2 +1,3 @@
+-e git://github.com/wikimedia/pywikibot-core.git#egg=pywikibot
 mwparserfromhell
 pywikibot
