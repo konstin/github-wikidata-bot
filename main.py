@@ -7,18 +7,27 @@ import pywikibot
 import requests
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
-from pywikibot.data import sparql
 from cachecontrol.heuristics import LastModified
+from pywikibot.data import sparql
 
 
 class Settings:
+    do_update_wikidata = True
+    do_update_wikipedia = False
+
+    repo_regex = re.compile(r"https://github.com/[^/]+/[^/]+")
+    version_regex = re.compile(r"\d+(\.\d+)+")
+    sparql_free_software_items = "".join(open("free_software_items.rq").readlines())
+    oauth_token_file = "github_oauth_token.txt"
+    # pywikibot is too stupid to cache the calendar model, so let's do this manually
+    calendarmodel = pywikibot.Site().data_repository().calendarmodel()
+
     cached_session = CacheControl(
         requests.Session(),
         cache=FileCache('cache', forever=True),
         heuristic=LastModified()
     )
-    repo_regex = re.compile(r"https://github.com/[^/]+/[^/]+")
-    version_regex = re.compile(r"\d+(\.\d+)+")
+
     properties = {
         "source code repository": "P1324",
         "official website": "P856",
@@ -26,10 +35,6 @@ class Settings:
         "software version": "P348",
         "publication date": "P577"
     }
-    sparql_free_software_items = "".join(open("free_software_items.rq").readlines())
-    oauth_token_file = "github_oauth_token.txt"
-    # pywikibot is too stupid to cache the calendar model, so let's do this manually
-    calendarmodel = pywikibot.Site().data_repository().calendarmodel()
 
     @staticmethod
     def get_wikidata():
@@ -129,8 +134,13 @@ class Settings:
         """
         Gets or creates a `source` under the property `p_value` to `qualifier`
         """
-        if qualifier.sources and p_value in qualifier.sources[0]:
-            all_sources = qualifier.sources[0][p_value]
+        all_sources = []
+
+        # We could have many qualifiers, so let's
+        if qualifier.sources:
+            for i in qualifier.sources:
+                if p_value in i:
+                    all_sources.append(i[p_value][0])
         else:
             all_sources = []
 
@@ -152,19 +162,15 @@ def query_projects():
     response = wikdata_sparql.query(Settings.sparql_free_software_items)
 
     # Split the data into those with repository and those without
-    github = []
-    no_github = []
+    projects = []
     for project in response["results"]["bindings"]:
         # Ŕemove bloating type information
         for key in project.keys():
             project[key] = project[key]["value"]
 
-        if "repo" in project:
-            github.append(project)
-        else:
-            no_github.append(project)
+        projects.append(project)
 
-    return github, no_github
+    return projects
 
 
 def get_data_from_github(url):
@@ -206,6 +212,11 @@ def get_data_from_github(url):
         # Heuristics to find the version number
         release_name = Settings.normalize_version(release["name"], project_info["name"])
         release_tag_name = Settings.normalize_version(release["tag_name"], project_info["name"])
+
+        # Workaround for Activiti
+        if "Beta" in release_name or "Beta" in release_tag_name:
+            release["prerelease"] = True
+
         match_name = re.search(Settings.version_regex, release_name)
         match_tag_name = re.search(Settings.version_regex, release_tag_name)
         if match_name:
@@ -346,19 +357,16 @@ def update_wikipedia(combined_properties):
 
 
 def main():
-    do_update_wikidata = True
-    do_update_wikipedia = False
-
     github_oath_token = open(Settings.oauth_token_file).readline().strip()
     Settings.cached_session.headers.update({"Authorization": "token " + github_oath_token})
 
     print("# Query Projects")
-    projects_github, projects_no_github = query_projects()
+    projects = query_projects()
 
     print("# Fetching data from github:")
 
     print("# Projects with github link")
-    for project in projects_github:
+    for project in projects:
         print("## " + project["projectLabel"])
 
         if not Settings.repo_regex.match(project["repo"]):
@@ -370,16 +378,14 @@ def main():
         except requests.exceptions.HTTPError:
             print("HTTP request for {} failed".format(project["projectLabel"]))
             continue
+
         combined_property = {**project, **project_github}
 
-        if do_update_wikidata:
+        if Settings.do_update_wikidata:
             update_wikidata(combined_property)
-        if do_update_wikipedia:
+        if Settings.do_update_wikipedia:
             update_wikipedia(combined_property)
 
-    print("# Projects without github link:")
-    for project in projects_no_github:
-        print("## " + project["projectLabel"])
 
 if __name__ == '__main__':
     main()
