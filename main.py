@@ -92,10 +92,10 @@ class Settings:
     @staticmethod
     def _get_or_create(method, all_objects, repo, p_value, value):
         """
-        Adds a value `value` with the property `p_value` if it doesn't exist, otherwise retrives it.
+        Helper method that adds a value `value` with the property `p_value` if it doesn't exist, otherwise retrives it.
         """
         for requested in all_objects:
-            if requested.getTarget() == value:
+            if requested.target_equals(value):
                 break
         else:
             requested = pywikibot.Claim(repo, p_value)
@@ -129,21 +129,34 @@ class Settings:
         return Settings._get_or_create(claim.addQualifier, all_objects, repo, p_value, qualifier)
 
     @staticmethod
-    def get_or_create_sources(repo, qualifier, p_value, value):
+    def get_or_create_sources(repo, qualifier, value, retrieved):
         """
         Gets or creates a `source` under the property `p_value` to `qualifier`
         """
         all_sources = []
 
+        src_p = Settings.properties["reference URL"]
+        retrieved_p = Settings.properties["retrieved"]
+
         # We could have many qualifiers, so let's
         if qualifier.sources:
             for i in qualifier.sources:
-                if p_value in i:
-                    all_sources.append(i[p_value][0])
+                if src_p in i:
+                    all_sources.append(i[src_p][0])
         else:
             all_sources = []
 
-        return Settings._get_or_create(qualifier.addSource, all_sources, repo, p_value, value)
+        for src_url in all_sources:
+            if src_url.target_equals(value):
+                break
+        else:
+            src_url = pywikibot.Claim(repo, src_p)
+            src_url.setTarget(value)
+            src_retrieved = pywikibot.Claim(repo, retrieved_p)
+            src_retrieved.setTarget(retrieved)
+            qualifier.addSources([src_url, src_retrieved])
+
+        return src_url
 
 
 def get_json_cached(url):
@@ -163,7 +176,7 @@ def query_projects():
     # Split the data into those with repository and those without
     projects = []
     for project in response["results"]["bindings"]:
-        # Ŕemove bloating type information
+        # Remove bloating type information
         for key in project.keys():
             project[key] = project[key]["value"]
 
@@ -184,10 +197,14 @@ def get_data_from_github(url):
     """
     github_properties = {}
 
-    isotimestamp = pywikibot.Timestamp.now().isoformat()
-    timestamp = pywikibot.WbTime.fromTimestr(isotimestamp, calendarmodel=Settings.calendarmodel)
-
-    github_properties["retrieved"] = timestamp
+    # "retrieved" does only accept dates without time, so create a timestamp with no date
+    isotimestamp = pywikibot.Timestamp.utcnow().toISOformat()
+    date = pywikibot.WbTime.fromTimestr(isotimestamp, calendarmodel=Settings.calendarmodel)
+    date.hour = 0
+    date.minute = 0
+    date.second = 0
+    date.precision = pywikibot.WbTime.PRECISION["day"]
+    github_properties["retrieved"] = date
 
     # General project information
     project_info = get_json_cached(Settings.github_repo_to_api(url))
@@ -289,8 +306,8 @@ def update_wikidata(combined_properties):
     if combined_properties["website"] and combined_properties["website"].startswith("http"):
         claim = Settings.get_or_create_claim(repo, item, Settings.properties["official website"],
                                              combined_properties["website"])
-        Settings.get_or_create_sources(repo, claim, Settings.properties["reference URL"],
-                                       Settings.github_repo_to_api(url_normalized))
+        Settings.get_or_create_sources(repo, claim, Settings.github_repo_to_api(url_normalized),
+                                       combined_properties["retrieved"])
 
     # Add all stable releases
     if len(combined_properties["stable_release"]) > 0:
@@ -302,8 +319,8 @@ def update_wikidata(combined_properties):
 
         Settings.get_or_create_qualifiers(repo, claim, Settings.properties["publication date"],
                                           release["date"])
-        Settings.get_or_create_sources(repo, claim, Settings.properties["reference URL"],
-                                       Settings.github_repo_to_api_releases(url_normalized))
+        Settings.get_or_create_sources(repo, claim, Settings.github_repo_to_api_releases(url_normalized),
+                                       combined_properties["retrieved"])
 
         # TODO give the latest release the preferred rank
 
