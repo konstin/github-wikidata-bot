@@ -15,6 +15,8 @@ class Settings:
     do_update_wikidata = True
     do_update_wikipedia = False
 
+    wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
+
     repo_regex = re.compile(r"https://github.com/[^/]+/[^/]+")
     version_regex = re.compile(r"\d+(\.\d+)+")
     sparql_free_software_items = "".join(open("free_software_items.rq").readlines())
@@ -29,16 +31,13 @@ class Settings:
     )
 
     properties = {
-        "source code repository": "P1324",
-        "official website": "P856",
-        "reference URL": "P854",
         "software version": "P348",
-        "publication date": "P577"
+        "publication date": "P577",
+        "retrieved": "P813",
+        "reference URL": "P854",
+        "official website": "P856",
+        "source code repository": "P1324",
     }
-
-    @staticmethod
-    def get_wikidata():
-        return pywikibot.Site("wikidata", "wikidata")
 
     @staticmethod
     def get_wikipedia():
@@ -185,6 +184,11 @@ def get_data_from_github(url):
     """
     github_properties = {}
 
+    isotimestamp = pywikibot.Timestamp.now().isoformat()
+    timestamp = pywikibot.WbTime.fromTimestr(isotimestamp, calendarmodel=Settings.calendarmodel)
+
+    github_properties["retrieved"] = timestamp
+
     # General project information
     project_info = get_json_cached(Settings.github_repo_to_api(url))
     if type(project_info) == list:
@@ -254,8 +258,7 @@ def update_wikidata(combined_properties):
     url_normalized = Settings.normalize_url(url_raw)
 
     # Wikidata boilerplate
-    site = Settings.get_wikidata()
-    repo = site.data_repository()
+    repo = Settings.wikidata_repo
     q_value = combined_properties["project"].replace("http://www.wikidata.org/entity/", "")
     item = pywikibot.ItemPage(repo, title=q_value)
     item.get()

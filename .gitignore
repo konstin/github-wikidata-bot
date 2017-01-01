@@ -3,3 +3,4 @@ pywikibot.lwp
 github_oauth_token.txt
 apicache/
 cache/
+src/
