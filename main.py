@@ -9,7 +9,7 @@ from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import LastModified
 from pywikibot.data import sparql
-
+from distutils.version import LooseVersion
 
 class Settings:
     do_update_wikidata = True
@@ -305,8 +305,13 @@ def update_wikidata(properties):
         get_or_create_sources(repo, claim, github_repo_to_api(url_normalized), properties["retrieved"])
 
     # Add all stable releases
+    latest_version = None  # Mute warning
     if len(properties["stable_release"]) > 0:
         print("Adding all {} stable releases:".format(len(properties["stable_release"])))
+        latest_version = max(properties["stable_release"], key=lambda x: LooseVersion(x["version"]))
+        latest_version = latest_version["version"]
+    print(latest_version)
+
     for release in properties["stable_release"]:
         print(" - '{}'".format(release["version"]))
         claim = get_or_create_claim(repo, item, Settings.properties["software version"], release["version"])
@@ -314,7 +319,13 @@ def update_wikidata(properties):
         get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
         get_or_create_sources(repo, claim, github_repo_to_api_releases(url_normalized), properties["retrieved"])
 
-        # TODO give the latest release the preferred rank
+        # Give the latest release the preferred rank
+        if release["version"] == latest_version:
+            if claim.getRank() != 'preferred':
+                claim.changeRank('preferred')
+        else:
+            if claim.getRank() != 'normal':
+                claim.changeRank('normal')
 
 
 def update_wikipedia(combined_properties):
