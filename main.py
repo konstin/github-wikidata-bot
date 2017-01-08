@@ -11,6 +11,7 @@ from cachecontrol.heuristics import LastModified
 from pywikibot.data import sparql
 from distutils.version import LooseVersion
 
+
 class Settings:
     do_update_wikidata = True
     do_update_wikipedia = False
@@ -306,11 +307,15 @@ def update_wikidata(properties):
 
     # Add all stable releases
     latest_version = None  # Mute warning
-    if len(properties["stable_release"]) > 0:
-        print("Adding all {} stable releases:".format(len(properties["stable_release"])))
-        latest_version = max(properties["stable_release"], key=lambda x: LooseVersion(x["version"]))
-        latest_version = latest_version["version"]
-    print(latest_version)
+    if 0 < len(properties["stable_release"]):
+        if len(properties["stable_release"]) > 100:
+            print("Adding only 100 stable releases")
+            properties["stable_release"] = properties["stable_release"][:100]
+        else:
+            print("Adding all {} stable releases:".format(len(properties["stable_release"])))
+            latest_version = max(properties["stable_release"], key=lambda x: LooseVersion(x["version"]))
+            latest_version = latest_version["version"]
+            print("Latest version: {}".format(latest_version))
 
     for release in properties["stable_release"]:
         print(" - '{}'".format(release["version"]))
