@@ -325,12 +325,16 @@ def update_wikidata(properties):
         get_or_create_sources(repo, claim, github_repo_to_api_releases(url_normalized), properties["retrieved"])
 
         # Give the latest release the preferred rank
-        if release["version"] == latest_version:
-            if claim.getRank() != 'preferred':
-                claim.changeRank('preferred')
-        else:
-            if claim.getRank() != 'normal':
-                claim.changeRank('normal')
+        # And work around a bug in pywikibot
+        try:
+            if release["version"] == latest_version:
+                if claim.getRank() != 'preferred':
+                    claim.changeRank('preferred')
+            else:
+                if claim.getRank() != 'normal':
+                    claim.changeRank('normal')
+        except AssertionError:
+            print("Setting rank failed. Skipping")
 
 
 def update_wikipedia(combined_properties):
