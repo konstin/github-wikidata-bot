@@ -313,9 +313,10 @@ def update_wikidata(properties):
             properties["stable_release"] = properties["stable_release"][:100]
         else:
             print("Adding all {} stable releases:".format(len(properties["stable_release"])))
-            latest_version = max(properties["stable_release"], key=lambda x: LooseVersion(x["version"]))
-            latest_version = latest_version["version"]
-            print("Latest version: {}".format(latest_version))
+
+        latest_version = max(properties["stable_release"], key=lambda x: LooseVersion(x["version"]))
+        latest_version = latest_version["version"]
+        print("Latest version: {}".format(latest_version))
 
     for release in properties["stable_release"]:
         print(" - '{}'".format(release["version"]))
