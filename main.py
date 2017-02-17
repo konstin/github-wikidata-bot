@@ -1,5 +1,5 @@
 #!/usr/bin/env python3.5
-
+import argparse
 import re
 
 import mwparserfromhell
@@ -388,6 +388,10 @@ def update_wikipedia(combined_properties):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--filter-projects", default="")
+    args = parser.parse_args()
+
     github_oath_token = open(Settings.oauth_token_file).readline().strip()
     Settings.cached_session.headers.update({"Authorization": "token " + github_oath_token})
 
@@ -398,6 +402,9 @@ def main():
 
     print("# Projects with github link")
     for project in projects:
+        if args.filter_projects not in project["projectLabel"]:
+            continue
+
         print("## " + project["projectLabel"])
 
         if not Settings.repo_regex.match(project["repo"]):
