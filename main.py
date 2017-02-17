@@ -306,6 +306,9 @@ def update_wikidata(properties):
         get_or_create_sources(repo, claim, github_repo_to_api(url_normalized), properties["retrieved"])
 
     # Add all stable releases
+    properties["stable_release"].sort(key=lambda x: LooseVersion(x["version"]))
+    properties["stable_release"].reverse()
+
     latest_version = None  # Mute warning
     if 0 < len(properties["stable_release"]):
         if len(properties["stable_release"]) > 100:
@@ -314,8 +317,7 @@ def update_wikidata(properties):
         else:
             print("Adding all {} stable releases:".format(len(properties["stable_release"])))
 
-        latest_version = max(properties["stable_release"], key=lambda x: LooseVersion(x["version"]))
-        latest_version = latest_version["version"]
+        latest_version = properties["stable_release"][0]["version"]
         print("Latest version: {}".format(latest_version))
 
     for release in properties["stable_release"]:
