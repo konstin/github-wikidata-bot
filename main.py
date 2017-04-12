@@ -26,6 +26,7 @@ class Settings:
 
     repo_regex = re.compile(r"https://github.com/[^/]+/[^/]+")
     version_regex = re.compile(r"\d+(\.\d+)+")
+    unmarked_prerelease_regex = re.compile(r"[ -._\d](r|rc|beta|alpha)([ .\d].*)?$")
 
     cached_session = CacheControl(
         requests.Session(),
@@ -191,6 +192,8 @@ def get_data_from_github(url, properties):
      - website / homepage
      - version number string and release date of all stable releases
      - version number string and release date of all prereleases
+     
+    All data is preprocessed, i.e. the version numbers are extracted and unmarked prereleases are discovered 
 
     :param url: The url of the github repository
     :param properties: The already gathere information
@@ -249,7 +252,7 @@ def get_data_from_github(url, properties):
             print("{} ({})".format(version, original_version))
 
         # Fix missing "Release Camdiate" annotation on github
-        if not release["prerelease"] and re.search(r"[ -._\d](r|rc|beta|alpha)([ .\d].*)?$", original_version, re.IGNORECASE):
+        if not release["prerelease"] and re.search(Settings.unmarked_prerelease_regex, original_version, re.IGNORECASE):
             print("Assuming Release Candidate: ", original_version)
             release["prerelease"] = True
             continue
