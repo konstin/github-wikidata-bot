@@ -14,6 +14,7 @@ from distutils.version import LooseVersion
 
 class Settings:
     do_update_wikidata = True
+    # Don't activate this, it's most likely broken
     do_update_wikipedia = False
 
     sparql_file = "free_software_items.rq"
@@ -232,18 +233,25 @@ def get_data_from_github(url, properties):
         release_name = normalize_version(release["name"], project_info["name"])
         release_tag_name = normalize_version(release["tag_name"], project_info["name"])
 
-        # Workaround for Activiti
-        if "Beta" in release_name or "Beta" in release_tag_name:
-            release["prerelease"] = True
-
         match_name = re.search(Settings.version_regex, release_name)
         match_tag_name = re.search(Settings.version_regex, release_tag_name)
         if match_name:
             version = match_name.group(0)
+            original_version = release_name
         elif match_tag_name:
             version = match_tag_name.group(0)
+            original_version = release_tag_name
         else:
             print(" - Invalid version strings '{}'".format(release["name"]))
+            continue
+
+        if not release["prerelease"]:
+            print("{} ({})".format(version, original_version))
+
+        # Fix missing "Release Camdiate" annotation on github
+        if not release["prerelease"] and re.search(r"[ -._\d](r|rc|beta|alpha)([ .\d].*)?$", original_version, re.IGNORECASE):
+            print("Assuming Release Candidate: ", original_version)
+            release["prerelease"] = True
             continue
 
         # Convert github's timestamps to wikidata dates
