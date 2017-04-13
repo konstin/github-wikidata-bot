@@ -26,7 +26,7 @@ class Settings:
 
     repo_regex = re.compile(r"https://github.com/[^/]+/[^/]+")
     version_regex = re.compile(r"\d+(\.\d+)+")
-    unmarked_prerelease_regex = re.compile(r"[ -._\d](r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE)
+    unmarked_prerelease_regex = re.compile(r"[ -._\d](b|r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE)
 
     cached_session = CacheControl(
         requests.Session(),
@@ -192,8 +192,8 @@ def get_data_from_github(url, properties):
      - website / homepage
      - version number string and release date of all stable releases
      - version number string and release date of all prereleases
-     
-    All data is preprocessed, i.e. the version numbers are extracted and unmarked prereleases are discovered 
+
+    All data is preprocessed, i.e. the version numbers are extracted and unmarked prereleases are discovered
 
     :param url: The url of the github repository
     :param properties: The already gathere information
