@@ -1,0 +1,8 @@
+SELECT DISTINCT ?software ?softwareLabel WHERE {
+  # Free Software projects
+  ?software wdt:P31 wd:Q341.
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+
+  # … without repository
+  FILTER NOT EXISTS { ?software wdt:P1324 ?repo }
+}
