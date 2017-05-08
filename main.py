@@ -313,8 +313,10 @@ def update_wikidata(properties):
     # Add the website
     print("Adding the website")
     if properties["website"] and properties["website"].startswith("http"):
-        claim = get_or_create_claim(repo, item, Settings.properties["official website"], properties["website"])
-        get_or_create_sources(repo, claim, github_repo_to_api(url_normalized), properties["retrieved"])
+        # Don't add the website if it already exists
+        if not Settings.properties["official website"] in item.claims:
+            claim = get_or_create_claim(repo, item, Settings.properties["official website"], properties["website"])
+            get_or_create_sources(repo, claim, github_repo_to_api(url_normalized), properties["retrieved"])
 
     # Add all stable releases
     properties["stable_release"].sort(key=lambda x: LooseVersion(x["version"]))
