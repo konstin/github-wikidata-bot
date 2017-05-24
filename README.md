@@ -27,3 +27,8 @@ First, a SPARQL query gathers all the free software projects in wikidata with
 github repository. For each entry a cached request to the github API is made, which
 is authenticated by the oauth key. The wikidata entries are then inserted using a
 "exists or insert" logic. For each entry the github api link is added as reference.
+
+## Why does the bot not work for item Q…?
+
+* Does the entity already have a VCS repository set? Use [this query](https://github.com/konstin/github-wikidata-bot/blob/master/free_software_without_repository.rq) do determine entities w/o repository.
+* Does the project use GitHub releases? If not, no automatic update is possible at the moment.
