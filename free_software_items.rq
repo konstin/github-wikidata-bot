@@ -1,9 +1,7 @@
 PREFIX schema: <http://schema.org/>
 
 SELECT ?project ?projectLabel ?article ?repo WHERE {
-  # Free Software projects
-  ?project p:P31/ps:P31 wd:Q341.
-
+  # Items with a repo on github
   ?project wdt:P1324 ?repo.
 
   # Exclude projects not hosted on github
