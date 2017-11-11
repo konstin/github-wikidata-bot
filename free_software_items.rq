@@ -10,8 +10,10 @@ SELECT ?project ?projectLabel ?article ?repo WHERE {
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
 
   # Get the corresponding wikipedia page
-  ?article schema:about ?project .
-  ?article schema:inLanguage "en" .
-  ?article schema:isPartOf <https://en.wikipedia.org/>
+  OPTIONAL {
+    ?article schema:about ?project .
+    ?article schema:inLanguage "en" .
+    ?article schema:isPartOf <https://en.wikipedia.org/>
+  }
 }
 ORDER BY ?projectLabel
