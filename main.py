@@ -360,6 +360,8 @@ def update_wikipedia(combined_properties):
     :param combined_properties: dict
     :return:
     """
+    if "article" not in combined_properties:
+        return
     q_value = combined_properties["article"].replace("https://en.wikipedia.org/wiki/", "")
     page = pywikibot.Page(pywikibot.Site("en", "wikipedia"), q_value)
     text = page.text
