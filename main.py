@@ -53,9 +53,7 @@ def github_repo_to_api(url):
 
 def github_repo_to_api_releases(url):
     """Converts a github repoository url to the api entry with the releases"""
-    url = normalize_url(url)
-    url = url.replace("https://github.com/", "https://api.github.com/repos/")
-    url += "/releases"
+    url = github_repo_to_api(url)+"/releases"
     return url
 
 
