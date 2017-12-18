@@ -1,0 +1,16 @@
+[[source]]
+
+verify_ssl = true
+url = "https://pypi.python.org/simple"
+name = "pypi"
+
+
+[dev-packages]
+
+
+
+[packages]
+
+pywikibot = "*"
+mwparserfromhell = "*"
+CacheControl = {extras = ["filecache"]}
