@@ -13,6 +13,8 @@ this script will collect the following metadata from the github API
 
 ## Setup
 
+It is recommend to install dependecies using pipenv (`pipenv install`), though you can still use pip (`pip install -r requirements.txt`).
+
 Generate a personal access token on github and paste it to a file called
 "github_oath_token.txt". Then run this script in a terminal and enter the
 password for the bot account.

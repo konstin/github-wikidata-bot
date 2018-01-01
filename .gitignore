@@ -6,3 +6,4 @@ cache/
 src/
 env/
 __pycache__
+.venv/
