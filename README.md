@@ -40,6 +40,11 @@ For each entry, the GitHub api link is added as reference.
   to determine entities without a repository.
 * Does the project use GitHub releases? If not, no automatic update is possible at the moment.
 
+## Statistics
+
+You can find detailed statistics on [wmflabs][wmflabs].
+
 [github-token]: https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
 [repo-property]: https://www.wikidata.org/wiki/Property:P1324
 [no-repo-query]: https://github.com/konstin/github-wikidata-bot/blob/master/free_software_without_repository.rq
+[wmflabs]: https://xtools.wmflabs.org/ec/wikidata/Github-wiki-bot
