@@ -21,15 +21,15 @@ though you can still use pip (`pip install -r requirements.txt`).
 and paste it to a file called `github_oath_token.txt`.
 Then run this script in a terminal and enter the password for your bot account.
 
-Note that this script uses a http cache for github responsres with the "LastModified"
-heuristic, so you might need to clear the cache manually if you want the
-really latest version.
+Note that this script uses a http cache for GitHub responses
+with the "LastModified" heuristic, so you might need to clear the cache manually
+if you want the really latest version.
 
 ## Implementation notes
 
 First, a SPARQL query gathers all the free software projects in Wikidata
-which have a GitHub repository specified in their statements.
-For each entry, a cached request to the github API is made,
+which have a GitHub repository specified in the [source code repository][repo-property] property.
+For each entry, a cached request to the GitHub API is made,
 which is authenticated by the OAuth key.
 The wikidata entries are then inserted using a "exists or insert" logic.
 For each entry, the GitHub api link is added as reference.
@@ -41,4 +41,5 @@ For each entry, the GitHub api link is added as reference.
 * Does the project use GitHub releases? If not, no automatic update is possible at the moment.
 
 [github-token]: https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
+[repo-property]: https://www.wikidata.org/wiki/Property:P1324
 [no-repo-query]: https://github.com/konstin/github-wikidata-bot/blob/master/free_software_without_repository.rq
