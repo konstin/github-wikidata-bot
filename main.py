@@ -238,10 +238,10 @@ def get_data_from_github(url, properties):
 
         match_name = re.search(Settings.version_regex, release_name)
         match_tag_name = re.search(Settings.version_regex, release_tag_name)
-        if match_name:
+        if match_tag_name:
             version = match_name.group(0)
             original_version = release_name
-        elif match_tag_name:
+        elif match_name:
             version = match_tag_name.group(0)
             original_version = release_tag_name
         else:
