@@ -5,7 +5,7 @@ SELECT ?project ?projectLabel ?article ?repo WHERE {
   ?project wdt:P1324 ?repo.
 
   # Exclude projects not hosted on github
-  FILTER(STRSTARTS(STR(?repo), "https://github.com")).
+  FILTER(contains(STR(?repo), "://github.com/")).
 
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
 
