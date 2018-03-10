@@ -215,7 +215,7 @@ def get_data_from_github(url, properties):
 
     # General project information
     project_info = get_json_cached(github_repo_to_api(url))
-    if type(project_info) == list:
+    if type(project_info) == list and len(project_info) > 0:
         project_info = project_info[0]
 
     if "homepage" in project_info:
@@ -225,7 +225,7 @@ def get_data_from_github(url, properties):
     url = github_repo_to_api_releases(url)
     page_number = 1
     releases = []
-    while 1:
+    while True:
         page = get_json_cached(url + "?page=" + str(page_number))
         if not page:
             break
@@ -444,6 +444,8 @@ def main():
             update_wikidata(project)
         if Settings.do_update_wikipedia:
             update_wikipedia(project)
+
+    print("# Finished successfully")
 
 
 if __name__ == '__main__':
