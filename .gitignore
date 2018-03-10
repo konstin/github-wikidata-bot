@@ -5,3 +5,4 @@ apicache/
 cache/
 src/
 .venv/
+apicache-py3

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3
 import argparse
 import re
 
@@ -17,6 +17,8 @@ class Settings:
     do_update_wikidata = True
     # Don't activate this, it's most likely broken
     do_update_wikipedia = False
+
+    normalize_url = True
 
     sparql_file = "free_software_items.rq"
     oauth_token_file = "github_oauth_token.txt"
@@ -294,26 +296,24 @@ def update_wikidata(properties):
     item = pywikibot.ItemPage(repo, title=q_value)
     item.get()
 
-    # This does not work with a normal account
-    """
-    # Canonicalize the github url
-    if url_raw != url_normalized:
-        print("Normalizing GitHub url")
+    # This does only work with a bot account
+    if normalize_url:
+        # Canonicalize the github url
+        if url_raw != url_normalized:
+            print("Normalizing GitHub url: {} -> {}".format(url_raw, url_normalized))
 
-        if Settings.properties["source code repository"] in item.claims and \
-                len(item.claims[Settings.properties["source code repository"]]) != 1:
-            print("Error: Multiple source code repositories")
-            return
+            if Settings.properties["source code repository"] in item.claims and \
+                    len(item.claims[Settings.properties["source code repository"]]) != 1:
+                print("Error: Multiple source code repositories")
+                return
 
-        # Altering = remove -> edit -> add
-        claim = pywikibot.Claim(repo, Settings.properties["source code repository"])
-        claim.setTarget(url_normalized)
-        claim.setSnakType('value')
-        item.addClaim(claim)
-        if len(item.claims[Settings.properties["source code repository"]]) > 1:
-            print("Removing old item")
-            item.removeClaims(item.claims[Settings.properties["source code repository"]][0])
-    """
+            # Altering = remove -> edit -> add
+            claim = pywikibot.Claim(repo, Settings.properties["source code repository"])
+            claim.setTarget(url_normalized)
+            claim.setSnakType('value')
+            item.addClaim(claim)
+            if len(item.claims[Settings.properties["source code repository"]]) > 1:
+                item.removeClaims(item.claims[Settings.properties["source code repository"]][0])
 
     # Add the website
     print("Adding the website")
@@ -412,7 +412,7 @@ def update_wikipedia(combined_properties):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--filter-projects", default="")
+    parser.add_argument("--filter", default="")
     args = parser.parse_args()
 
     github_oath_token = open(Settings.oauth_token_file).readline().strip()
@@ -425,7 +425,7 @@ def main():
 
     print("# Projects with github link")
     for project in projects:
-        if args.filter_projects not in project["projectLabel"]:
+        if args.filter not in project["projectLabel"]:
             continue
 
         print("## " + project["projectLabel"])
