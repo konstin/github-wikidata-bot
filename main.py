@@ -66,8 +66,7 @@ def normalize_url(url):
     :return:
     """
     url = url.strip("/")
-    url = url.replace("http://", "https://")
-    url = url.replace("git://", "https://")
+    url = "https://" + url.split("://")[1]
     if url.endswith('.git'):
         url = url[:-4]
     return url
