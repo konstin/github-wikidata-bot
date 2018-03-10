@@ -10,6 +10,7 @@ from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import LastModified
 from pywikibot.data import sparql
 from distutils.version import LooseVersion
+from json.decoder import JSONDecodeError
 
 
 class Settings:
@@ -162,7 +163,10 @@ def get_or_create_sources(repo, qualifier, value, retrieved):
 def get_json_cached(url):
     response = Settings.cached_session.get(url)
     response.raise_for_status()
-    return response.json()
+    try:
+        return response.json()
+    except JSONDecodeError:
+        return []
 
 
 def query_projects():
@@ -239,10 +243,10 @@ def get_data_from_github(url, properties):
         match_name = re.search(Settings.version_regex, release_name)
         match_tag_name = re.search(Settings.version_regex, release_tag_name)
         if match_tag_name:
-            version = match_name.group(0)
+            version = match_tag_name.group(0)
             original_version = release_name
         elif match_name:
-            version = match_tag_name.group(0)
+            version = match_name.group(0)
             original_version = release_tag_name
         else:
             print(" - Invalid version strings '{}'".format(release["name"]))
