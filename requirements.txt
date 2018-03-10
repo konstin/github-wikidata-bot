@@ -1,4 +1,10 @@
--e git://github.com/wikimedia/pywikibot-core.git#egg=pywikibot
-mwparserfromhell
-pywikibot
-cachecontrol[filecache]
+CacheControl==0.12.4
+certifi==2018.1.18
+chardet==3.0.4
+idna==2.6
+lockfile==0.12.2
+msgpack-python==0.5.6
+mwparserfromhell==0.5.1
+pywikibot==3.0.dev0
+requests==2.18.4
+urllib3==1.22

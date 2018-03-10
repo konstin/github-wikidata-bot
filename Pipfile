@@ -11,6 +11,6 @@ name = "pypi"
 
 [packages]
 
-pywikibot = "*"
-mwparserfromhell = "*"
-CacheControl = {extras = ["filecache"]}
+pywikibot = "~=3.0.20180304"
+mwparserfromhell = "~=0.5.1"
+CacheControl = {version = "~=0.12.4", extras = ["filecache"]}
