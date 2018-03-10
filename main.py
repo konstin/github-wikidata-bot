@@ -165,7 +165,8 @@ def get_json_cached(url):
     response.raise_for_status()
     try:
         return response.json()
-    except JSONDecodeError:
+    except JSONDecodeError as e:
+        print("JSONDecodeError for {}: {}".format(url, e))
         return []
 
 
