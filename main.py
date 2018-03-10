@@ -272,7 +272,7 @@ def get_data_from_github(url, properties):
             prefix = "pre_release"
         else:
             prefix = "stable_release"
-        properties[prefix].append({"version": version, "date": date})
+        properties[prefix].append({"version": version, "date": date, "page": releases["html_url"]})
 
     return properties
 
@@ -342,7 +342,7 @@ def update_wikidata(properties):
         claim = get_or_create_claim(repo, item, Settings.properties["software version"], release["version"])
 
         get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
-        get_or_create_sources(repo, claim, github_repo_to_api_releases(url_normalized), properties["retrieved"])
+        get_or_create_sources(repo, claim, release["page"], properties["retrieved"])
 
         # Give the latest release the preferred rank
         # And work around a bug in pywikibot
