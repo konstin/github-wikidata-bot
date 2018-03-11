@@ -131,7 +131,7 @@ def get_or_create_qualifiers(repo, claim, p_value, qualifier):
     return _get_or_create(claim.addQualifier, all_objects, repo, p_value, qualifier)
 
 
-def get_or_create_sources(repo, claim, url, retrieved, title):
+def get_or_create_sources(repo, claim, url, retrieved, title, date):
     """
     Gets or creates a `source` under the property `claim` to `url`
     """
@@ -140,6 +140,7 @@ def get_or_create_sources(repo, claim, url, retrieved, title):
     src_p = Settings.properties["reference URL"]
     retrieved_p = Settings.properties["retrieved"]
     title_p = Settings.properties["title"]
+    date_p = Settings.properties["publication date"]
 
     # We could have many sources, so let's
     if claim.sources:
@@ -159,7 +160,9 @@ def get_or_create_sources(repo, claim, url, retrieved, title):
         src_retrieved.setTarget(retrieved)
         src_title = pywikibot.Claim(repo, title_p)
         src_title.setTarget(pywikibot.WbMonolingualText(title, "en"))
-        claim.addSources([src_url, src_retrieved, src_title])
+        src_date = pywikibot.Claim(repo, date_p)
+        src_date.setTarget(date)
+        claim.addSources([src_url, src_retrieved, src_title, src_date])
 
     return src_url
 
@@ -347,7 +350,7 @@ def update_wikidata(properties):
 
         get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
         title = "Release %s" % release["version"]
-        get_or_create_sources(repo, claim, release["page"], properties["retrieved"], title)
+        get_or_create_sources(repo, claim, release["page"], properties["retrieved"], title, release["date"])
 
         # Give the latest release the preferred rank
         # And work around a bug in pywikibot
