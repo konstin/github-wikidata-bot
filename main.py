@@ -44,6 +44,7 @@ class Settings:
         "reference URL": "P854",
         "official website": "P856",
         "source code repository": "P1324",
+        "version type": "P548",
     }
 
 
@@ -326,6 +327,7 @@ def update_wikidata(properties):
     # Add all stable releases
     properties["stable_release"].sort(key=lambda x: LooseVersion(x["version"]))
     properties["stable_release"].reverse()
+    stable = pywikibot.ItemPage(repo, "Q2804309")
 
     latest_version = None  # Mute warning
     if 0 < len(properties["stable_release"]):
@@ -343,6 +345,7 @@ def update_wikidata(properties):
         claim = get_or_create_claim(repo, item, Settings.properties["software version"], release["version"])
 
         get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
+        get_or_create_qualifiers(repo, claim, Settings.properties["version type"], stable)
         get_or_create_sources(repo, claim, github_repo_to_api_releases(url_normalized), properties["retrieved"])
 
         # Give the latest release the preferred rank
