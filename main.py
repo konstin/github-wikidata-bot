@@ -5,6 +5,7 @@ import re
 import mwparserfromhell
 import pywikibot
 import requests
+import sys
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import LastModified
@@ -290,6 +291,13 @@ def get_data_from_github(url, properties):
 def update_wikidata(properties):
     """
     Update wikidata entry with data from github
+def set_claim_rank(claim, latest_version, release):
+    if release["version"] == latest_version:
+        if claim.getRank() != 'preferred':
+            claim.changeRank('preferred')
+    else:
+        if claim.getRank() != 'normal':
+            claim.changeRank('normal')
 
     :param properties: dict
     :return:
@@ -356,23 +364,18 @@ def update_wikidata(properties):
         # Give the latest release the preferred rank
         # And work around a bug in pywikibot
         try:
-            if release["version"] == latest_version:
-                if claim.getRank() != 'preferred':
-                    claim.changeRank('preferred')
-            else:
-                if claim.getRank() != 'normal':
-                    claim.changeRank('normal')
+            set_claim_rank(claim, latest_version, release)
         except AssertionError:
-            print("Setting rank failed. Skipping")
+            print("Using the fallback for setting the preferred rank")
+
+            item.get(force=True)
+
+            claim = get_or_create_claim(repo, item, Settings.properties["software version"], release["version"])
+            set_claim_rank(claim, latest_version, release)
 
 
 def update_wikipedia(combined_properties):
-    """
-    Updates the software info boxes of wikipedia articles according to github data
-
-    :param combined_properties: dict
-    :return:
-    """
+    """ Updates the software info boxes of wikipedia articles according to github data """
     if "article" not in combined_properties:
         return
     q_value = combined_properties["article"].replace("https://en.wikipedia.org/wiki/", "")
