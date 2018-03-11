@@ -176,7 +176,7 @@ def get_json_cached(url):
     try:
         return response.json()
     except JSONDecodeError as e:
-        print("JSONDecodeError for {}: {}".format(url, e))
+        print("JSONDecodeError for {}: {}".format(url, e), file=sys.stderr)
         return []
 
 
@@ -288,9 +288,27 @@ def get_data_from_github(url, properties):
     return properties
 
 
-def update_wikidata(properties):
+def do_normalize_url(item, repo, url_normalized, url_raw):
+    """ Canonicalize the github url
+    This use the format https://github.com/[owner]/[repo]
     """
-    Update wikidata entry with data from github
+    if url_raw != url_normalized:
+        print("Normalizing GitHub url: {} -> {}".format(url_raw, url_normalized))
+
+        source_p = Settings.properties["source code repository"]
+        if source_p in item.claims and len(item.claims[source_p]) != 1:
+            print("Error: Multiple source code repositories", file=sys.stderr)
+            return
+
+        # Editing is in this case actually remove the old value and adding the new one
+        claim = pywikibot.Claim(repo, source_p)
+        claim.setTarget(url_normalized)
+        claim.setSnakType('value')
+        item.addClaim(claim)
+        if len(item.claims[source_p]) > 1:
+            item.removeClaims(item.claims[source_p][0])
+
+
 def set_claim_rank(claim, latest_version, release):
     if release["version"] == latest_version:
         if claim.getRank() != 'preferred':
@@ -299,9 +317,9 @@ def set_claim_rank(claim, latest_version, release):
         if claim.getRank() != 'normal':
             claim.changeRank('normal')
 
-    :param properties: dict
-    :return:
-    """
+
+def update_wikidata(properties):
+    """ Update wikidata entry with data from github """
     url_raw = properties["repo"]
     url_normalized = normalize_url(url_raw)
 
@@ -313,22 +331,7 @@ def set_claim_rank(claim, latest_version, release):
 
     # This does only work with a bot account
     if normalize_url:
-        # Canonicalize the github url
-        if url_raw != url_normalized:
-            print("Normalizing GitHub url: {} -> {}".format(url_raw, url_normalized))
-
-            if Settings.properties["source code repository"] in item.claims and \
-                    len(item.claims[Settings.properties["source code repository"]]) != 1:
-                print("Error: Multiple source code repositories")
-                return
-
-            # Altering = remove -> edit -> add
-            claim = pywikibot.Claim(repo, Settings.properties["source code repository"])
-            claim.setTarget(url_normalized)
-            claim.setSnakType('value')
-            item.addClaim(claim)
-            if len(item.claims[Settings.properties["source code repository"]]) > 1:
-                item.removeClaims(item.claims[Settings.properties["source code repository"]][0])
+        do_normalize_url(item, repo, url_normalized, url_raw)
 
     # Add the website
     print("Adding the website")
@@ -343,7 +346,7 @@ def set_claim_rank(claim, latest_version, release):
     properties["stable_release"].reverse()
 
     latest_version = None  # Mute warning
-    if 0 < len(properties["stable_release"]):
+    if len(properties["stable_release"]) > 0:
         if len(properties["stable_release"]) > 100:
             print("Adding only 100 stable releases")
             properties["stable_release"] = properties["stable_release"][:100]
@@ -423,7 +426,7 @@ def update_wikipedia(combined_properties):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--filter", default="")
+    parser.add_argument("--filter")
     args = parser.parse_args()
 
     github_oath_token = open(Settings.oauth_token_file).readline().strip()
@@ -448,7 +451,7 @@ def main():
         try:
             project = get_data_from_github(project["repo"], project)
         except requests.exceptions.HTTPError:
-            print("HTTP request for {} failed".format(project["projectLabel"]))
+            print("HTTP request for {} failed".format(project["projectLabel"]), file=sys.stderr)
             continue
 
         if Settings.do_update_wikidata:

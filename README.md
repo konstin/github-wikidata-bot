@@ -8,7 +8,7 @@ using metadata collected from the GitHub API:
 
 * Import all stable releases and the release dates
 * Update the project website
-* [Disabled] Normalize the GitHub link
+* Normalize the GitHub link
 * [Disabled] Update the wikipedia software info box with the new information
 
 
@@ -38,7 +38,7 @@ For each entry, the GitHub api link is added as reference.
 
 * Does the entity already have a VCS repository set? Use [this query][no-repo-query]
   to determine entities without a repository.
-* Does the project use GitHub releases? If not, no automatic update is possible at the moment.
+* Does the project use GitHub releases? If not, no automatic update is possible at the moment. (See #5)
 
 ## Statistics
 
