@@ -353,7 +353,6 @@ def update_wikidata(properties):
 
         get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
         get_or_create_qualifiers(repo, claim, Settings.properties["version type"], stable)
-        get_or_create_sources(repo, claim, github_repo_to_api_releases(url_normalized), properties["retrieved"])
         title = "Release %s" % release["version"]
         get_or_create_sources(repo, claim, release["page"], properties["retrieved"], title, release["date"])
 
