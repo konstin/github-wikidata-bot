@@ -272,7 +272,7 @@ def get_data_from_github(url, properties):
             prefix = "pre_release"
         else:
             prefix = "stable_release"
-        properties[prefix].append({"version": version, "date": date, "page": releases["html_url"]})
+        properties[prefix].append({"version": version, "date": date, "page": release["html_url"]})
 
     return properties
 
