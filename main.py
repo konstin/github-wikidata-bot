@@ -27,7 +27,7 @@ class Settings:
     calendarmodel = pywikibot.Site().data_repository().calendarmodel()
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
 
-    repo_regex = re.compile(r"https://github.com/[^/]+/[^/]+")
+    repo_regex = re.compile(r"[a-z]+://github.com/[^/]+/[^/]+")
     version_regex = re.compile(r"\d+(\.\d+)+")
     unmarked_prerelease_regex = re.compile(r"[ -._\d](b|r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE)
 
@@ -56,20 +56,20 @@ def github_repo_to_api(url):
 
 def github_repo_to_api_releases(url):
     """Converts a github repoository url to the api entry with the releases"""
-    url = normalize_url(url)
-    url = url.replace("https://github.com/", "https://api.github.com/repos/")
+    url = github_repo_to_api(url)
     url += "/releases"
     return url
 
 
 def normalize_url(url):
     """
-    Canonical urls be like: no slash, no file extension
+    Canonical urls be like: https, no slash, no file extension
 
     :param url:
     :return:
     """
     url = url.strip("/")
+    url = "https://" + url.split("://")[1]
     if url.endswith('.git'):
         url = url[:-4]
     return url
