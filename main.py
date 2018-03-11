@@ -426,10 +426,14 @@ def update_wikipedia(combined_properties):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--filter")
+    parser.add_argument("--filter", default="")
+    parser.add_argument("--github-oauth-token")
     args = parser.parse_args()
 
-    github_oath_token = open(Settings.oauth_token_file).readline().strip()
+    if args.github_oauth_token:
+        github_oath_token = args.github_oauth_token
+    else:
+        github_oath_token = open(Settings.oauth_token_file).readline().strip()
     Settings.cached_session.headers.update({"Authorization": "token " + github_oath_token})
 
     print("# Query Projects")
