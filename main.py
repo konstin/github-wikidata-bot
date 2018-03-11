@@ -27,7 +27,7 @@ class Settings:
     calendarmodel = pywikibot.Site().data_repository().calendarmodel()
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
 
-    repo_regex = re.compile(r"https://github.com/[^/]+/[^/]+")
+    repo_regex = re.compile(r"[a-z]+://github.com/[^/]+/[^/]+")
     version_regex = re.compile(r"\d+(\.\d+)+")
     unmarked_prerelease_regex = re.compile(r"[ -._\d](b|r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE)
 
@@ -45,6 +45,7 @@ class Settings:
         "official website": "P856",
         "source code repository": "P1324",
         "version type": "P548",
+        "title": "P1476",
     }
 
 
@@ -57,20 +58,20 @@ def github_repo_to_api(url):
 
 def github_repo_to_api_releases(url):
     """Converts a github repoository url to the api entry with the releases"""
-    url = normalize_url(url)
-    url = url.replace("https://github.com/", "https://api.github.com/repos/")
+    url = github_repo_to_api(url)
     url += "/releases"
     return url
 
 
 def normalize_url(url):
     """
-    Canonical urls be like: no slash, no file extension
+    Canonical urls be like: https, no slash, no file extension
 
     :param url:
     :return:
     """
     url = url.strip("/")
+    url = "https://" + url.split("://")[1]
     if url.endswith('.git'):
         url = url[:-4]
     return url
@@ -133,32 +134,38 @@ def get_or_create_qualifiers(repo, claim, p_value, qualifier):
     return _get_or_create(claim.addQualifier, all_objects, repo, p_value, qualifier)
 
 
-def get_or_create_sources(repo, qualifier, value, retrieved):
+def get_or_create_sources(repo, claim, url, retrieved, title, date):
     """
-    Gets or creates a `source` under the property `p_value` to `qualifier`
+    Gets or creates a `source` under the property `claim` to `url`
     """
     all_sources = []
 
     src_p = Settings.properties["reference URL"]
     retrieved_p = Settings.properties["retrieved"]
+    title_p = Settings.properties["title"]
+    date_p = Settings.properties["publication date"]
 
-    # We could have many qualifiers, so let's
-    if qualifier.sources:
-        for i in qualifier.sources:
+    # We could have many sources, so let's
+    if claim.sources:
+        for i in claim.sources:
             if src_p in i:
                 all_sources.append(i[src_p][0])
     else:
         all_sources = []
 
     for src_url in all_sources:
-        if src_url.target_equals(value):
+        if src_url.target_equals(url):
             break
     else:
         src_url = pywikibot.Claim(repo, src_p)
-        src_url.setTarget(value)
+        src_url.setTarget(url)
         src_retrieved = pywikibot.Claim(repo, retrieved_p)
         src_retrieved.setTarget(retrieved)
-        qualifier.addSources([src_url, src_retrieved])
+        src_title = pywikibot.Claim(repo, title_p)
+        src_title.setTarget(pywikibot.WbMonolingualText(title, "en"))
+        src_date = pywikibot.Claim(repo, date_p)
+        src_date.setTarget(date)
+        claim.addSources([src_url, src_retrieved, src_title, src_date])
 
     return src_url
 
@@ -276,7 +283,7 @@ def get_data_from_github(url, properties):
             prefix = "pre_release"
         else:
             prefix = "stable_release"
-        properties[prefix].append({"version": version, "date": date})
+        properties[prefix].append({"version": version, "date": date, "page": release["html_url"]})
 
     return properties
 
@@ -347,6 +354,8 @@ def update_wikidata(properties):
         get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
         get_or_create_qualifiers(repo, claim, Settings.properties["version type"], stable)
         get_or_create_sources(repo, claim, github_repo_to_api_releases(url_normalized), properties["retrieved"])
+        title = "Release %s" % release["version"]
+        get_or_create_sources(repo, claim, release["page"], properties["retrieved"], title, release["date"])
 
         # Give the latest release the preferred rank
         # And work around a bug in pywikibot
