@@ -190,7 +190,6 @@ def query_projects():
     sparql_free_software_items = "".join(open(Settings.sparql_file).readlines())
     response = wikdata_sparql.query(sparql_free_software_items)
 
-    # Split the data into those with repository and those without
     projects = []
     for project in response["results"]["bindings"]:
         # Remove bloating type information
@@ -227,7 +226,8 @@ def get_data_from_github(url, properties):
     # General project information
     project_info = get_json_cached(github_repo_to_api(url))
 
-    properties["website"] = project_info.get("homepage")
+    if project_info.get("homepage"):
+        properties["website"] = project_info["homepage"]
 
     # Get all pages of the release information
     url = github_repo_to_api_releases(url)
@@ -453,7 +453,7 @@ def main():
             print("Skipping: {}".format(project["repo"]))
             continue
 
-        print("## " + project["projectLabel"])
+        print("## " + project["projectLabel"] + ": " + project['project'])
 
         try:
             project = get_data_from_github(project["repo"], project)
