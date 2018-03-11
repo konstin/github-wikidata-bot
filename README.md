@@ -6,7 +6,7 @@ For free software projects with a GitHub repository listed in Wikidata,
 this script will perform the following steps,
 using metadata collected from the GitHub API:
 
-* Import all stable releases and the release dates
+* Import all stable releases and the release dates, including release data, source, and a source title
 * Update the project website
 * Normalize the GitHub link
 * [Disabled] Update the wikipedia software info box with the new information
