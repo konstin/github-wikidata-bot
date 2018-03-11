@@ -44,6 +44,7 @@ class Settings:
         "reference URL": "P854",
         "official website": "P856",
         "source code repository": "P1324",
+        "title": "P1476",
     }
 
 
@@ -132,32 +133,38 @@ def get_or_create_qualifiers(repo, claim, p_value, qualifier):
     return _get_or_create(claim.addQualifier, all_objects, repo, p_value, qualifier)
 
 
-def get_or_create_sources(repo, qualifier, value, retrieved):
+def get_or_create_sources(repo, claim, url, retrieved, title, date):
     """
-    Gets or creates a `source` under the property `p_value` to `qualifier`
+    Gets or creates a `source` under the property `claim` to `url`
     """
     all_sources = []
 
     src_p = Settings.properties["reference URL"]
     retrieved_p = Settings.properties["retrieved"]
+    title_p = Settings.properties["title"]
+    date_p = Settings.properties["publication date"]
 
-    # We could have many qualifiers, so let's
-    if qualifier.sources:
-        for i in qualifier.sources:
+    # We could have many sources, so let's
+    if claim.sources:
+        for i in claim.sources:
             if src_p in i:
                 all_sources.append(i[src_p][0])
     else:
         all_sources = []
 
     for src_url in all_sources:
-        if src_url.target_equals(value):
+        if src_url.target_equals(url):
             break
     else:
         src_url = pywikibot.Claim(repo, src_p)
-        src_url.setTarget(value)
+        src_url.setTarget(url)
         src_retrieved = pywikibot.Claim(repo, retrieved_p)
         src_retrieved.setTarget(retrieved)
-        qualifier.addSources([src_url, src_retrieved])
+        src_title = pywikibot.Claim(repo, title_p)
+        src_title.setTarget(pywikibot.WbMonolingualText(title, "en"))
+        src_date = pywikibot.Claim(repo, date_p)
+        src_date.setTarget(date)
+        claim.addSources([src_url, src_retrieved, src_title, src_date])
 
     return src_url
 
@@ -275,7 +282,7 @@ def get_data_from_github(url, properties):
             prefix = "pre_release"
         else:
             prefix = "stable_release"
-        properties[prefix].append({"version": version, "date": date})
+        properties[prefix].append({"version": version, "date": date, "page": release["html_url"]})
 
     return properties
 
@@ -343,7 +350,8 @@ def update_wikidata(properties):
         claim = get_or_create_claim(repo, item, Settings.properties["software version"], release["version"])
 
         get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
-        get_or_create_sources(repo, claim, github_repo_to_api_releases(url_normalized), properties["retrieved"])
+        title = "Release %s" % release["version"]
+        get_or_create_sources(repo, claim, release["page"], properties["retrieved"], title, release["date"])
 
         # Give the latest release the preferred rank
         # And work around a bug in pywikibot
