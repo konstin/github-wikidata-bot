@@ -28,7 +28,7 @@ class Settings:
     calendarmodel = pywikibot.Site().data_repository().calendarmodel()
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
 
-    repo_regex = re.compile(r"[a-z]+://github.com/[^/]+/[^/]+/?")
+    repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
     version_regex = re.compile(r"\d+(\.\d+)+")
     unmarked_prerelease_regex = re.compile(r"[ -._\d](b|r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE)
 
