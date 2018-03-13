@@ -287,7 +287,7 @@ def get_data_from_github(url, properties):
     return properties
 
 
-def do_normalize_url(item, repo, url_normalized, url_raw):
+def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
     """ Canonicalize the github url
     This use the format https://github.com/[owner]/[repo]
     """
@@ -296,7 +296,7 @@ def do_normalize_url(item, repo, url_normalized, url_raw):
 
         source_p = Settings.properties["source code repository"]
         if source_p in item.claims and len(item.claims[source_p]) != 1:
-            print("Error: Multiple source code repositories", item.claims[source_p], file=sys.stderr)
+            print("Error: Multiple source code repositories", q_value, file=sys.stderr)
             return
 
         # Editing is in this case actually remove the old value and adding the new one
@@ -330,7 +330,7 @@ def update_wikidata(properties):
 
     # This does only work with a bot account
     if normalize_url:
-        do_normalize_url(item, repo, url_normalized, url_raw)
+        do_normalize_url(item, repo, url_normalized, url_raw, q_value)
 
     # Add the website
     if properties.get("website", "").startswith("http"):
