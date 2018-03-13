@@ -296,7 +296,7 @@ def do_normalize_url(item, repo, url_normalized, url_raw):
 
         source_p = Settings.properties["source code repository"]
         if source_p in item.claims and len(item.claims[source_p]) != 1:
-            print("Error: Multiple source code repositories", file=sys.stderr)
+            print("Error: Multiple source code repositories", item.claims[source_p], file=sys.stderr)
             return
 
         # Editing is in this case actually remove the old value and adding the new one
