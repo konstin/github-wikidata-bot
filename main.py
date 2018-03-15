@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
+import logging.config
 import re
-import sys
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
 
@@ -12,6 +12,41 @@ from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import LastModified
 from pywikibot.data import sparql
+
+LOGGING = {
+    'version': 1,
+    'formatters': {
+        'extended': {
+            'format': '%(levelname)-8s %(message)s',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+        'all': {
+            'class': 'logging.FileHandler',
+            'filename': 'all.log',
+            'formatter': 'extended',
+        },
+        'error': {
+            'class': 'logging.FileHandler',
+            'filename': 'error.log',
+            'formatter': 'extended',
+            'level': 'WARN'
+        }
+    },
+    'loggers': {
+        __name__: {
+            'handlers': ['console', 'all', 'error'],
+            'level': 'INFO',
+        }
+    }
+}
+
+logging.config.dictConfig(LOGGING)
+
+logger = logging.getLogger(__name__)
 
 
 class Settings:
@@ -135,7 +170,7 @@ def get_or_create_qualifiers(repo, claim, p_value, qualifier):
     return _get_or_create(claim.addQualifier, all_objects, repo, p_value, qualifier)
 
 
-def get_or_create_sources(repo, claim, url, retrieved, title = None, date = None):
+def get_or_create_sources(repo, claim, url, retrieved, title=None, date=None):
     """
     Gets or creates a `source` under the property `claim` to `url`
     """
@@ -162,11 +197,18 @@ def get_or_create_sources(repo, claim, url, retrieved, title = None, date = None
         src_url.setTarget(url)
         src_retrieved = pywikibot.Claim(repo, retrieved_p)
         src_retrieved.setTarget(retrieved)
-        src_title = pywikibot.Claim(repo, title_p)
-        src_title.setTarget(pywikibot.WbMonolingualText(title, "en"))
-        src_date = pywikibot.Claim(repo, date_p)
-        src_date.setTarget(date)
-        claim.addSources([src_url, src_retrieved, src_title, src_date])
+
+        sources = [src_url, src_retrieved]
+
+        if title:
+            src_title = pywikibot.Claim(repo, title_p)
+            src_title.setTarget(pywikibot.WbMonolingualText(title, "en"))
+            sources.append(src_title)
+        if date:
+            src_date = pywikibot.Claim(repo, date_p)
+            src_date.setTarget(date)
+            sources.append(src_date)
+        claim.addSources(sources)
 
     return src_url
 
@@ -177,7 +219,7 @@ def get_json_cached(url):
     try:
         return response.json()
     except JSONDecodeError as e:
-        print("JSONDecodeError for {}: {}".format(url, e), file=sys.stderr)
+        logger.error("JSONDecodeError for {}: {}".format(url, e))
         return {}
 
 
@@ -258,12 +300,12 @@ def get_data_from_github(url, properties):
             version = match_name.group(0)
             original_version = release_tag_name
         else:
-            print("Invalid version string '{}'".format(release["name"]))
+            logger.info("Invalid version string '{}'".format(release["name"]))
             continue
 
         # Fix missing "Release Camdiate" annotation on github
         if not release["prerelease"] and re.search(Settings.unmarked_prerelease_regex, original_version):
-            print("Assuming Release Candidate: ", original_version)
+            logger.info("Assuming Release Candidate: " + original_version)
             release["prerelease"] = True
             continue
 
@@ -292,11 +334,11 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
     This use the format https://github.com/[owner]/[repo]
     """
     if url_raw != url_normalized:
-        print("Normalizing {} to {}".format(url_raw, url_normalized))
+        logger.info("Normalizing {} to {}".format(url_raw, url_normalized))
 
         source_p = Settings.properties["source code repository"]
         if source_p in item.claims and len(item.claims[source_p]) != 1:
-            print("Error: Multiple source code repositories", q_value, file=sys.stderr)
+            logger.error("Error: Multiple source code repositories for " + q_value)
             return
 
         # Editing is in this case actually remove the old value and adding the new one
@@ -336,7 +378,7 @@ def update_wikidata(properties):
     if properties.get("website", "").startswith("http"):
         # Don't add the website if it already exists
         if not Settings.properties["official website"] in item.claims:
-            print("Adding the website")
+            logger.info("Adding the website")
             claim = get_or_create_claim(repo, item, Settings.properties["official website"], properties["website"])
             get_or_create_sources(repo, claim, github_repo_to_api(url_normalized), properties["retrieved"])
 
@@ -349,16 +391,16 @@ def update_wikidata(properties):
         return
 
     latest_version = properties["stable_release"][0]["version"]
-    print("Latest version: {}".format(latest_version))
+    logger.info("Latest version: {}".format(latest_version))
 
     if len(properties["stable_release"]) > 100:
-        print("Adding only 100 stable releases")
+        logger.info("Adding only 100 stable releases")
         properties["stable_release"] = properties["stable_release"][:100]
     else:
-        print("Adding {} stable releases:".format(len(properties["stable_release"])))
+        logger.info("Adding {} stable releases:".format(len(properties["stable_release"])))
 
     for release in properties["stable_release"]:
-        print(" - '{}'".format(release["version"]))
+        logger.info(" - '{}'".format(release["version"]))
         claim = get_or_create_claim(repo, item, Settings.properties["software version"], release["version"])
 
         get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
@@ -371,7 +413,7 @@ def update_wikidata(properties):
         try:
             set_claim_rank(claim, latest_version, release)
         except AssertionError:
-            print("Using the fallback for setting the preferred rank")
+            logger.info("Using the fallback for setting the preferred rank")
 
             item.get(force=True)
 
@@ -394,11 +436,11 @@ def update_wikipedia(combined_properties):
         if template.name.matches("Infobox software"):
             break
     else:
-        print("No 'Infobox software' found! Skipping {}".format(q_value))
+        logger.info("No 'Infobox software' found! Skipping {}".format(q_value))
         return
 
     template_before_edit = str(template)
-    print(template)
+    logger.info(template)
 
     if combined_properties["stable_release"]:
         srv = " " + combined_properties["stable_release"][0]["version"] + "\n"
@@ -422,8 +464,8 @@ def update_wikipedia(combined_properties):
             template.add("website", srv)
 
     if str(template) != template_before_edit:
-        print("\nThe template has been edited:\n")
-        print(template)
+        logger.info("\nThe template has been edited:\n")
+        logger.info(template)
 
 
 def main():
@@ -440,25 +482,25 @@ def main():
         "Authorization": "token " + github_oath_token
     })
 
-    print("# Querying Projects")
+    logger.info("# Querying Projects")
     projects = query_projects()
-    print("{} projects were found".format(len(projects)))
+    logger.info("{} projects were found".format(len(projects)))
 
-    print("# Processing projects")
+    logger.info("# Processing projects")
     for project in projects:
         if args.filter not in project["projectLabel"]:
             continue
 
         if not Settings.repo_regex.match(project["repo"]):
-            print("Skipping: {}".format(project["repo"]))
+            logger.info("Skipping: {}".format(project["repo"]))
             continue
 
-        print("## " + project["projectLabel"] + ": " + project['project'])
+        logger.info("## " + project["projectLabel"] + ": " + project['project'])
 
         try:
             project = get_data_from_github(project["repo"], project)
         except requests.exceptions.HTTPError:
-            print("HTTP request for {} failed".format(project["projectLabel"]), file=sys.stderr)
+            logger.error("HTTP request for {} failed".format(project["projectLabel"]))
             continue
 
         if Settings.do_update_wikidata:
@@ -466,7 +508,7 @@ def main():
         if Settings.do_update_wikipedia:
             update_wikipedia(project)
 
-    print("# Finished successfully")
+    logger.info("# Finished successfully")
 
 
 if __name__ == '__main__':
