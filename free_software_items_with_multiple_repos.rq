@@ -1,0 +1,24 @@
+PREFIX schema: <http://schema.org/>
+
+SELECT ?project ?projectLabel ?article ?repo (COUNT(?all_repos) as ?repo_count) WHERE {
+  # Items with a repo on github
+  ?project wdt:P1324 ?repo.
+
+  # Exclude projects not hosted on github
+  FILTER(contains(STR(?repo), "://github.com/")).
+
+  # Same as before, but without the filtering, so we can use it for counting
+  ?project wdt:P1324 ?all_repos.
+
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
+
+  # Get the corresponding wikipedia page
+  OPTIONAL {
+    ?article schema:about ?project .
+    ?article schema:inLanguage "en" .
+    ?article schema:isPartOf <https://en.wikipedia.org/>
+  }
+}
+GROUP BY ?project ?projectLabel ?article ?repo
+HAVING (?repo_count > 1)
+ORDER BY ?projectLabel
