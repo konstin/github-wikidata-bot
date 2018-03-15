@@ -337,8 +337,21 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
         logger.info("Normalizing {} to {}".format(url_raw, url_normalized))
 
         source_p = Settings.properties["source code repository"]
-        if source_p in item.claims and len(item.claims[source_p]) != 1:
+        urls = item.claims[source_p]
+        if source_p in item.claims and len(urls) == 2:
+            if urls[0].getTarget() == url_normalized and urls[1].getTarget() == url_raw:
+                item.removeClaims(urls[1])
+                return
+            if urls[0].getTarget() == url_raw and urls[1].getTarget() == url_normalized:
+                item.removeClaims(urls[0])
+                return
+
+        if source_p in item.claims and len(urls) > 1:
             logger.error("Error: Multiple source code repositories for " + q_value)
+            return
+
+        if urls[0].getTarget() != url_raw:
+            logging.error("Error: The url on the object doesn't match the url from the sparql query " + q_value)
             return
 
         # Editing is in this case actually remove the old value and adding the new one
@@ -346,8 +359,7 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
         claim.setTarget(url_normalized)
         claim.setSnakType('value')
         item.addClaim(claim)
-        if len(item.claims[source_p]) > 1:
-            item.removeClaims(item.claims[source_p][0])
+        item.removeClaims(urls[0])
 
 
 def set_claim_rank(claim, latest_version, release):
@@ -492,7 +504,7 @@ def main():
             continue
 
         if not Settings.repo_regex.match(project["repo"]):
-            logger.info("Skipping: {}".format(project["repo"]))
+            logger.info("Skipping {}: {}".format(project["project"], project["repo"]))
             continue
 
         logger.info("## " + project["projectLabel"] + ": " + project['project'])
