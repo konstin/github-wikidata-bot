@@ -498,15 +498,20 @@ def main():
     projects = query_projects()
     logger.info("{} projects were found".format(len(projects)))
 
-    logger.info("# Processing projects")
+    logger.info("# Filtering Projects")
+    projects_filtered = []
     for project in projects:
         if args.filter not in project["projectLabel"]:
             continue
 
         if not Settings.repo_regex.match(project["repo"]):
-            logger.info("Skipping {}: {}".format(project["project"], project["repo"]))
+            logger.info(" - {}: {} {}".format(project["projectLabel"], project["project"], project["repo"]))
             continue
 
+        projects_filtered.append(project)
+
+    logger.info("# Processing projects")
+    for project in projects_filtered:
         logger.info("## " + project["projectLabel"] + ": " + project['project'])
 
         try:
