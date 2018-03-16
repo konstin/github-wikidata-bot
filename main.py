@@ -80,7 +80,6 @@ class Settings:
         "reference URL": "P854",
         "official website": "P856",
         "source code repository": "P1324",
-        "version type": "P548",
         "title": "P1476",
     }
 
@@ -397,7 +396,6 @@ def update_wikidata(properties):
     # Add all stable releases
     properties["stable_release"].sort(key=lambda x: LooseVersion(x["version"]))
     properties["stable_release"].reverse()
-    stable = pywikibot.ItemPage(repo, "Q2804309")
 
     if len(properties["stable_release"]) == 0:
         return
@@ -416,7 +414,6 @@ def update_wikidata(properties):
         claim = get_or_create_claim(repo, item, Settings.properties["software version"], release["version"])
 
         get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
-        get_or_create_qualifiers(repo, claim, Settings.properties["version type"], stable)
         title = "Release %s" % release["version"]
         get_or_create_sources(repo, claim, release["page"], properties["retrieved"], title, release["date"])
 
