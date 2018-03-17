@@ -331,34 +331,40 @@ def get_data_from_github(url, properties):
 def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
     """ Canonicalize the github url
     This use the format https://github.com/[owner]/[repo]
+
+    Note: This apparently only works with a bot account
     """
-    if url_raw != url_normalized:
-        logger.info("Normalizing {} to {}".format(url_raw, url_normalized))
+    if url_raw == url_normalized:
+        return
 
-        source_p = Settings.properties["source code repository"]
-        urls = item.claims[source_p]
-        if source_p in item.claims and len(urls) == 2:
-            if urls[0].getTarget() == url_normalized and urls[1].getTarget() == url_raw:
-                item.removeClaims(urls[1])
-                return
-            if urls[0].getTarget() == url_raw and urls[1].getTarget() == url_normalized:
-                item.removeClaims(urls[0])
-                return
+    logger.info("Normalizing {} to {}".format(url_raw, url_normalized))
 
-        if source_p in item.claims and len(urls) > 1:
-            logger.error("Error: Multiple source code repositories for " + q_value)
+    source_p = Settings.properties["source code repository"]
+    urls = item.claims[source_p]
+    if source_p in item.claims and len(urls) == 2:
+        if urls[0].getTarget() == url_normalized and urls[1].getTarget() == url_raw:
+            logging.info("The old and the new url are already set, removing the old")
+            item.removeClaims(urls[1])
+            return
+        if urls[0].getTarget() == url_raw and urls[1].getTarget() == url_normalized:
+            logging.info("The old and the new url are already set, removing the old")
+            item.removeClaims(urls[0])
             return
 
-        if urls[0].getTarget() != url_raw:
-            logging.error("Error: The url on the object doesn't match the url from the sparql query " + q_value)
-            return
+    if source_p in item.claims and len(urls) > 1:
+        logger.error("Error: Multiple source code repositories for " + q_value)
+        return
 
-        # Editing is in this case actually remove the old value and adding the new one
-        claim = pywikibot.Claim(repo, source_p)
-        claim.setTarget(url_normalized)
-        claim.setSnakType('value')
-        item.addClaim(claim)
-        item.removeClaims(urls[0])
+    if urls[0].getTarget() != url_raw:
+        logging.error("Error: The url on the object doesn't match the url from the sparql query " + q_value)
+        return
+
+    # Editing is in this case actually remove the old value and adding the new one
+    claim = pywikibot.Claim(repo, source_p)
+    claim.setTarget(url_normalized)
+    claim.setSnakType('value')
+    item.addClaim(claim)
+    item.removeClaims(urls[0])
 
 
 def set_claim_rank(claim, latest_version, release):
@@ -372,50 +378,47 @@ def set_claim_rank(claim, latest_version, release):
 
 def update_wikidata(properties):
     """ Update wikidata entry with data from github """
-    url_raw = properties["repo"]
-    url_normalized = normalize_url(url_raw)
-
     # Wikidata boilerplate
-    repo = Settings.wikidata_repo
+    wikidata = Settings.wikidata_repo
     q_value = properties["project"].replace("http://www.wikidata.org/entity/", "")
-    item = pywikibot.ItemPage(repo, title=q_value)
+    item = pywikibot.ItemPage(wikidata, title=q_value)
     item.get()
 
-    # This does only work with a bot account
-    if normalize_url:
-        do_normalize_url(item, repo, url_normalized, url_raw, q_value)
+    url_raw = properties["repo"]
+    url_normalized = normalize_url(url_raw)
+    if Settings.normalize_url:
+        do_normalize_url(item, wikidata, url_normalized, url_raw, q_value)
 
-    # Add the website
-    if properties.get("website", "").startswith("http"):
-        # Don't add the website if it already exists
-        if not Settings.properties["official website"] in item.claims:
-            logger.info("Adding the website")
-            claim = get_or_create_claim(repo, item, Settings.properties["official website"], properties["website"])
-            get_or_create_sources(repo, claim, github_repo_to_api(url_normalized), properties["retrieved"])
+    # Add the website if doesn not already exists
+    if properties.get("website", "").startswith("http") and Settings.properties["official website"] not in item.claims:
+        logger.info("Adding the website: {}".format(properties["website"]))
+        claim = get_or_create_claim(wikidata, item, Settings.properties["official website"], properties["website"])
+        get_or_create_sources(wikidata, claim, github_repo_to_api(url_normalized), properties["retrieved"])
 
     # Add all stable releases
-    properties["stable_release"].sort(key=lambda x: LooseVersion(x["version"]))
-    properties["stable_release"].reverse()
+    stable_releases = properties["stable_release"]
+    stable_releases.sort(key=lambda x: LooseVersion(x["version"]))
+    stable_releases.reverse()
 
-    if len(properties["stable_release"]) == 0:
+    if len(stable_releases) == 0:
         return
 
-    latest_version = properties["stable_release"][0]["version"]
+    latest_version = stable_releases[0]["version"]
     logger.info("Latest version: {}".format(latest_version))
 
-    if len(properties["stable_release"]) > 100:
+    if len(stable_releases) > 100:
         logger.info("Adding only 100 stable releases")
-        properties["stable_release"] = properties["stable_release"][:100]
+        stable_releases = stable_releases[:100]
     else:
-        logger.info("Adding {} stable releases:".format(len(properties["stable_release"])))
+        logger.info("Adding {} stable releases:".format(len(stable_releases)))
 
-    for release in properties["stable_release"]:
+    for release in stable_releases:
         logger.info(" - '{}'".format(release["version"]))
-        claim = get_or_create_claim(repo, item, Settings.properties["software version"], release["version"])
+        claim = get_or_create_claim(wikidata, item, Settings.properties["software version"], release["version"])
 
-        get_or_create_qualifiers(repo, claim, Settings.properties["publication date"], release["date"])
+        get_or_create_qualifiers(wikidata, claim, Settings.properties["publication date"], release["date"])
         title = "Release %s" % release["version"]
-        get_or_create_sources(repo, claim, release["page"], properties["retrieved"], title, release["date"])
+        get_or_create_sources(wikidata, claim, release["page"], properties["retrieved"], title, release["date"])
 
         # Give the latest release the preferred rank
         # And work around a bug in pywikibot
@@ -426,7 +429,7 @@ def update_wikidata(properties):
 
             item.get(force=True)
 
-            claim = get_or_create_claim(repo, item, Settings.properties["software version"], release["version"])
+            claim = get_or_create_claim(wikidata, item, Settings.properties["software version"], release["version"])
             set_claim_rank(claim, latest_version, release)
 
 
@@ -512,15 +515,15 @@ def main():
         logger.info("## " + project["projectLabel"] + ": " + project['project'])
 
         try:
-            project = get_data_from_github(project["repo"], project)
+            properties = get_data_from_github(project["repo"], project)
         except requests.exceptions.HTTPError:
             logger.error("HTTP request for {} failed".format(project["projectLabel"]))
             continue
 
         if Settings.do_update_wikidata:
-            update_wikidata(project)
+            update_wikidata(properties)
         if Settings.do_update_wikipedia:
-            update_wikipedia(project)
+            update_wikipedia(properties)
 
     logger.info("# Finished successfully")
 
