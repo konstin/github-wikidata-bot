@@ -422,7 +422,11 @@ def update_wikidata(properties):
         logger.info(" - '{}'".format(release["version"]))
         claim = get_or_create_claim(wikidata, item, Settings.properties["software version"], release["version"])
 
-        get_or_create_qualifiers(wikidata, claim, Settings.properties["publication date"], release["date"])
+        # Assumption: A preexisting publication date is more reliable than the one from github
+        date_p = Settings.properties["publication date"]
+        if not date_p in claim.qualifiers:
+            get_or_create_qualifiers(wikidata, claim, date_p, release["date"])
+
         title = "Release %s" % release["version"]
         get_or_create_sources(wikidata, claim, release["page"], properties["retrieved"], title, release["date"])
 
