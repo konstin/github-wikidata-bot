@@ -65,6 +65,7 @@ class Settings:
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
     version_regex = re.compile(r"\d+(\.\d+)+")
+    # Often prereleases aren't marked as such, so we need manually catch those cases
     unmarked_prerelease_regex = re.compile(r"[ -._\d](b|r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE)
 
     cached_session = CacheControl(
@@ -294,10 +295,10 @@ def get_data_from_github(url, properties):
         match_tag_name = re.search(Settings.version_regex, release_tag_name)
         if match_tag_name:
             version = match_tag_name.group(0)
-            original_version = release_name
+            original_version = release_tag_name
         elif match_name:
             version = match_name.group(0)
-            original_version = release_tag_name
+            original_version = release_name
         else:
             logger.info("Invalid version string '{}'".format(release["name"]))
             continue
@@ -401,6 +402,11 @@ def update_wikidata(properties):
     stable_releases.reverse()
 
     if len(stable_releases) == 0:
+        return
+
+    versions = [i["version"] for i in stable_releases]
+    if len(versions) != len(set(versions)):
+        logging.error("There are duplicate releases in {}: {}".format(q_value, stable_releases))
         return
 
     latest_version = stable_releases[0]["version"]
