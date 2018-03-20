@@ -257,6 +257,7 @@ def get_data_from_github(url, properties):
     :return: dict of dicts
     """
     # "retrieved" does only accept dates without time, so create a timestamp with no date
+    # noinspection PyUnresolvedReferences
     isotimestamp = pywikibot.Timestamp.utcnow().toISOformat()
     date = pywikibot.WbTime.fromTimestr(isotimestamp, calendarmodel=Settings.calendarmodel)
     date.hour = 0
@@ -424,7 +425,7 @@ def update_wikidata(properties):
 
         # Assumption: A preexisting publication date is more reliable than the one from github
         date_p = Settings.properties["publication date"]
-        if not date_p in claim.qualifiers:
+        if date_p not in claim.qualifiers:
             get_or_create_qualifiers(wikidata, claim, date_p, release["date"])
 
         title = "Release %s" % release["version"]
