@@ -413,6 +413,14 @@ def update_wikidata(properties):
     latest_version = stable_releases[0]["version"]
     logger.info("Latest version: {}".format(latest_version))
 
+    existing_versions = item.claims.get(Settings.properties["software version"], [])
+    github_version_names = [i['version'] for i in stable_releases]
+
+    for i in existing_versions:
+        if i.getRank() == 'preferred' and i.getTarget() not in github_version_names:
+            logger.info("There's a preferred rank for a version which is not in the github page: {}".format(i.getTarget()))
+            latest_version = None
+
     if len(stable_releases) > 100:
         logger.info("Adding only 100 stable releases")
         stable_releases = stable_releases[:100]
