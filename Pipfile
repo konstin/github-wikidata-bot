@@ -13,4 +13,4 @@ name = "pypi"
 
 pywikibot = "~=3.0.20180403"
 mwparserfromhell = "~=0.5.1"
-CacheControl = {version = "~=0.12.4", extras = ["filecache"]}
+CacheControl = {version = "~=0.12.5", extras = ["filecache"]}
