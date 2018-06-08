@@ -403,6 +403,7 @@ def update_wikidata(properties):
     stable_releases.reverse()
 
     if len(stable_releases) == 0:
+        logger.info("No stable releases")
         return
 
     versions = [i["version"] for i in stable_releases]
