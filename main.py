@@ -345,11 +345,11 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
     urls = item.claims[source_p]
     if source_p in item.claims and len(urls) == 2:
         if urls[0].getTarget() == url_normalized and urls[1].getTarget() == url_raw:
-            logging.info("The old and the new url are already set, removing the old")
+            logger.info("The old and the new url are already set, removing the old")
             item.removeClaims(urls[1])
             return
         if urls[0].getTarget() == url_raw and urls[1].getTarget() == url_normalized:
-            logging.info("The old and the new url are already set, removing the old")
+            logger.info("The old and the new url are already set, removing the old")
             item.removeClaims(urls[0])
             return
 
@@ -358,7 +358,7 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
         return
 
     if urls[0].getTarget() != url_raw:
-        logging.error("Error: The url on the object doesn't match the url from the sparql query " + q_value)
+        logger.error("Error: The url on the object doesn't match the url from the sparql query " + q_value)
         return
 
     # Editing is in this case actually remove the old value and adding the new one
@@ -408,7 +408,8 @@ def update_wikidata(properties):
 
     versions = [i["version"] for i in stable_releases]
     if len(versions) != len(set(versions)):
-        logging.error("There are duplicate releases in {}: {}".format(q_value, stable_releases))
+        minified = [{"version": release["version"], "page": release["page"]} for release in stable_releases]
+        logger.error("There are duplicate releases in {}: {}".format(q_value, minified))
         return
 
     latest_version = stable_releases[0]["version"]
@@ -419,7 +420,8 @@ def update_wikidata(properties):
 
     for i in existing_versions:
         if i.getRank() == 'preferred' and i.getTarget() not in github_version_names:
-            logger.info("There's a preferred rank for a version which is not in the github page: {}".format(i.getTarget()))
+            logger.info(
+                "There's a preferred rank for a version which is not in the github page: {}".format(i.getTarget()))
             latest_version = None
 
     if len(stable_releases) > 100:
