@@ -14,34 +14,23 @@ from cachecontrol.heuristics import LastModified
 from pywikibot.data import sparql
 
 LOGGING = {
-    'version': 1,
-    'formatters': {
-        'extended': {
-            'format': '%(levelname)-8s %(message)s',
+    "version": 1,
+    "formatters": {"extended": {"format": "%(levelname)-8s %(message)s"}},
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+        "all": {
+            "class": "logging.FileHandler",
+            "filename": "all.log",
+            "formatter": "extended",
+        },
+        "error": {
+            "class": "logging.FileHandler",
+            "filename": "error.log",
+            "formatter": "extended",
+            "level": "WARN",
         },
     },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-        },
-        'all': {
-            'class': 'logging.FileHandler',
-            'filename': 'all.log',
-            'formatter': 'extended',
-        },
-        'error': {
-            'class': 'logging.FileHandler',
-            'filename': 'error.log',
-            'formatter': 'extended',
-            'level': 'WARN'
-        }
-    },
-    'loggers': {
-        __name__: {
-            'handlers': ['console', 'all', 'error'],
-            'level': 'INFO',
-        }
-    }
+    "loggers": {__name__: {"handlers": ["console", "all", "error"], "level": "INFO"}},
 }
 
 logging.config.dictConfig(LOGGING)
@@ -66,12 +55,14 @@ class Settings:
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
     version_regex = re.compile(r"\d+(\.\d+)+")
     # Often prereleases aren't marked as such, so we need manually catch those cases
-    unmarked_prerelease_regex = re.compile(r"[ -._\d](b|r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE)
+    unmarked_prerelease_regex = re.compile(
+        r"[ -._\d](b|r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE
+    )
 
     cached_session = CacheControl(
         requests.Session(),
-        cache=FileCache('cache', forever=True),
-        heuristic=LastModified()
+        cache=FileCache("cache", forever=True),
+        heuristic=LastModified(),
     )
 
     properties = {
@@ -108,7 +99,7 @@ def normalize_url(url):
     """
     url = url.strip("/")
     url = "https://" + url.split("://")[1]
-    if url.endswith('.git'):
+    if url.endswith(".git"):
         url = url[:-4]
     return url
 
@@ -259,7 +250,9 @@ def get_data_from_github(url, properties):
     # "retrieved" does only accept dates without time, so create a timestamp with no date
     # noinspection PyUnresolvedReferences
     isotimestamp = pywikibot.Timestamp.utcnow().toISOformat()
-    date = pywikibot.WbTime.fromTimestr(isotimestamp, calendarmodel=Settings.calendarmodel)
+    date = pywikibot.WbTime.fromTimestr(
+        isotimestamp, calendarmodel=Settings.calendarmodel
+    )
     date.hour = 0
     date.minute = 0
     date.second = 0
@@ -305,13 +298,17 @@ def get_data_from_github(url, properties):
             continue
 
         # Fix missing "Release Camdiate" annotation on github
-        if not release["prerelease"] and re.search(Settings.unmarked_prerelease_regex, original_version):
+        if not release["prerelease"] and re.search(
+            Settings.unmarked_prerelease_regex, original_version
+        ):
             logger.info("Assuming Release Candidate: " + original_version)
             release["prerelease"] = True
             continue
 
         # Convert github's timestamps to wikidata dates
-        date = pywikibot.WbTime.fromTimestr(release["published_at"], calendarmodel=Settings.calendarmodel)
+        date = pywikibot.WbTime.fromTimestr(
+            release["published_at"], calendarmodel=Settings.calendarmodel
+        )
         date.hour = 0
         date.minute = 0
         date.second = 0
@@ -321,11 +318,9 @@ def get_data_from_github(url, properties):
             prefix = "pre_release"
         else:
             prefix = "stable_release"
-        properties[prefix].append({
-            "version": version,
-            "date": date,
-            "page": release["html_url"]
-        })
+        properties[prefix].append(
+            {"version": version, "date": date, "page": release["html_url"]}
+        )
 
     return properties
 
@@ -358,24 +353,27 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
         return
 
     if urls[0].getTarget() != url_raw:
-        logger.error("Error: The url on the object doesn't match the url from the sparql query " + q_value)
+        logger.error(
+            "Error: The url on the object doesn't match the url from the sparql query "
+            + q_value
+        )
         return
 
     # Editing is in this case actually remove the old value and adding the new one
     claim = pywikibot.Claim(repo, source_p)
     claim.setTarget(url_normalized)
-    claim.setSnakType('value')
+    claim.setSnakType("value")
     item.addClaim(claim)
     item.removeClaims(urls[0])
 
 
 def set_claim_rank(claim, latest_version, release):
     if release["version"] == latest_version:
-        if claim.getRank() != 'preferred':
-            claim.changeRank('preferred')
+        if claim.getRank() != "preferred":
+            claim.changeRank("preferred")
     else:
-        if claim.getRank() != 'normal':
-            claim.changeRank('normal')
+        if claim.getRank() != "normal":
+            claim.changeRank("normal")
 
 
 def update_wikidata(properties):
@@ -392,10 +390,20 @@ def update_wikidata(properties):
         do_normalize_url(item, wikidata, url_normalized, url_raw, q_value)
 
     # Add the website if doesn not already exists
-    if properties.get("website", "").startswith("http") and Settings.properties["official website"] not in item.claims:
+    if (
+        properties.get("website", "").startswith("http")
+        and Settings.properties["official website"] not in item.claims
+    ):
         logger.info("Adding the website: {}".format(properties["website"]))
-        claim = get_or_create_claim(wikidata, item, Settings.properties["official website"], properties["website"])
-        get_or_create_sources(wikidata, claim, github_repo_to_api(url_normalized), properties["retrieved"])
+        claim = get_or_create_claim(
+            wikidata,
+            item,
+            Settings.properties["official website"],
+            properties["website"],
+        )
+        get_or_create_sources(
+            wikidata, claim, github_repo_to_api(url_normalized), properties["retrieved"]
+        )
 
     # Add all stable releases
     stable_releases = properties["stable_release"]
@@ -408,7 +416,10 @@ def update_wikidata(properties):
 
     versions = [i["version"] for i in stable_releases]
     if len(versions) != len(set(versions)):
-        minified = [{"version": release["version"], "page": release["page"]} for release in stable_releases]
+        minified = [
+            {"version": release["version"], "page": release["page"]}
+            for release in stable_releases
+        ]
         logger.error("There are duplicate releases in {}: {}".format(q_value, minified))
         return
 
@@ -416,12 +427,15 @@ def update_wikidata(properties):
     logger.info("Latest version: {}".format(latest_version))
 
     existing_versions = item.claims.get(Settings.properties["software version"], [])
-    github_version_names = [i['version'] for i in stable_releases]
+    github_version_names = [i["version"] for i in stable_releases]
 
     for i in existing_versions:
-        if i.getRank() == 'preferred' and i.getTarget() not in github_version_names:
+        if i.getRank() == "preferred" and i.getTarget() not in github_version_names:
             logger.info(
-                "There's a preferred rank for a version which is not in the github page: {}".format(i.getTarget()))
+                "There's a preferred rank for a version which is not in the github page: {}".format(
+                    i.getTarget()
+                )
+            )
             latest_version = None
 
     if len(stable_releases) > 100:
@@ -432,7 +446,9 @@ def update_wikidata(properties):
 
     for release in stable_releases:
         logger.info(" - '{}'".format(release["version"]))
-        claim = get_or_create_claim(wikidata, item, Settings.properties["software version"], release["version"])
+        claim = get_or_create_claim(
+            wikidata, item, Settings.properties["software version"], release["version"]
+        )
 
         # Assumption: A preexisting publication date is more reliable than the one from github
         date_p = Settings.properties["publication date"]
@@ -440,7 +456,14 @@ def update_wikidata(properties):
             get_or_create_qualifiers(wikidata, claim, date_p, release["date"])
 
         title = "Release %s" % release["version"]
-        get_or_create_sources(wikidata, claim, release["page"], properties["retrieved"], title, release["date"])
+        get_or_create_sources(
+            wikidata,
+            claim,
+            release["page"],
+            properties["retrieved"],
+            title,
+            release["date"],
+        )
 
         # Give the latest release the preferred rank
         # And work around a bug in pywikibot
@@ -451,7 +474,12 @@ def update_wikidata(properties):
 
             item.get(force=True)
 
-            claim = get_or_create_claim(wikidata, item, Settings.properties["software version"], release["version"])
+            claim = get_or_create_claim(
+                wikidata,
+                item,
+                Settings.properties["software version"],
+                release["version"],
+            )
             set_claim_rank(claim, latest_version, release)
 
 
@@ -459,7 +487,9 @@ def update_wikipedia(combined_properties):
     """ Updates the software info boxes of wikipedia articles according to github data. Most lieky BROKEN """
     if "article" not in combined_properties:
         return
-    q_value = combined_properties["article"].replace("https://en.wikipedia.org/wiki/", "")
+    q_value = combined_properties["article"].replace(
+        "https://en.wikipedia.org/wiki/", ""
+    )
     page = pywikibot.Page(pywikibot.Site("en", "wikipedia"), q_value)
     text = page.text
     wikitext = mwparserfromhell.parse(text)
@@ -484,7 +514,9 @@ def update_wikipedia(combined_properties):
             template.add("latest release version", srv)
 
         date = combined_properties["stable_release"][0]["date"]
-        date_text = "{{{{release date|{}|{}|{}}}}}".format(date.year, date.month, date.day)
+        date_text = "{{{{release date|{}|{}|{}}}}}".format(
+            date.year, date.month, date.day
+        )
         if template.has("latest release date"):
             template.get("latest release date").value = " " + date_text + "\n"
         else:
@@ -512,9 +544,9 @@ def main():
         github_oath_token = args.github_oauth_token
     else:
         github_oath_token = open(Settings.oauth_token_file).readline().strip()
-    Settings.cached_session.headers.update({
-        "Authorization": "token " + github_oath_token
-    })
+    Settings.cached_session.headers.update(
+        {"Authorization": "token " + github_oath_token}
+    )
 
     logger.info("# Querying Projects")
     projects = query_projects()
@@ -527,14 +559,18 @@ def main():
             continue
 
         if not Settings.repo_regex.match(project["repo"]):
-            logger.info(" - {}: {} {}".format(project["projectLabel"], project["project"], project["repo"]))
+            logger.info(
+                " - {}: {} {}".format(
+                    project["projectLabel"], project["project"], project["repo"]
+                )
+            )
             continue
 
         projects_filtered.append(project)
 
     logger.info("# Processing projects")
     for project in projects_filtered:
-        logger.info("## " + project["projectLabel"] + ": " + project['project'])
+        logger.info("## " + project["projectLabel"] + ": " + project["project"])
 
         try:
             properties = get_data_from_github(project["repo"], project)
@@ -550,5 +586,5 @@ def main():
     logger.info("# Finished successfully")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
