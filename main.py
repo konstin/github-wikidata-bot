@@ -106,8 +106,8 @@ def normalize_url(url):
 
 def normalize_version(version, name):
     """
-    Removes some of the bloat in the version strings. Note that this function is mostly useless as it has become
-    superseeded by the regex.
+    Removes some of the bloat in the version strings. Note that this function
+    is mostly useless as it has become superseeded by the regex.
     """
     if not version:
         return ""
@@ -124,7 +124,8 @@ def normalize_version(version, name):
 
 def _get_or_create(method, all_objects, repo, p_value, value):
     """
-    Helper method that adds a value `value` with the property `p_value` if it doesn't exist, otherwise retrives it.
+    Helper method that adds a value `value` with the property `p_value` if it
+    doesn't exist, otherwise retrieves it.
     """
     for requested in all_objects:
         if requested.target_equals(value):
@@ -151,7 +152,7 @@ def get_or_create_claim(repo, item, p_value, value):
 
 def get_or_create_qualifiers(repo, claim, p_value, qualifier):
     """
-    Gets or creates a `qualfier` under the property `p_value` to `claim`
+    Gets or creates a `qualifier` under the property `p_value` to `claim`
     """
     if p_value in claim.qualifiers:
         all_objects = claim.qualifiers[p_value]
@@ -241,10 +242,11 @@ def get_data_from_github(url, properties):
      - version number string and release date of all stable releases
      - version number string and release date of all prereleases
 
-    All data is preprocessed, i.e. the version numbers are extracted and unmarked prereleases are discovered
+    All data is preprocessed, i.e. the version numbers are extracted and
+    unmarked prereleases are discovered
 
     :param url: The url of the github repository
-    :param properties: The already gathere information
+    :param properties: The already gathered information
     :return: dict of dicts
     """
     # "retrieved" does only accept dates without time, so create a timestamp with no date
@@ -485,7 +487,10 @@ def update_wikidata(properties):
 
 
 def update_wikipedia(combined_properties):
-    """ Updates the software info boxes of wikipedia articles according to github data. Most lieky BROKEN """
+    """
+    Updates the software info boxes of wikipedia articles according to github data.
+    Most likely BROKEN
+    """
     if "article" not in combined_properties:
         return
     q_value = combined_properties["article"].replace(
