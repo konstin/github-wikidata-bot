@@ -1,5 +1,7 @@
 ## Github to wikidata bot
 
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
+
 Update Wikidata and Wikipedia entries using metadata from GitHub.
 
 For free software projects with a GitHub repository listed in Wikidata,
