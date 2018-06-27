@@ -416,11 +416,12 @@ def update_wikidata(properties):
 
     versions = [i["version"] for i in stable_releases]
     if len(versions) != len(set(versions)):
-        minified = [
+        duplicates = [
             {"version": release["version"], "page": release["page"]}
             for release in stable_releases
-        ]
-        logger.error("There are duplicate releases in {}: {}".format(q_value, minified))
+            if versions.count(release["version"]) > 1
+                ]
+        logger.error("There are duplicate releases in {}: {}".format(q_value, duplicates))
         return
 
     latest_version = stable_releases[0]["version"]
