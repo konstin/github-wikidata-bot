@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import logging.config
 import re
 from distutils.version import LooseVersion
@@ -46,7 +47,6 @@ class Settings:
     normalize_url = True
 
     sparql_file = "free_software_items.rq"
-    oauth_token_file = "github_oauth_token.txt"
 
     # pywikibot is too stupid to cache the calendar model, so let's do this manually
     calendarmodel = pywikibot.Site().data_repository().calendarmodel()
@@ -551,7 +551,8 @@ def main():
     if args.github_oauth_token:
         github_oath_token = args.github_oauth_token
     else:
-        github_oath_token = open(Settings.oauth_token_file).readline().strip()
+        with open("config.json") as config:
+            github_oath_token = json.load(config)["github-oauth-token"]
     Settings.cached_session.headers.update(
         {"Authorization": "token " + github_oath_token}
     )

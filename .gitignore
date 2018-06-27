@@ -1,6 +1,7 @@
 throttle.ctrl
 pywikibot.lwp
 github_oauth_token.txt
+config.json
 apicache/
 cache/
 src/

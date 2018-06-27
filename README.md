@@ -19,14 +19,20 @@ using metadata collected from the GitHub API:
 It is recommended to install dependecies using pipenv (`pipenv install`),
 though you can also use pip (`pip install -r requirements.txt`).
 
-[Generate a personal access token on GitHub][github-token]
-and either paste it to a file called `github_oauth_token.txt`
-or pass it with `--github-oauth-token [token]`. Then run `main.py` in
-a terminal and enter the password for your bot account.
+[Generate a personal access token on GitHub][github-token]. Create a config.json file with that token and your wikidata username:
+
+```json
+{
+  "username": "my-wikidata-username",
+  "github-oauth-token": "abcdedf1234567"
+}
+```
+
+Then run `main.py` in a terminal and enter the password for your bot account.
 
 Note that this script uses a http cache for GitHub responses
 with the "LastModified" heuristic, so you might need to clear the cache manually
-if you want the really latest version.
+if you want to guarantee that you get the latest version.
 
 ## Implementation notes
 
