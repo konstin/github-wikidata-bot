@@ -294,7 +294,7 @@ def get_data_from_github(url, properties):
             version = match_name.group(0)
             original_version = release_name
         else:
-            logger.info("Invalid version string '{}'".format(release["name"]))
+            logger.warning("Invalid version string '{}'".format(release["name"]))
             continue
 
         # Fix missing "Release Camdiate" annotation on github
@@ -349,12 +349,12 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
             return
 
     if source_p in item.claims and len(urls) > 1:
-        logger.error("Error: Multiple source code repositories for " + q_value)
+        logger.info("Multiple source code repositories for {} not supported".format(q_value))
         return
 
     if urls[0].getTarget() != url_raw:
         logger.error(
-            "Error: The url on the object doesn't match the url from the sparql query "
+            "The url on the object doesn't match the url from the sparql query "
             + q_value
         )
         return
@@ -431,7 +431,7 @@ def update_wikidata(properties):
 
     for i in existing_versions:
         if i.getRank() == "preferred" and i.getTarget() not in github_version_names:
-            logger.info(
+            logger.warning(
                 "There's a preferred rank for a version which is not in the github page: {}".format(
                     i.getTarget()
                 )
@@ -439,7 +439,7 @@ def update_wikidata(properties):
             latest_version = None
 
     if len(stable_releases) > 100:
-        logger.info("Adding only 100 stable releases of ", len(stable_releases))
+        logger.warning("Adding only 100 stable releases of ", len(stable_releases))
         stable_releases = stable_releases[-100:]
     else:
         logger.info("Adding {} stable releases:".format(len(stable_releases)))
@@ -470,7 +470,7 @@ def update_wikidata(properties):
         try:
             set_claim_rank(claim, latest_version, release)
         except AssertionError:
-            logger.info("Using the fallback for setting the preferred rank")
+            logger.warning("Using the fallback for setting the preferred rank")
 
             item.get(force=True)
 
