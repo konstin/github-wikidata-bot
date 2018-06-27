@@ -349,7 +349,7 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
             return
 
     if source_p in item.claims and len(urls) > 1:
-        logger.info("Multiple source code repositories for %s not supported" % q_value)
+        logger.info("Multiple source code repositories for {} not supported".format(q_value))
         return
 
     if urls[0].getTarget() != url_raw:
