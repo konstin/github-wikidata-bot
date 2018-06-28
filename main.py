@@ -287,13 +287,13 @@ def get_data_from_github(url, properties):
         release_name = normalize_version(release["name"], project_info["name"])
         release_tag_name = normalize_version(release["tag_name"], project_info["name"])
 
-        match_name = re.search(Settings.version_regex, release_name)
-        match_tag_name = re.search(Settings.version_regex, release_tag_name)
-        if match_tag_name:
-            version = match_tag_name.group(0)
+        match_name = list(re.finditer(Settings.version_regex, release_name))
+        match_tag_name = list(re.finditer(Settings.version_regex, release_tag_name))
+        if len(match_tag_name) == 1:
+            version = match_tag_name[0].group(0)
             original_version = release_tag_name
-        elif match_name:
-            version = match_name.group(0)
+        elif len(match_name) == 1:
+            version = match_name[0].group(0)
             original_version = release_name
         else:
             logger.warning("Invalid version string '{}'".format(release["name"]))
