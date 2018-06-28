@@ -14,6 +14,8 @@ from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import LastModified
 from pywikibot.data import sparql
 
+from versionhandler import extract_version
+
 LOGGING = {
     "version": 1,
     "formatters": {"extended": {"format": "%(levelname)-8s %(message)s"}},
@@ -53,14 +55,6 @@ class Settings:
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
-    version_regex = re.compile(
-            r"\d+(\.\d+)+([a-z]|-\d|-?(alpha|beta|preview|rc)[.-]?\d*)?(\s|$)",
-            re.IGNORECASE
-    )
-    # Often prereleases aren't marked as such, so we need manually catch those cases
-    unmarked_prerelease_regex = re.compile(
-        r"[ -._\d](r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE
-    )
 
     cached_session = CacheControl(
         requests.Session(),
@@ -105,24 +99,6 @@ def normalize_url(url):
     if url.endswith(".git"):
         url = url[:-4]
     return url
-
-
-def normalize_version(version, name):
-    """
-    Removes some of the bloat in the version strings. Note that this function
-    is mostly useless as it has become superseeded by the regex.
-    """
-    if not version:
-        return ""
-
-    for i in [re.escape(name), "release", "stable", "version", "patch", r"  +"]:
-        insensitive = re.compile(i, re.IGNORECASE)
-        version = insensitive.sub("", version)
-    version = version.strip()
-    if len(version) > 0 and version[0] == "v":
-        version = version[1:]
-    version = version.strip(" -_")
-    return version
 
 
 def _get_or_create(method, all_objects, repo, p_value, value):
@@ -287,28 +263,24 @@ def get_data_from_github(url, properties):
     # (pre)release versions and dates
     for release in releases:
         # Heuristics to find the version number
-        release_name = normalize_version(release["name"], project_info["name"])
-        release_tag_name = normalize_version(release["tag_name"], project_info["name"])
-
-        match_name = list(re.finditer(Settings.version_regex, release_name))
-        match_tag_name = list(re.finditer(Settings.version_regex, release_tag_name))
-        if len(match_tag_name) == 1:
-            version = match_tag_name[0].group(0).strip()
-            original_version = release_tag_name
-        elif len(match_name) == 1:
-            version = match_name[0].group(0).strip()
-            original_version = release_name
+        match_tag_name = extract_version(release["tag_name"], project_info["name"])
+        match_name = extract_version(release["name"], project_info["name"])
+        if match_tag_name is not None:
+            version, release_type = match_tag_name
+            original_version = release["tag_name"]
+        elif match_name is not None:
+            version, release_type = match_name
+            original_version = release["name"]
         else:
             logger.warning("Invalid version string '{}'".format(release["name"]))
             continue
 
-        # Fix missing "Release Candidate" annotation on github
-        if not release["prerelease"] and re.search(
-            Settings.unmarked_prerelease_regex, original_version
-        ):
-            logger.info("Assuming Release Candidate: " + original_version)
+        # Often prereleases aren't marked as such, so we need manually catch those cases
+        if not release["prerelease"] and release_type != "stable":
+            logger.info("Diverting release type: " + original_version)
             release["prerelease"] = True
-            continue
+        elif release["prerelease"] and release_type == "stable":
+            release_type = "unstable"
 
         # Convert github's timestamps to wikidata dates
         date = pywikibot.WbTime.fromTimestr(
@@ -324,7 +296,8 @@ def get_data_from_github(url, properties):
         else:
             prefix = "stable_release"
         properties[prefix].append(
-            {"version": version, "date": date, "page": release["html_url"]}
+            {"version": version, "date": date,
+             "page": release["html_url"], "release_type": release_type}
         )
 
     return properties
