@@ -53,10 +53,10 @@ class Settings:
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
-    version_regex = re.compile(r"\d+(\.\d+)+")
+    version_regex = re.compile(r"\d+(\.\d+)+([a-z]|-\d)?(\s|$)")
     # Often prereleases aren't marked as such, so we need manually catch those cases
     unmarked_prerelease_regex = re.compile(
-        r"[ -._\d](b|r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE
+        r"[ -._\d](r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE
     )
 
     cached_session = CacheControl(
@@ -290,16 +290,16 @@ def get_data_from_github(url, properties):
         match_name = list(re.finditer(Settings.version_regex, release_name))
         match_tag_name = list(re.finditer(Settings.version_regex, release_tag_name))
         if len(match_tag_name) == 1:
-            version = match_tag_name[0].group(0)
+            version = match_tag_name[0].group(0).strip()
             original_version = release_tag_name
         elif len(match_name) == 1:
-            version = match_name[0].group(0)
+            version = match_name[0].group(0).strip()
             original_version = release_name
         else:
             logger.warning("Invalid version string '{}'".format(release["name"]))
             continue
 
-        # Fix missing "Release Camdiate" annotation on github
+        # Fix missing "Release Candidate" annotation on github
         if not release["prerelease"] and re.search(
             Settings.unmarked_prerelease_regex, original_version
         ):
