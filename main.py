@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class Settings:
-    do_update_wikidata = True
+    do_update_wikidata = False
     # Don't activate this, it's most likely broken
     do_update_wikipedia = False
 
@@ -53,7 +53,10 @@ class Settings:
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
-    version_regex = re.compile(r"\d+(\.\d+)+([a-z]|-\d)?(\s|$)")
+    version_regex = re.compile(
+            r"\d+(\.\d+)+([a-z]|-\d|-?(alpha|beta|preview|rc)[.-]?\d*)?(\s|$)",
+            re.IGNORECASE
+    )
     # Often prereleases aren't marked as such, so we need manually catch those cases
     unmarked_prerelease_regex = re.compile(
         r"[ -._\d](r|rc|beta|alpha)([ .\d].*)?$", re.IGNORECASE
