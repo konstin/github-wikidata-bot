@@ -74,14 +74,14 @@ class Settings:
 
 
 def github_repo_to_api(url):
-    """Converts a github repoository url to the api entry with the general information"""
+    """Converts a github repository url to the api entry with the general information"""
     url = normalize_url(url)
     url = url.replace("https://github.com/", "https://api.github.com/repos/")
     return url
 
 
 def github_repo_to_api_releases(url):
-    """Converts a github repoository url to the api entry with the releases"""
+    """Converts a github repository url to the api entry with the releases"""
     url = github_repo_to_api(url)
     url += "/releases"
     return url
@@ -369,7 +369,7 @@ def update_wikidata(properties):
     if Settings.normalize_url:
         do_normalize_url(item, wikidata, url_normalized, url_raw, q_value)
 
-    # Add the website if doesn not already exists
+    # Add the website if doesn't not already exists
     if (
         properties.get("website", "").startswith("http")
         and Settings.properties["official website"] not in item.claims

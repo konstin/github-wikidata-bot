@@ -2,8 +2,21 @@ import re
 
 
 def extract_version(string, name=None):
+    """
+    Heuristic to extract a version-number from a string.
+
+    See test file for supported formats. Returns None if no unambiguously
+    version number could be found.
+
+    :param string: the string to search
+    :param name: the name of the program
+    :return: None or a tuple of two strings:
+             - type of version ("stable", "beta", "alpha", "rc" or "unstable")
+             - version number
+    """
     if type(string) is not str:
         return None
+    # Remove a prefix of the name of the program if existent
     if name:
         namere = re.compile(r"^" + re.escape(name) + r"[ -_]", re.IGNORECASE)
         match = namere.match(string)
