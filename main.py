@@ -266,10 +266,10 @@ def get_data_from_github(url, properties):
         match_tag_name = extract_version(release["tag_name"], project_info["name"])
         match_name = extract_version(release["name"], project_info["name"])
         if match_tag_name is not None:
-            version, release_type = match_tag_name
+            release_type, version = match_tag_name
             original_version = release["tag_name"]
         elif match_name is not None:
-            version, release_type = match_name
+            release_type, version = match_name
             original_version = release["name"]
         else:
             logger.warning("Invalid version string '{}'".format(release["name"]))
