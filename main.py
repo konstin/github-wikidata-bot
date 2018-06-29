@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 class Settings:
-    do_update_wikidata = False
+    do_update_wikidata = True
     # Don't activate this, it's most likely broken
     do_update_wikipedia = False
 
