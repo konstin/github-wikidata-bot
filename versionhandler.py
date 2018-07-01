@@ -25,9 +25,9 @@ def extract_version(string, name=None):
     STABLE = "stable"
     UNSTABLE = "unstable"
     exact = re.compile(r"[vV]?(\d{1,5}(\.\d{1,3})*)")
-    stable = re.compile(r"(\s|^|v)\d{1,3}(\.\d{1,3})+(-\d\d?|[a-z])?(\s|$)")
+    stable = re.compile(r"(\s|^|v)(\d{1,3}(\.\d{1,3})+(-\d\d?|[a-z])?)(\s|$)")
     pre = re.compile(
-        r"(\s|^|v)(\d{1,3}(\.\d{1,3})+)[.-]?(alpha|beta|pre|rc|b|preview)[.-]?\d*(\s|$)",
+        r"(\s|^|v)((\d{1,3}(\.\d{1,3})+)[.-]?(alpha|beta|pre|rc|b|preview)[.-]?\d*)(\s|$)",
         re.IGNORECASE,
     )
     explicitstable = re.compile(r"(\s|^|v)(\d{1,3}(\.\d{1,3})+)(-stable)(\s|$)")
@@ -43,7 +43,7 @@ def extract_version(string, name=None):
         return None
 
     if match_stable:
-        return (STABLE, match_stable[0].group(0).strip())
+        return (STABLE, match_stable[0].group(2).strip())
 
     if match_pre:
         state = re.search(
@@ -53,9 +53,9 @@ def extract_version(string, name=None):
             statestr = state.group(1).lower()
             if statestr == "b":
                 statestr = "beta"
-            return (statestr, match_pre[0].group(0))
+            return (statestr, match_pre[0].group(2).strip())
         else:
-            return (UNSTABLE, match_pre[0].group(0))
+            return (UNSTABLE, match_pre[0].group(2).strip())
 
     if match_explicit:
         return (STABLE, match_explicit[0].group(2).strip())

@@ -11,6 +11,7 @@ def test_stable():
     assert extract_version("1.23f") == ("stable", "1.23f")
     assert extract_version("1.2-1") == ("stable", "1.2-1")
     assert extract_version("1.2-12") == ("stable", "1.2-12")
+    assert extract_version("v1.2-12") == ("stable", "1.2-12")
     assert extract_version("0.23.5-stable") == ("stable", "0.23.5")
     assert extract_version("program 1.2", "program") == ("stable", "1.2")
     assert extract_version("program-1.2", "program") == ("stable", "1.2")
@@ -32,6 +33,8 @@ def test_unstable():
     assert extract_version("1.4-beta.1") == ("beta", "1.4-beta.1")
     assert extract_version("1.4-beta-1") == ("beta", "1.4-beta-1")
     assert extract_version("1.3b1") == ("beta", "1.3b1")
+    assert extract_version("Picard 2.0.0beta3") == ("beta", "2.0.0beta3")
+    assert extract_version("v1.0.0-beta3") == ("beta", "1.0.0-beta3")
 
 
 def test_invalid():
