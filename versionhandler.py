@@ -45,7 +45,6 @@ def extract_version(string, name=None):
     if match_stable:
         return (STABLE, match_stable[0].group(0).strip())
 
-    match = list(pre.finditer(string))
     if match_pre:
         state = re.search(
             r"[^a-zA-Z](alpha|beta|rc|b)($|[^a-zA-Z])", string, re.IGNORECASE
