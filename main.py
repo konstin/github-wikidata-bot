@@ -5,6 +5,7 @@ import logging.config
 import re
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
+from typing import Optional
 
 import mwparserfromhell
 import pywikibot
@@ -194,7 +195,7 @@ def get_json_cached(url):
         return {}
 
 
-def query_projects():
+def query_projects(filter: Optional[str] = None):
     """
     Queries for all software projects and returns them as an array of simplified dicts
     :return: the data splitted into projects with and without github
@@ -204,14 +205,88 @@ def query_projects():
     response = wikdata_sparql.query(sparql_free_software_items)
 
     projects = []
+    logger.info(
+        "{} projects were found by the sparql query".format(
+            len(response["results"]["bindings"])
+        )
+    )
     for project in response["results"]["bindings"]:
         # Remove bloating type information
         for key in project.keys():
             project[key] = project[key]["value"]
 
+        if filter and filter not in project["projectLabel"]:
+            continue
+
+        if not Settings.repo_regex.match(project["repo"]):
+            logger.info(
+                " - Removing {}: {} {}".format(
+                    project["projectLabel"], project["project"], project["repo"]
+                )
+            )
+            continue
+
         projects.append(project)
 
+    logger.info("{} projects remained after filtering".format(len(projects)))
+
     return projects
+
+
+def get_all_github_releases(url: str):
+    """ Gets all pages of the release information """
+    url = github_repo_to_api_releases(url)
+    page_number = 1
+    releases = []
+    while True:
+        page = get_json_cached(url + "?page=" + str(page_number))
+        if not page:
+            break
+        page_number += 1
+        releases += page
+    return releases
+
+
+def analyse_release(release: dict, project_name: str) -> Optional[dict]:
+    """ Heuristics to find the version number """
+    match_tag_name = extract_version(release["tag_name"], project_name)
+    match_name = extract_version(release["name"], project_name)
+    if match_tag_name is not None:
+        release_type, version = match_tag_name
+        original_version = release["tag_name"]
+    elif match_name is not None:
+        release_type, version = match_name
+        original_version = release["name"]
+    else:
+        logger.warning(
+            "Invalid version strings '{}' and '{}'".format(
+                release["tag_name"], release["name"]
+            )
+        )
+        return None
+
+    # Often prereleases aren't marked as such, so we need manually catch those cases
+    if not release["prerelease"] and release_type != "stable":
+        logger.info("Diverting release type: " + original_version)
+        release["prerelease"] = True
+    elif release["prerelease"] and release_type == "stable":
+        release_type = "unstable"
+
+    # Convert github's timestamps to wikidata dates
+    date = pywikibot.WbTime.fromTimestr(
+        release["published_at"], calendarmodel=Settings.calendarmodel
+    )
+    date.hour = 0
+    date.minute = 0
+    date.second = 0
+    date.precision = pywikibot.WbTime.PRECISION["day"]
+
+    return {
+        "version": version,
+        "date": date,
+        "page": release["html_url"],
+        "release_type": release_type,
+    }
 
 
 def get_data_from_github(url, properties):
@@ -246,59 +321,14 @@ def get_data_from_github(url, properties):
     if project_info.get("homepage"):
         properties["website"] = project_info["homepage"]
 
-    # Get all pages of the release information
-    url = github_repo_to_api_releases(url)
-    page_number = 1
-    releases = []
-    while True:
-        page = get_json_cached(url + "?page=" + str(page_number))
-        if not page:
-            break
-        page_number += 1
-        releases += page
+    releases = get_all_github_releases(url)
 
     properties["stable_release"] = []
-    properties["pre_release"] = []
-
-    # (pre)release versions and dates
     for release in releases:
-        # Heuristics to find the version number
-        match_tag_name = extract_version(release["tag_name"], project_info["name"])
-        match_name = extract_version(release["name"], project_info["name"])
-        if match_tag_name is not None:
-            release_type, version = match_tag_name
-            original_version = release["tag_name"]
-        elif match_name is not None:
-            release_type, version = match_name
-            original_version = release["name"]
-        else:
-            logger.warning("Invalid version string '{}'".format(release["name"]))
-            continue
+        extract = analyse_release(release, project_info["name"])
 
-        # Often prereleases aren't marked as such, so we need manually catch those cases
-        if not release["prerelease"] and release_type != "stable":
-            logger.info("Diverting release type: " + original_version)
-            release["prerelease"] = True
-        elif release["prerelease"] and release_type == "stable":
-            release_type = "unstable"
-
-        # Convert github's timestamps to wikidata dates
-        date = pywikibot.WbTime.fromTimestr(
-            release["published_at"], calendarmodel=Settings.calendarmodel
-        )
-        date.hour = 0
-        date.minute = 0
-        date.second = 0
-        date.precision = pywikibot.WbTime.PRECISION["day"]
-
-        if release["prerelease"]:
-            prefix = "pre_release"
-        else:
-            prefix = "stable_release"
-        properties[prefix].append(
-            {"version": version, "date": date,
-             "page": release["html_url"], "release_type": release_type}
-        )
+        if extract and extract["release_type"] == "stable":
+            properties["stable_release"].append(extract)
 
     return properties
 
@@ -400,8 +430,10 @@ def update_wikidata(properties):
             {"version": release["version"], "page": release["page"]}
             for release in stable_releases
             if versions.count(release["version"]) > 1
-                ]
-        logger.error("There are duplicate releases in {}: {}".format(q_value, duplicates))
+        ]
+        logger.error(
+            "There are duplicate releases in {}: {}".format(q_value, duplicates)
+        )
         return
 
     latest_version = stable_releases[0]["version"]
@@ -534,27 +566,11 @@ def main():
     )
 
     logger.info("# Querying Projects")
-    projects = query_projects()
+    projects = query_projects(args.filter)
     logger.info("{} projects were found".format(len(projects)))
 
-    logger.info("# Filtering Projects")
-    projects_filtered = []
-    for project in projects:
-        if args.filter not in project["projectLabel"]:
-            continue
-
-        if not Settings.repo_regex.match(project["repo"]):
-            logger.info(
-                " - {}: {} {}".format(
-                    project["projectLabel"], project["project"], project["repo"]
-                )
-            )
-            continue
-
-        projects_filtered.append(project)
-
     logger.info("# Processing projects")
-    for project in projects_filtered:
+    for project in projects:
         logger.info("## " + project["projectLabel"] + ": " + project["project"])
 
         try:
