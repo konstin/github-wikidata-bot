@@ -21,17 +21,16 @@ def extract_version(string, name=None):
         namere = re.compile(r"^" + re.escape(name) + r"[ -_]", re.IGNORECASE)
         match = namere.match(string)
         if match:
-            string = string[match.end():]
+            string = string[match.end() :]
     STABLE = "stable"
     UNSTABLE = "unstable"
     exact = re.compile(r"[vV]?(\d{1,5}(\.\d{1,3})*)")
     stable = re.compile(r"(\s|^|v)\d{1,3}(\.\d{1,3})+(-\d\d?|[a-z])?(\s|$)")
     pre = re.compile(
         r"(\s|^|v)(\d{1,3}(\.\d{1,3})+)[.-]?(alpha|beta|pre|rc|b|preview)[.-]?\d*(\s|$)",
-        re.IGNORECASE
+        re.IGNORECASE,
     )
-    explicitstable = re.compile(
-        r"(\s|^|v)(\d{1,3}(\.\d{1,3})+)(-stable)(\s|$)")
+    explicitstable = re.compile(r"(\s|^|v)(\d{1,3}(\.\d{1,3})+)(-stable)(\s|$)")
 
     match = exact.fullmatch(string)
     if match:
@@ -49,11 +48,12 @@ def extract_version(string, name=None):
     match = list(pre.finditer(string))
     if match_pre:
         state = re.search(
-            r"[^a-zA-Z](alpha|beta|rc|b)($|[^a-zA-Z])", string, re.IGNORECASE)
+            r"[^a-zA-Z](alpha|beta|rc|b)($|[^a-zA-Z])", string, re.IGNORECASE
+        )
         if state:
             statestr = state.group(1).lower()
-            if statestr == 'b':
-                statestr = 'beta'
+            if statestr == "b":
+                statestr = "beta"
             return (statestr, match_pre[0].group(0))
         else:
             return (UNSTABLE, match_pre[0].group(0))
