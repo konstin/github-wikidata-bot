@@ -249,8 +249,8 @@ def get_all_github_releases(url: str):
 
 def analyse_release(release: dict, project_name: str) -> Optional[dict]:
     """ Heuristics to find the version number """
-    match_tag_name = extract_version(release["tag_name"], project_name)
-    match_name = extract_version(release["name"], project_name)
+    match_tag_name = extract_version(release["tag_name"] or "", project_name)
+    match_name = extract_version(release["name"] or "", project_name)
     if match_tag_name is not None:
         release_type, version = match_tag_name
         original_version = release["tag_name"]
