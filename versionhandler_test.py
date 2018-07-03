@@ -56,3 +56,4 @@ def test_invalid():
     assert extract_version("foo #871") is None
     assert extract_version("RC1") is None
     assert extract_version("1234567") is None
+    assert extract_version("mame0199", "mame") is None

@@ -22,7 +22,7 @@ def extract_version(
     """
     # Remove a prefix of the name of the program if existent
     if name:
-        namere = re.compile(r"^" + re.escape(name) + r"[ -_]", re.IGNORECASE)
+        namere = re.compile(r"^" + re.escape(name) + r"[ _-]", re.IGNORECASE)
         match = namere.match(string)
         if match:
             string = string[match.end() :]
