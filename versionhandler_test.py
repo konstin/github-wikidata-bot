@@ -35,6 +35,8 @@ def test_unstable():
     assert extract_version("1.3b1") == ("beta", "1.3b1")
     assert extract_version("Picard 2.0.0beta3") == ("beta", "2.0.0beta3")
     assert extract_version("v1.0.0-beta3") == ("beta", "1.0.0-beta3")
+    assert extract_version("9.3.2_RC1") == ("rc", "9.3.2_RC1")
+    assert extract_version("v2.1-rc1") == ("rc", "2.1-rc1")
 
 
 def test_invalid():
