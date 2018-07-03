@@ -88,6 +88,13 @@ def github_repo_to_api_releases(url):
     return url
 
 
+def github_repo_to_api_tags(url):
+    """Converts a github repository url to the api entry with the tags"""
+    url = github_repo_to_api(url)
+    url += "/tags"
+    return url
+
+
 def normalize_url(url):
     """
     Canonical urls be like: https, no slash, no file extension
@@ -100,6 +107,17 @@ def normalize_url(url):
     if url.endswith(".git"):
         url = url[:-4]
     return url
+
+
+def string_to_wddate(isotimestamp):
+    date = pywikibot.WbTime.fromTimestr(
+        isotimestamp, calendarmodel=Settings.calendarmodel
+    )
+    date.hour = 0
+    date.minute = 0
+    date.second = 0
+    date.precision = pywikibot.WbTime.PRECISION["day"]
+    return date
 
 
 def _get_or_create(method, all_objects, repo, p_value, value):
@@ -282,13 +300,7 @@ def analyse_release(release: dict, project_name: str) -> Optional[dict]:
         release_type = "unstable"
 
     # Convert github's timestamps to wikidata dates
-    date = pywikibot.WbTime.fromTimestr(
-        release["published_at"], calendarmodel=Settings.calendarmodel
-    )
-    date.hour = 0
-    date.minute = 0
-    date.second = 0
-    date.precision = pywikibot.WbTime.PRECISION["day"]
+    date = string_to_wddate(release["published_at"])
 
     return {
         "version": version,
@@ -315,14 +327,7 @@ def get_data_from_github(url, properties):
     # "retrieved" does only accept dates without time, so create a timestamp with no date
     # noinspection PyUnresolvedReferences
     isotimestamp = pywikibot.Timestamp.utcnow().toISOformat()
-    date = pywikibot.WbTime.fromTimestr(
-        isotimestamp, calendarmodel=Settings.calendarmodel
-    )
-    date.hour = 0
-    date.minute = 0
-    date.second = 0
-    date.precision = pywikibot.WbTime.PRECISION["day"]
-    properties["retrieved"] = date
+    properties["retrieved"] = string_to_wddate(isotimestamp)
 
     # General project information
     project_info = get_json_cached(github_repo_to_api(url))
