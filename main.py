@@ -6,6 +6,7 @@ import re
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
 from typing import Optional
+from urllib.parse import urlencode
 
 import mwparserfromhell
 import pywikibot
@@ -326,7 +327,7 @@ def analyse_tag(release: dict, project_info: dict) -> Optional[dict]:
     date = string_to_wddate(
         get_json_cached(release["commit"]["url"])["commit"]["committer"]["date"]
     )
-    html_url = project_info["html_url"] + "/releases/tag/" + release["name"]
+    html_url = project_info["html_url"] + "/releases/tag/" + urlencode(release["name"])
 
     return {
         "version": version,
