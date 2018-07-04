@@ -71,6 +71,7 @@ class Settings:
         "official website": "P856",
         "source code repository": "P1324",
         "title": "P1476",
+        "protocol": "P2700",
     }
 
 
@@ -382,6 +383,7 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
     claim = pywikibot.Claim(repo, source_p)
     claim.setTarget(url_normalized)
     claim.setSnakType("value")
+    get_or_create_qualifiers(repo, claim, Settings.properties["protocol"], "Q186055")
     item.addClaim(claim)
     item.removeClaims(urls[0])
 
