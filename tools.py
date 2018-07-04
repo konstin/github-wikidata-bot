@@ -2,15 +2,11 @@
 import argparse
 import json
 from random import sample
-from typing import Iterable, Dict
+from typing import Dict, Iterable
 
-from main import (
-    Settings,
-    analyse_release,
-    get_all_github_releases,
-    logger,
-    query_projects,
-)
+from main import (Settings, analyse_release, get_all_pages, get_json_cached,
+                  github_repo_to_api, github_repo_to_api_releases, logger,
+                  query_projects)
 
 
 def safe_sample(population: Iterable[Dict[str, str]], size: int):
@@ -28,11 +24,13 @@ def debug_version_handling(
     if not no_sampling:
         projects = safe_sample(projects, threshold)
     for project in projects:
-        github_releases = get_all_github_releases(project["repo"])
+        project_info = get_json_cached(github_repo_to_api(project["repo"]))
+        apiurl = github_repo_to_api_releases(project["repo"])
+        github_releases = get_all_pages(apiurl)
         if not no_sampling:
             github_releases = safe_sample(github_releases, size)
         for github_release in github_releases:
-            release = analyse_release(github_release, project["projectLabel"])
+            release = analyse_release(github_release, project_info)
             print(
                 "{:15} | {:10} | {:20} | {:25} | {}".format(
                     release["version"] if release else "---",
