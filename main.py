@@ -35,6 +35,8 @@ class Settings:
     blacklist = []
     sparql_file = "free_software_items.rq"
 
+    license_sparql_file = "free_licenses.rq"
+    licenses = {}
     # pywikibot is too stupid to cache the calendar model, so let's do this manually
     calendarmodel = pywikibot.Site().data_repository().calendarmodel()
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
@@ -56,6 +58,7 @@ class Settings:
         "source code repository": "P1324",
         "title": "P1476",
         "protocol": "P2700",
+        "license": "P275",
     }
 
 
@@ -386,6 +389,8 @@ def get_data_from_github(url, properties):
     if project_info.get("homepage"):
         properties["website"] = project_info["homepage"]
 
+    if project_info.get("license"):
+        properties["license"] = project_info["license"]["spdx_id"]
     apiurl = github_repo_to_api_releases(url)
     releases = get_all_pages(apiurl)
 
@@ -488,6 +493,21 @@ def update_wikidata(properties):
         )
         get_or_create_sources(
             wikidata, claim, github_repo_to_api(url_normalized), properties["retrieved"]
+        )
+
+    # Add the license if it doesn't already exists
+    if "license" in properties and Settings.properties["license"] not in item.claims:
+        if properties["license"] in Settings.licenses:
+            license = Settings.licenses[properties["license"]]
+            logger.info("Adding the license: {}".format(properties["license"]))
+            claim = get_or_create_claim(
+                wikidata,
+                item,
+                Settings.properties["license"],
+                pywikibot.ItemPage(wikidata, license),
+            )
+            get_or_create_sources(
+                wikidata, claim, url_normalized, properties["retrieved"]
         )
 
     # Add all stable releases
@@ -675,6 +695,12 @@ def main():
     Settings.cached_session.headers.update(
         {"Authorization": "token " + github_oath_token}
     )
+    sparql_license_items = "".join(open(Settings.license_sparql_file).readlines())
+    response = sparql.SparqlQuery().query(sparql_license_items)
+    Settings.licenses = {
+        row["spdx"]["value"]: row["license"]["value"][31:]
+        for row in response["results"]["bindings"]
+    }
 
     Settings.blacklist = get_filter_list()
 
