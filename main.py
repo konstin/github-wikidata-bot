@@ -47,6 +47,9 @@ class Settings:
     # Don't activate this, it's most likely broken
     do_update_wikipedia = False
 
+    # Read also tags if a project doesn't use githubs releases
+    read_tags = False
+
     normalize_url = True
 
     sparql_file = "free_software_items.rq"
@@ -251,24 +254,24 @@ def query_projects(filter: Optional[str] = None):
     return projects
 
 
-def get_all_github_releases(url: str):
-    """ Gets all pages of the release information """
-    url = github_repo_to_api_releases(url)
+def get_all_pages(url: str):
+    """ Gets all pages of the release/tag information """
     page_number = 1
-    releases = []
+    results = []
     while True:
         page = get_json_cached(url + "?page=" + str(page_number))
         if not page:
             break
         page_number += 1
-        releases += page
-    return releases
+        results += page
+    return results
 
 
-def analyse_release(release: dict, project_name: str) -> Optional[dict]:
+def analyse_release(release: dict, project_info: dict) -> Optional[dict]:
     """ Heuristics to find the version number """
-    match_tag_name = extract_version(release["tag_name"] or "", project_name)
-    match_name = extract_version(release["name"] or "", project_name)
+    project_name = project_info["name"]
+    match_tag_name = extract_version(release.get("tag_name") or "", project_name)
+    match_name = extract_version(release.get("name") or "", project_name)
     if (
         match_tag_name is not None
         and match_name is not None
@@ -310,6 +313,29 @@ def analyse_release(release: dict, project_name: str) -> Optional[dict]:
     }
 
 
+def analyse_tag(release: dict, project_info: dict) -> Optional[dict]:
+    """ Heuristics to find the version number """
+    project_name = project_info["name"]
+    match_name = extract_version(release.get("name") or "", project_name)
+    if match_name is not None:
+        release_type, version = match_name
+    else:
+        logger.warning("Invalid version strings '{}'".format(release["name"]))
+        return None
+
+    date = string_to_wddate(
+        get_json_cached(release["commit"]["url"])["commit"]["committer"]["date"]
+    )
+    html_url = project_info["html_url"] + "/releases/tag/" + release["name"]
+
+    return {
+        "version": version,
+        "date": date,
+        "page": html_url,
+        "release_type": release_type,
+    }
+
+
 def get_data_from_github(url, properties):
     """
     Retrieve the following data from github. Sets it to None if none was given by github
@@ -335,11 +361,18 @@ def get_data_from_github(url, properties):
     if project_info.get("homepage"):
         properties["website"] = project_info["homepage"]
 
-    releases = get_all_github_releases(url)
+    apiurl = github_repo_to_api_releases(url)
+    releases = get_all_pages(apiurl)
+    analyse = analyse_release
+    if Settings.read_tags and len(releases) == 0:
+        logger.info("Falling back to tags.")
+        apiurl = github_repo_to_api_tags(url)
+        releases = get_all_pages(apiurl)
+        analyse = analyse_tag
 
     properties["stable_release"] = []
     for release in releases:
-        extract = analyse_release(release, project_info["name"])
+        extract = analyse(release, project_info)
 
         if extract and extract["release_type"] == "stable":
             properties["stable_release"].append(extract)
