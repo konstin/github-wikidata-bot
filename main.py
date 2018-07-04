@@ -383,6 +383,7 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
     claim = pywikibot.Claim(repo, source_p)
     claim.setTarget(url_normalized)
     claim.setSnakType("value")
+    # Add git as protocol
     get_or_create_qualifiers(repo, claim, Settings.properties["protocol"], "Q186055")
     item.addClaim(claim)
     item.removeClaims(urls[0])
