@@ -49,6 +49,8 @@ class Settings:
 
     normalize_url = True
 
+    blacklist_page = "User:Github-wiki-bot/Exceptions"
+    blacklist = []
     sparql_file = "free_software_items.rq"
 
     # pywikibot is too stupid to cache the calendar model, so let's do this manually
@@ -73,6 +75,20 @@ class Settings:
         "title": "P1476",
         "protocol": "P2700",
     }
+
+
+def get_filter_list():
+    if not Settings.blacklist_page:
+        return []
+    site = pywikibot.Site()
+    page = pywikibot.Page(site, Settings.blacklist_page)
+    text = page.text
+    r = re.compile(r"Q\d+")
+    blacklist = []
+    for line in text.split():
+        if len(line) > 0 and r.fullmatch(line):
+            blacklist.append(line)
+    return blacklist
 
 
 def github_repo_to_api(url):
@@ -217,6 +233,8 @@ def query_projects(filter: Optional[str] = None):
             project[key] = project[key]["value"]
 
         if filter and filter not in project["projectLabel"]:
+            continue
+        if project["project"][31:] in Settings.blacklist:
             continue
 
         if not Settings.repo_regex.match(project["repo"]):
@@ -576,6 +594,8 @@ def main():
     Settings.cached_session.headers.update(
         {"Authorization": "token " + github_oath_token}
     )
+
+    Settings.blacklist = get_filter_list()
 
     logger.info("# Querying Projects")
     projects = query_projects(args.filter)

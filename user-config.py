@@ -1,7 +1,7 @@
 import json
 
 family = "wikidata"
-mylang = "test"  # Nonsense for required field
+mylang = "wikidata"  # Needed for editing of userpages
 with open("config.json") as config:
     username = json.load(config)["username"]
     usernames["wikidata"]["wikidata"] = username
