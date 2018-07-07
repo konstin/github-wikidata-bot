@@ -33,7 +33,9 @@ def extract_version(
     if match:
         return "stable", match.group(1)
 
-    stable = re.compile(r"(\s|^|v)(\d{1,3}(\.\d{1,3})+(-\d\d?|[a-z])?)(\s|$)", re.IGNORECASE)
+    stable = re.compile(
+        r"(\s|^|v)(\d{1,3}(\.\d{1,3})+(-\d\d?|[a-z])?)(\s|$)", re.IGNORECASE
+    )
     pre = re.compile(
         r"(\s|^|v)((\d{1,3}(\.\d{1,3})+)[._-]?(alpha|beta|pre|rc|b|preview)[._-]?\d*)(\s|$)",
         re.IGNORECASE,

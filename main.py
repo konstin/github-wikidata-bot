@@ -17,27 +17,6 @@ from pywikibot.data import sparql
 
 from versionhandler import extract_version
 
-LOGGING = {
-    "version": 1,
-    "formatters": {"extended": {"format": "%(levelname)-8s %(message)s"}},
-    "handlers": {
-        "console": {"class": "logging.StreamHandler"},
-        "all": {
-            "class": "logging.FileHandler",
-            "filename": "all.log",
-            "formatter": "extended",
-        },
-        "error": {
-            "class": "logging.FileHandler",
-            "filename": "error.log",
-            "formatter": "extended",
-            "level": "WARN",
-        },
-    },
-    "loggers": {__name__: {"handlers": ["console", "all", "error"], "level": "INFO"}},
-}
-
-logging.config.dictConfig(LOGGING)
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +237,9 @@ def analyse_release(release: dict, project_name: str) -> Optional[dict]:
         and match_tag_name != match_name
     ):
         logger.warning(
-            "Conflicting versions {} and {}".format(match_tag_name, match_name)
+            "Conflicting versions {} and {} for {} and {}".format(
+                match_tag_name, match_name, release["tag_name"], release["name"]
+            )
         )
         return None
     elif match_tag_name is not None:
@@ -464,7 +445,9 @@ def update_wikidata(properties):
             latest_version = None
 
     if len(stable_releases) > 100:
-        logger.warning("Adding only 100 stable releases of ", len(stable_releases))
+        logger.warning(
+            "Adding only 100 stable releases of {}".format(len(stable_releases))
+        )
         stable_releases = stable_releases[-100:]
     else:
         logger.info("Adding {} stable releases:".format(len(stable_releases)))
@@ -562,11 +545,46 @@ def update_wikipedia(combined_properties):
         logger.info(template)
 
 
+def configure_logging(quiet: bool):
+    """ In cron jobs you do not want logging to stdout / stderr, so the quiet option allows disabling that. """
+    if quiet:
+        handlers = ["all", "error"]
+    else:
+        handlers = ["console", "all", "error"]
+
+    conf = {
+        "version": 1,
+        "formatters": {"extended": {"format": "%(levelname)-8s %(message)s"}},
+        "handlers": {
+            "console": {"class": "logging.StreamHandler"},
+            "all": {
+                "class": "logging.FileHandler",
+                "filename": "all.log",
+                "formatter": "extended",
+            },
+            "error": {
+                "class": "logging.FileHandler",
+                "filename": "error.log",
+                "formatter": "extended",
+                "level": "WARN",
+            },
+        },
+        "loggers": {__name__: {"handlers": handlers, "level": "INFO"}},
+    }
+
+    logging.config.dictConfig(conf)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--filter", default="")
     parser.add_argument("--github-oauth-token")
+    parser.add_argument(
+        "--quiet", action="store_true", help="Do not log to stdout/stderr"
+    )
     args = parser.parse_args()
+
+    configure_logging(args.quiet)
 
     if args.github_oauth_token:
         github_oath_token = args.github_oauth_token
