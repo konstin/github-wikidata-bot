@@ -17,7 +17,6 @@ from pywikibot.data import sparql
 
 from versionhandler import extract_version
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -364,10 +363,11 @@ def do_normalize_url(item, repo, url_normalized, url_raw, q_value):
     claim = pywikibot.Claim(repo, source_p)
     claim.setTarget(url_normalized)
     claim.setSnakType("value")
-    # Add git as protocol
-    get_or_create_qualifiers(repo, claim, Settings.properties["protocol"], "Q186055")
     item.addClaim(claim)
     item.removeClaims(urls[0])
+    # Add git as protocol
+    git = pywikibot.page.ItemPage(repo, "Q186055")
+    get_or_create_qualifiers(repo, claim, Settings.properties["protocol"], git)
 
 
 def set_claim_rank(claim, latest_version, release):
