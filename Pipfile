@@ -8,6 +8,6 @@ black = "==18.6b4"
 pytest = "~=3.6.3"
 
 [packages]
-pywikibot = "~=3.0.20180603"
+pywikibot = "~=3.0.20180710"
 mwparserfromhell = "~=0.5.1"
 CacheControl = {version = "~=0.12.5", extras = ["filecache"]}
