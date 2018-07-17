@@ -518,7 +518,9 @@ def update_wikidata(properties):
             latest_version = None
 
     if len(stable_releases) > 100:
-        logger.warning("Adding only 100 stable releases of ", len(stable_releases))
+        logger.warning(
+            "Adding only 100 stable releases of {}".format(len(stable_releases))
+        )
         stable_releases = stable_releases[-100:]
     else:
         logger.info("Adding {} stable releases:".format(len(stable_releases)))
