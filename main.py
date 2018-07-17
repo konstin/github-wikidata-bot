@@ -114,6 +114,9 @@ def normalize_url(url):
 
 
 def string_to_wddate(isotimestamp):
+    """
+    Create a wikidata compatible wikibase date from an ISO 8601 timestamp
+    """
     date = pywikibot.WbTime.fromTimestr(
         isotimestamp, calendarmodel=Settings.calendarmodel
     )
@@ -208,6 +211,9 @@ def get_or_create_sources(repo, claim, url, retrieved, title=None, date=None):
 
 
 def get_json_cached(url):
+    """
+    Get JSON from an API and cache the result
+    """
     response = Settings.cached_session.get(url)
     response.raise_for_status()
     try:
@@ -269,7 +275,10 @@ def get_all_pages(url: str):
 
 
 def analyse_release(release: dict, project_info: dict) -> Optional[dict]:
-    """ Heuristics to find the version number """
+    """
+    Heuristics to find the version number and according meta-data for a release
+    marked with githubs release-feature
+    """
     project_name = project_info["name"]
     match_tag_name = extract_version(release.get("tag_name") or "", project_name)
     match_name = extract_version(release.get("name") or "", project_name)
@@ -315,7 +324,13 @@ def analyse_release(release: dict, project_info: dict) -> Optional[dict]:
 
 
 def analyse_tag(release: dict, project_info: dict) -> Optional[dict]:
-    """ Heuristics to find the version number """
+    """
+    Heuristics to find the version number and according meta-data for a release
+    not marked with githubs release-feature but tagged with git.
+
+    Compared to analyse_release this needs an extra API-call which makes this
+    function considerably slower.
+    """
     project_name = project_info["name"]
     match_name = extract_version(release.get("name") or "", project_name)
     if match_name is not None:
@@ -339,10 +354,13 @@ def analyse_tag(release: dict, project_info: dict) -> Optional[dict]:
 
 def get_data_from_github(url, properties):
     """
-    Retrieve the following data from github. Sets it to None if none was given by github
+    Retrieve the following data from github:
      - website / homepage
      - version number string and release date of all stable releases
-     - version number string and release date of all prereleases
+
+    Version marked with githubs own release-function are received primarily.
+    Only if a project has none releases marked that way this function will fall
+    back to parsing the tags of the project.
 
     All data is preprocessed, i.e. the version numbers are extracted and
     unmarked prereleases are discovered
