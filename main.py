@@ -382,17 +382,17 @@ def get_data_from_github(url, properties):
 
     apiurl = github_repo_to_api_releases(url)
     releases = get_all_pages(apiurl)
-    analyse = analyse_release
+
     if Settings.read_tags and len(releases) == 0:
         logger.info("Falling back to tags.")
         apiurl = github_repo_to_api_tags(url)
         releases = get_all_pages(apiurl)
-        analyse = analyse_tag
+        extracted = [analyse_tag(release, project_info) for release in releases]
+    else:
+        extracted = [analyse_release(release, project_info) for release in releases]
 
     properties["stable_release"] = []
-    for release in releases:
-        extract = analyse(release, project_info)
-
+    for extract in extracted:
         if extract and extract["release_type"] == "stable":
             properties["stable_release"].append(extract)
 
