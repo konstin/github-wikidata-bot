@@ -411,7 +411,6 @@ def update_wikidata(properties):
     # Add all stable releases
     stable_releases = properties["stable_release"]
     stable_releases.sort(key=lambda x: LooseVersion(x["version"]))
-    stable_releases.reverse()
 
     if len(stable_releases) == 0:
         logger.info("No stable releases")
