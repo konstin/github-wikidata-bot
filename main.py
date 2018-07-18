@@ -90,7 +90,7 @@ def github_repo_to_api_releases(url):
 def github_repo_to_api_tags(url):
     """Converts a github repository url to the api entry with the tags"""
     url = github_repo_to_api(url)
-    url += "/tags"
+    url += "/git/refs/tags"
     return url
 
 
@@ -331,17 +331,24 @@ def analyse_tag(release: dict, project_info: dict) -> Optional[dict]:
     function considerably slower.
     """
     project_name = project_info["name"]
-    match_name = extract_version(release.get("name") or "", project_name)
+    tag_name = release.get("ref", "refs/tags/")[10:]
+    match_name = extract_version(tag_name, project_name)
     if match_name is not None:
         release_type, version = match_name
     else:
         logger.warning("Invalid version strings '{}'".format(release["name"]))
         return None
 
-    date = string_to_wddate(
-        get_json_cached(release["commit"]["url"])["commit"]["committer"]["date"]
-    )
-    html_url = project_info["html_url"] + "/releases/tag/" + quote_plus(release["name"])
+    tag_type = release["object"]["type"]
+    tag_url = release["object"]["url"]
+    tag_details = get_json_cached(tag_url)
+    if tag_type == "tag":
+        date = string_to_wddate(tag_details["tagger"]["date"])
+    elif tag_type == "commit":
+        date = string_to_wddate(tag_details["committer"]["date"])
+    else:
+        raise NotImplementedError("Unknown type of tag: %s" % tag_type)
+    html_url = project_info["html_url"] + "/releases/tag/" + quote_plus(tag_name)
 
     return {
         "version": version,
@@ -385,7 +392,7 @@ def get_data_from_github(url, properties):
     if Settings.read_tags and len(releases) == 0:
         logger.info("Falling back to tags.")
         apiurl = github_repo_to_api_tags(url)
-        releases = get_all_pages(apiurl)
+        releases = get_json_cached(apiurl)
         extracted = [analyse_tag(release, project_info) for release in releases]
     else:
         extracted = [analyse_release(release, project_info) for release in releases]
