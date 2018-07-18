@@ -27,7 +27,7 @@ class Settings:
     do_update_wikipedia = False
 
     # Read also tags if a project doesn't use githubs releases
-    read_tags = False
+    read_tags = True
 
     normalize_url = True
 
@@ -503,7 +503,7 @@ def update_wikidata(properties):
         )
         return
 
-    latest_version = stable_releases[0]["version"]
+    latest_version = stable_releases[-1]["version"]
     logger.info("Latest version: {}".format(latest_version))
 
     existing_versions = item.claims.get(Settings.properties["software version"], [])
