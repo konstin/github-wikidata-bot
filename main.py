@@ -336,7 +336,7 @@ def analyse_tag(release: dict, project_info: dict) -> Optional[dict]:
     if match_name is not None:
         release_type, version = match_name
     else:
-        logger.warning("Invalid version strings '{}'".format(release["name"]))
+        logger.warning("Invalid version string '{}'".format(tag_name))
         return None
 
     tag_type = release["object"]["type"]
