@@ -395,6 +395,13 @@ def get_data_from_github(url, properties):
         logger.info("Falling back to tags.")
         apiurl = github_repo_to_api_tags(url)
         releases = get_json_cached(apiurl)
+        if len(releases) > 200:
+            logger.warning(
+                "To many tags ({}), skipping for performance reasons.".format(
+                    len(releases)
+                )
+            )
+            releases = []
         extracted = [analyse_tag(release, project_info) for release in releases]
     else:
         extracted = [analyse_release(release, project_info) for release in releases]
