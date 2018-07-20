@@ -386,6 +386,8 @@ def get_data_from_github(url, properties):
     if project_info.get("homepage"):
         properties["website"] = project_info["homepage"]
 
+    if project_info.get("license"):
+        properties["license"] = project_info["license"]["spdx_id"]
     apiurl = github_repo_to_api_releases(url)
     releases = get_all_pages(apiurl)
 
@@ -492,7 +494,9 @@ def update_wikidata(properties):
 
     # Add all stable releases
     stable_releases = properties["stable_release"]
-    stable_releases.sort(key=lambda x: LooseVersion(x["version"]))
+    stable_releases.sort(
+        key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x["version"]))
+    )
 
     if len(stable_releases) == 0:
         logger.info("No stable releases")
