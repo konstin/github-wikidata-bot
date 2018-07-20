@@ -336,7 +336,7 @@ def analyse_tag(release: dict, project_info: dict) -> Optional[dict]:
     if match_name is not None:
         release_type, version = match_name
     else:
-        logger.warning("Invalid version strings '{}'".format(release["name"]))
+        logger.warning("Invalid version string '{}'".format(tag_name))
         return None
 
     tag_type = release["object"]["type"]
@@ -581,61 +581,6 @@ def update_wikidata(properties):
                 release["version"],
             )
             set_claim_rank(claim, latest_version, release)
-
-
-def update_wikipedia(combined_properties):
-    """
-    Updates the software info boxes of wikipedia articles according to github data.
-    Most likely BROKEN
-    """
-    if "article" not in combined_properties:
-        return
-    q_value = combined_properties["article"].replace(
-        "https://en.wikipedia.org/wiki/", ""
-    )
-    page = pywikibot.Page(pywikibot.Site("en", "wikipedia"), q_value)
-    text = page.text
-    wikitext = mwparserfromhell.parse(text)
-    templates = wikitext.filter_templates(recursive=True)
-
-    # Find the software info box
-    for template in templates:
-        if template.name.matches("Infobox software"):
-            break
-    else:
-        logger.info("No 'Infobox software' found! Skipping {}".format(q_value))
-        return
-
-    template_before_edit = str(template)
-    logger.info(template)
-
-    if combined_properties["stable_release"]:
-        srv = " " + combined_properties["stable_release"][0]["version"] + "\n"
-        if template.has("latest release version"):
-            template.get("latest release version").value = srv
-        else:
-            template.add("latest release version", srv)
-
-        date = combined_properties["stable_release"][0]["date"]
-        date_text = "{{{{release date|{}|{}|{}}}}}".format(
-            date.year, date.month, date.day
-        )
-        if template.has("latest release date"):
-            template.get("latest release date").value = " " + date_text + "\n"
-        else:
-            template.add("latest release date", date_text)
-
-    if combined_properties["website"]:
-        srv = " {{URL|" + combined_properties["website"] + "}}\n"
-        if template.has("website"):
-            template.get("website").value = srv
-        else:
-            template.add("website", srv)
-
-    if str(template) != template_before_edit:
-        logger.info("\nThe template has been edited:\n")
-        logger.info(template)
-
 
 def configure_logging(quiet: bool):
     """ In cron jobs you do not want logging to stdout / stderr, so the quiet option allows disabling that. """
