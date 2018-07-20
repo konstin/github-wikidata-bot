@@ -47,7 +47,7 @@ For each entry, the GitHub api link is added as reference.
 
 * Does the entity already have a VCS repository set? Use [this query][no-repo-query]
   to determine entities without a repository.
-* Does the project use GitHub releases? If not, no automatic update is possible at the moment. (See #5)
+* You can check the [logs][logs].
 
 ## Statistics
 
@@ -57,3 +57,4 @@ You can find detailed statistics on [wmflabs][wmflabs].
 [repo-property]: https://www.wikidata.org/wiki/Property:P1324
 [no-repo-query]: https://github.com/konstin/github-wikidata-bot/blob/master/free_software_without_repository.rq
 [wmflabs]: https://xtools.wmflabs.org/ec/wikidata/Github-wiki-bot
+[logs]: https://gist.github.com/konstin/9b90ae895ad9a270102415474a56e613
