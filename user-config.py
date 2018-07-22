@@ -8,7 +8,8 @@ with open("config.json") as config:
     usernames["wikipedia"]["en"] = username
 
 console_encoding = "utf-8"
-put_throttle = 5
+put_throttle = 1
+minthrottle = 1
 
 # adapt to pywikibot's horrible configuration system
 del json
