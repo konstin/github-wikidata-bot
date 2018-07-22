@@ -1,6 +1,6 @@
 PREFIX schema: <http://schema.org/>
 
-SELECT ?project ?projectLabel ?article ?repo WHERE {
+SELECT ?project ?projectLabel ?repo WHERE {
   # Items with a repo on github
   ?project wdt:P1324 ?repo.
 
@@ -8,12 +8,5 @@ SELECT ?project ?projectLabel ?article ?repo WHERE {
   FILTER(contains(STR(?repo), "://github.com/")).
 
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
-
-  # Get the corresponding wikipedia page
-  OPTIONAL {
-    ?article schema:about ?project .
-    ?article schema:inLanguage "en" .
-    ?article schema:isPartOf <https://en.wikipedia.org/>
-  }
 }
 ORDER BY LCASE(?projectLabel)
