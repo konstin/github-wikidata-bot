@@ -16,4 +16,4 @@ SELECT ?project ?projectLabel ?article ?repo WHERE {
     ?article schema:isPartOf <https://en.wikipedia.org/>
   }
 }
-ORDER BY ?projectLabel
+ORDER BY LCASE(?projectLabel)
