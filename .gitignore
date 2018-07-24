@@ -9,3 +9,4 @@ src/
 apicache-py3
 all.log
 error.log
+__pycache__/

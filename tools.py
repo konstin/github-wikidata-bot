@@ -4,9 +4,16 @@ import json
 from random import sample
 from typing import Dict, Iterable
 
-from main import (Settings, analyse_release, get_all_pages, get_json_cached,
-                  github_repo_to_api, github_repo_to_api_releases, logger,
-                  query_projects)
+from main import (
+    Settings,
+    analyse_release,
+    get_all_pages,
+    get_json_cached,
+    github_repo_to_api,
+    github_repo_to_api_releases,
+    logger,
+    query_projects,
+)
 
 
 def safe_sample(population: Iterable[Dict[str, str]], size: int):
@@ -33,8 +40,8 @@ def debug_version_handling(
             release = analyse_release(github_release, project_info)
             print(
                 "{:15} | {:10} | {:20} | {:25} | {}".format(
-                    release["version"] if release else "---",
-                    release["release_type"] if release else "---",
+                    release.version if release else "---",
+                    release.release_type if release else "---",
                     github_release["tag_name"],
                     repr(project["projectLabel"]),
                     github_release["name"],
