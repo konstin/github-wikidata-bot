@@ -582,7 +582,8 @@ def update_wikidata(properties):
             )
             set_claim_rank(claim, latest_version, release)
 
-def configure_logging(quiet: bool):
+
+def configure_logging(quiet: bool, http_debug: bool):
     """ In cron jobs you do not want logging to stdout / stderr, so the quiet option allows disabling that. """
     if quiet:
         handlers = ["all", "error"]
@@ -611,17 +612,27 @@ def configure_logging(quiet: bool):
 
     logging.config.dictConfig(conf)
 
+    if http_debug:
+        from http.client import HTTPConnection
+
+        HTTPConnection.debuglevel = 1
+
+        requests_log = logging.getLogger("urllib3")
+        requests_log.setLevel(logging.DEBUG)
+        requests_log.propagate = True
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--filter", default="")
     parser.add_argument("--github-oauth-token")
+    parser.add_argument("--debug-http", action="store_true")
     parser.add_argument(
         "--quiet", action="store_true", help="Do not log to stdout/stderr"
     )
     args = parser.parse_args()
 
-    configure_logging(args.quiet)
+    configure_logging(args.quiet, args.debug_http)
 
     if args.github_oauth_token:
         github_oath_token = args.github_oauth_token
