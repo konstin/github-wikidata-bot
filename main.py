@@ -252,7 +252,7 @@ def query_projects(project_filter: Optional[str] = None) -> List[Dict[str, str]]
             "repo": project["repo"]["value"],
         }
 
-        if project_filter and project_filter not in project["projectLabel"]:
+        if project_filter and project_filter.lower() not in project["projectLabel"].lower():
             continue
         if project["project"][31:] in Settings.blacklist:
             continue
@@ -354,8 +354,15 @@ def analyse_tag(release: dict, project_info: dict) -> Optional[Release]:
     tag_url = release["object"]["url"]
     tag_details = get_json_cached(tag_url)
     if tag_type == "tag":
+        # It is weird that we even have to check that as the github UI shows the date, yet the api doesn't
+        if not tag_details["tagger"]["date"]:
+            logger.warning("No tag date for {} {}".format(tag_name, tag_url))
+            return None
         date = string_to_wddate(tag_details["tagger"]["date"])
     elif tag_type == "commit":
+        if not tag_details["committer"]["date"]:
+            logger.warning("No tag date for {} {}".format(tag_name, tag_url))
+            return None
         date = string_to_wddate(tag_details["committer"]["date"])
     else:
         raise NotImplementedError("Unknown type of tag: %s" % tag_type)
@@ -669,7 +676,11 @@ def main():
             continue
 
         if Settings.do_update_wikidata:
-            update_wikidata(properties)
+            try:
+                update_wikidata(properties)
+            except Exception as e:
+                logger.error("Failed to update {}: {}".format(properties.project, e))
+                raise e
 
     logger.info("# Finished successfully")
 
