@@ -5,7 +5,7 @@ name = "pypi"
 
 [dev-packages]
 black = "==18.6b4"
-pytest = "~=3.6.4"
+pytest = "~=3.7.1"
 
 [packages]
 pywikibot = "~=3.0.20180710"
