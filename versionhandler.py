@@ -37,7 +37,7 @@ def extract_version(
         r"(\s|^|v)(\d{1,3}(\.\d{1,3})+(-\d\d?|[a-z])?)(\s|$)", re.IGNORECASE
     )
     pre = re.compile(
-        r"(\s|^|v)((\d{1,3}(\.\d{1,3})+)[._-]?(alpha|beta|pre|rc|b|preview)[._-]?\d*)(\s|$)",
+        r"(\s|^|v)((\d{1,3}(\.\d{1,3})+)[._ -]?(alpha|beta|pre|rc|b|preview)[._-]?\d*)(\s|$)",
         re.IGNORECASE,
     )
     explicitstable = re.compile(
