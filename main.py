@@ -35,7 +35,9 @@ class Settings:
     normalize_url = True
 
     blacklist_page = "User:Github-wiki-bot/Exceptions"
+    whitelist_page = "User:Github-wiki-bot/Whitelist"
     blacklist: List[str] = []
+    whitelist: List[str] = []
     sparql_file = "free_software_items.rq"
 
     # pywikibot is too stupid to cache the calendar model, so let's do this manually
@@ -78,18 +80,16 @@ class Project:
     retrieved: WbTime
 
 
-def get_filter_list() -> List[str]:
-    if not Settings.blacklist_page:
-        return []
+def get_filter_list(pagetitle: str) -> List[str]:
     site = pywikibot.Site()
-    page = pywikibot.Page(site, Settings.blacklist_page)
+    page = pywikibot.Page(site, pagetitle)
     text = page.text
     r = re.compile(r"Q\d+")
-    blacklist = []
+    filterlist = []
     for line in text.split():
         if len(line) > 0 and r.fullmatch(line):
-            blacklist.append(line)
-    return blacklist
+            filterlist.append(line)
+    return filterlist
 
 
 def github_repo_to_api(url: str) -> str:
@@ -404,9 +404,11 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     if project_info.get("license"):
         properties["license"] = project_info["license"]["spdx_id"]
     apiurl = github_repo_to_api_releases(url)
+    q_value = properties["project"].replace("http://www.wikidata.org/entity/", "")
     releases = get_all_pages(apiurl)
 
-    if Settings.read_tags and len(releases) == 0:
+    extracted = [analyse_release(release, project_info) for release in releases]
+    if Settings.read_tags and (len(releases) == 0 or q_value in Settings.whitelist):
         logger.info("Falling back to tags")
         apiurl = github_repo_to_api_tags(url)
         try:
@@ -424,9 +426,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
                 )
             )
             releases = []
-        extracted = [analyse_tag(release, project_info) for release in releases]
-    else:
-        extracted = [analyse_release(release, project_info) for release in releases]
+        extracted += [analyse_tag(release, project_info) for release in releases]
 
     stable_release = []
     for extract in extracted:
@@ -659,7 +659,8 @@ def main():
         {"Authorization": "token " + github_oath_token}
     )
 
-    Settings.blacklist = get_filter_list()
+    Settings.blacklist = get_filter_list(Settings.blacklist_page)
+    Settings.whitelist = get_filter_list(Settings.whitelist_page)
 
     logger.info("# Querying Projects")
     projects = query_projects(args.filter)
