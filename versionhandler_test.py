@@ -37,6 +37,8 @@ def test_unstable():
     assert extract_version("v1.0.0-beta3") == ("beta", "1.0.0-beta3")
     assert extract_version("9.3.2_RC1") == ("rc", "9.3.2_RC1")
     assert extract_version("v2.1-rc1") == ("rc", "2.1-rc1")
+    assert extract_version("v4.9.0-RC2") == ("rc", "4.9.0-RC2")
+    assert extract_version("4.9.0 RC2") == ("rc", "4.9.0")
 
 
 def test_invalid():
@@ -57,3 +59,41 @@ def test_invalid():
     assert extract_version("RC1") is None
     assert extract_version("1234567") is None
     assert extract_version("mame0199", "mame") is None
+
+
+def test_not_supported_yet():
+    """
+    Not yet supported formats
+
+    These asserts will all fail. Improve the versionhandler to support them if
+    possible and then move them up to the corresponding test.
+    """
+    assert extract_version("version-1.2") == ("stable", "1.2")
+    assert extract_version("version/1.2") == ("stable", "1.2")
+    assert extract_version("releases/1.2") == ("stable", "1.2")
+    assert extract_version("release-1.2") == ("stable", "1.2")
+    assert extract_version("release/1.2") == ("stable", "1.2")
+    assert extract_version("rel/1.2") == ("stable", "1.2")
+    assert extract_version("REL-1.2") == ("stable", "1.2")
+    assert extract_version("v.1.2") == ("stable", "1.2")
+
+    # v3.0.5.RELEASE
+    # v3.0.1.RELEASE
+    # v1.0.0-Release
+    # 9.2.1.1-RELEASE
+    # 7.4.1.Final
+    # v1.6-dev
+    # v0.18.25dev
+
+    # 4_3_0
+    # v0_99_7
+    # v4-1-17
+
+    # v2016.2.4
+    # v0.8007
+    # 16.1.20160627
+    # 2015.1.4
+    # v1016
+
+    # 12.3-Frodo
+    # 0.10.6.d
