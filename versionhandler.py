@@ -22,10 +22,16 @@ def extract_version(
     """
     # Remove a prefix of the name of the program if existent
     if name:
-        namere = re.compile(r"^" + re.escape(name) + r"[ _-]", re.IGNORECASE)
-        match = namere.match(string)
-        if match:
-            string = string[match.end() :]
+        namere = re.compile(r"^" + re.escape(name) + r"[ _-]?", re.IGNORECASE)
+        string = re.sub(namere, "", string)
+    string = re.sub(r"^(releases|release|rel|version|vers|v\.)[ _/-]?", "",
+                    string, flags=re.IGNORECASE)
+
+    # Replace underscore/hyphen with dots if only underscores/hyphens are used
+    if re.fullmatch(r"[0-9_]*", string):
+        string = string.replace('_', '.')
+    if re.fullmatch(r"[0-9-]*", string):
+        string = string.replace('-', '.')
 
     # Check for proper stable versions such as `v1.2.3`
     exact = re.compile(r"[vV]?(\d{1,3}(\.\d{1,3})*)")
@@ -37,7 +43,7 @@ def extract_version(
         r"(\s|^|v)(\d{1,3}(\.\d{1,3})+(-\d\d?|[a-z])?)(\s|$)", re.IGNORECASE
     )
     pre = re.compile(
-        r"(\s|^|v)((\d{1,3}(\.\d{1,3})+)[._-]?(alpha|beta|pre|rc|b|preview)[._-]?\d*)(\s|$)",
+        r"(\s|^|v)((\d{1,3}(\.\d{1,3})+)[._ -]?(alpha|beta|pre|rc|b|preview)[._-]?\d*)(\s|$)",
         re.IGNORECASE,
     )
     explicitstable = re.compile(
