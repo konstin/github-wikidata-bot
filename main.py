@@ -424,7 +424,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
                 )
             )
             releases = []
-        extracted += [analyse_tag(release, project_info) for release in releases]
+        extracted = [analyse_tag(release, project_info) for release in releases]
 
     stable_release = []
     for extract in extracted:
