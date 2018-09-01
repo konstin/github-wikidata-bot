@@ -3,19 +3,18 @@ import argparse
 import json
 import logging.config
 import re
+from dataclasses import dataclass
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote_plus
 
 import pywikibot
 import requests
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
-from dataclasses import dataclass
-
 # noinspection PyProtectedMember
-from pywikibot import ItemPage, WbTime, Claim
+from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
 from requests import HTTPError
 
@@ -352,7 +351,7 @@ def analyse_tag(release: dict, project_info: dict) -> Optional[Release]:
     tag_url = release["object"]["url"]
     tag_details = get_json_cached(tag_url)
     if tag_type == "tag":
-        # It is weird that we even have to check that as the github UI shows the date, yet the api doesn't
+        # For some weird reason the api might not always have a date
         if not tag_details["tagger"]["date"]:
             logger.warning("No tag date for {} {}".format(tag_name, tag_url))
             return None
@@ -600,7 +599,10 @@ def update_wikidata(properties: Project):
 
 
 def configure_logging(quiet: bool, http_debug: bool):
-    """ In cron jobs you do not want logging to stdout / stderr, so the quiet option allows disabling that. """
+    """
+    In cron jobs you do not want logging to stdout / stderr,
+    therefore the quiet option allows disabling that.
+    """
     if quiet:
         handlers = ["all", "error"]
     else:
