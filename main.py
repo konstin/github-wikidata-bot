@@ -488,6 +488,8 @@ def do_normalize_url(item: ItemPage, url_normalized: str, url_raw: str, q_value:
 
 
 def set_claim_rank(claim: Claim, latest_version: str, release: Release):
+    if latest_version is None:
+        return
     if release.version == latest_version:
         if claim.getRank() != "preferred":
             logger.info("Setting prefered rank for {}".format(claim.getTarget()))
