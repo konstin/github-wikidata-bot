@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "github-wikidata-bot"
+version = "0.3.0"
+description = "Updates Wikidata entries using metadata from github"
+authors = ["konstin <konstin@mailbox.org>", "Michael Schönitzer <michael@schoenitzer.de>"]
+
+[tool.poetry.dependencies]
+python = "^3.6"
+pywikibot = "^3.0"
+CacheControl = {version = "^0.12.5", extras = ["filecache"]}
+dataclasses = "^0.6.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^3.7"
+black = "^18.6b4"

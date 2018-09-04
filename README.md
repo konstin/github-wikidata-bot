@@ -2,7 +2,7 @@
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
-Update Wikidata and Wikipedia entries using metadata from GitHub.
+Update Wikidata entries using metadata from GitHub.
 
 For free software projects with a GitHub repository listed in Wikidata,
 this script will perform the following steps,
@@ -11,13 +11,11 @@ using metadata collected from the GitHub API:
 * Import all stable releases and the release dates, including release data, source, and a source title
 * Update the project website
 * Normalize the GitHub link
-* [Disabled] Update the wikipedia software info box with the new information
 
 
 ## Setup and usage
 
-The bot needs python 3.6. It is recommended to install dependecies using pipenv (`pipenv install`),
-though you can also use pip (`pip install -r requirements.txt`).
+First install python >=3.6 and [poetry][poetry], then run `poetry install`. 
 
 [Generate a personal access token on GitHub][github-token]. Create a config.json file with that token and your wikidata username:
 
@@ -49,6 +47,7 @@ For each entry, the GitHub api link is added as reference.
 
 You can find detailed statistics on [wmflabs][wmflabs].
 
+[poetry]: https://github.com/sdispater/poetry
 [github-token]: https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
 [repo-property]: https://www.wikidata.org/wiki/Property:P1324
 [no-repo-query]: https://github.com/konstin/github-wikidata-bot/blob/master/free_software_without_repository.rq

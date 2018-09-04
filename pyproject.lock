@@ -1,0 +1,276 @@
+[[package]]
+category = "dev"
+description = "A small Python module for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
+name = "appdirs"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "1.4.3"
+
+[[package]]
+category = "dev"
+description = "Atomic file writes."
+name = "atomicwrites"
+optional = false
+platform = "*"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+version = "1.2.1"
+
+[[package]]
+category = "dev"
+description = "Classes Without Boilerplate"
+name = "attrs"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "18.2.0"
+
+[[package]]
+category = "dev"
+description = "The uncompromising code formatter."
+name = "black"
+optional = false
+platform = "*"
+python-versions = ">=3.6"
+version = "18.6b4"
+
+[package.dependencies]
+appdirs = "*"
+attrs = ">=17.4.0"
+click = ">=6.5"
+toml = ">=0.9.4"
+
+[[package]]
+category = "main"
+description = "httplib2 caching for requests"
+name = "cachecontrol"
+optional = false
+platform = "*"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+version = "0.12.5"
+
+[package.dependencies]
+lockfile = ">=0.9"
+msgpack = "*"
+requests = "*"
+
+[[package]]
+category = "main"
+description = "Python package for providing Mozilla's CA Bundle."
+name = "certifi"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "2018.8.24"
+
+[[package]]
+category = "main"
+description = "Universal encoding detector for Python 2 and 3"
+name = "chardet"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "3.0.4"
+
+[[package]]
+category = "dev"
+description = "A simple wrapper around optparse for powerful command line utilities."
+name = "click"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "6.7"
+
+[[package]]
+category = "dev"
+description = "Cross-platform colored terminal text."
+name = "colorama"
+optional = false
+platform = "UNKNOWN"
+python-versions = "*"
+version = "0.3.9"
+
+[package.requirements]
+platform = "win32"
+
+[[package]]
+category = "main"
+description = "A backport of the dataclasses module for Python 3.6"
+name = "dataclasses"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "0.6"
+
+[[package]]
+category = "main"
+description = "Internationalized Domain Names in Applications (IDNA)"
+name = "idna"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "2.7"
+
+[[package]]
+category = "main"
+description = "Google's IP address manipulation library"
+name = "ipaddr"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "2.2.0"
+
+[[package]]
+category = "main"
+description = "Platform-independent file locking module"
+name = "lockfile"
+optional = false
+platform = "UNKNOWN"
+python-versions = "*"
+version = "0.12.2"
+
+[[package]]
+category = "dev"
+description = "More routines for operating on iterables, beyond itertools"
+name = "more-itertools"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "4.3.0"
+
+[package.dependencies]
+six = ">=1.0.0,<2.0.0"
+
+[[package]]
+category = "main"
+description = "MessagePack (de)serializer."
+name = "msgpack"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "0.5.6"
+
+[[package]]
+category = "dev"
+description = "plugin and hook calling mechanisms for python"
+name = "pluggy"
+optional = false
+platform = "unix"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+version = "0.7.1"
+
+[[package]]
+category = "dev"
+description = "library with cross-python path, ini-parsing, io, code, log facilities"
+name = "py"
+optional = false
+platform = "unix"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+version = "1.6.0"
+
+[[package]]
+category = "dev"
+description = "pytest: simple powerful testing with Python"
+name = "pytest"
+optional = false
+platform = "unix"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+version = "3.7.4"
+
+[package.dependencies]
+atomicwrites = ">=1.0"
+attrs = ">=17.4.0"
+more-itertools = ">=4.0.0"
+pluggy = ">=0.7"
+py = ">=1.5.0"
+setuptools = "*"
+six = ">=1.10.0"
+
+[package.dependencies.colorama]
+platform = "win32"
+version = "*"
+
+[[package]]
+category = "main"
+description = "Python MediaWiki Bot Framework"
+name = "pywikibot"
+optional = false
+platform = "*"
+python-versions = ">=2.7.2, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+version = "3.0.20180823"
+
+[package.dependencies]
+ipaddr = ">=2.1.10"
+requests = ">=2.9,<2.18.2 || >2.18.2"
+
+[[package]]
+category = "main"
+description = "Python HTTP for Humans."
+name = "requests"
+optional = false
+platform = "*"
+python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+version = "2.19.1"
+
+[package.dependencies]
+certifi = ">=2017.4.17"
+chardet = ">=3.0.2,<3.1.0"
+idna = ">=2.5,<2.8"
+urllib3 = ">=1.21.1,<1.24"
+
+[[package]]
+category = "dev"
+description = "Python 2 and 3 compatibility utilities"
+name = "six"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "1.11.0"
+
+[[package]]
+category = "dev"
+description = "Python Library for Tom's Obvious, Minimal Language"
+name = "toml"
+optional = false
+platform = "*"
+python-versions = "*"
+version = "0.9.4"
+
+[[package]]
+category = "main"
+description = "HTTP library with thread-safe connection pooling, file post, and more."
+name = "urllib3"
+optional = false
+platform = "*"
+python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, <4"
+version = "1.23"
+
+[metadata]
+content-hash = "a6a5027b093c6e51a6ceef8353cfa30a220edeeaf8974de957d88d255eb8d3fb"
+platform = "*"
+python-versions = ">=3.6"
+
+[metadata.hashes]
+appdirs = ["9e5896d1372858f8dd3344faf4e5014d21849c756c8d5701f78f8a103b372d92", "d8b24664561d0d34ddfaec54636d502d7cea6e29c3eaf68f3df6180863e2166e"]
+atomicwrites = ["0312ad34fcad8fac3704d441f7b317e50af620823353ec657a53e981f92920c0", "ec9ae8adaae229e4f8446952d204a3e4b5fdd2d099f9be3aaf556120135fb3ee"]
+attrs = ["10cbf6e27dbce8c30807caf056c8eb50917e0eaafe86347671b57254006c3e69", "ca4be454458f9dec299268d472aaa5a11f67a4ff70093396e1ceae9c76cf4bbb"]
+black = ["22158b89c1a6b4eb333a1e65e791a3f8b998cf3b11ae094adb2570f31f769a44", "4b475bbd528acce094c503a3d2dbc2d05a4075f6d0ef7d9e7514518e14cc5191"]
+cachecontrol = ["cef77effdf51b43178f6a2d3b787e3734f98ade253fa3187f3bb7315aaa42ff7"]
+certifi = ["376690d6f16d32f9d1fe8932551d80b23e9d393a8578c5633a2ed39a64861638", "456048c7e371c089d0a77a5212fb37a2c2dce1e24146e3b7e0261736aaeaa22a"]
+chardet = ["84ab92ed1c4d4f16916e05906b6b75a6c0fb5db821cc65e70cbd64a3e2a5eaae", "fc323ffcaeaed0e0a02bf4d117757b98aed530d9ed4531e3e15460124c106691"]
+click = ["29f99fc6125fbc931b758dc053b3114e55c77a6e4c6c3a2674a2dc986016381d", "f15516df478d5a56180fbf80e68f206010e6d160fc39fa508b65e035fd75130b"]
+colorama = ["463f8483208e921368c9f306094eb6f725c6ca42b0f97e313cb5d5512459feda", "48eb22f4f8461b1df5734a074b57042430fb06e1d61bd1e11b078c0fe6d7a1f1"]
+dataclasses = ["454a69d788c7fda44efd71e259be79577822f5e3f53f029a22d08004e951dc9f", "6988bd2b895eef432d562370bb707d540f32f7360ab13da45340101bc2307d84"]
+idna = ["156a6814fb5ac1fc6850fb002e0852d56c0c8d2531923a51032d1b70760e186e", "684a38a6f903c1d71d6d5fac066b58d7768af4de2b832e426ec79c30daa94a16"]
+ipaddr = ["4092dfe667588d16aa12b59acb7c8a4024e5dcb23a681cd0b0b602373eca88d6"]
+lockfile = ["6aed02de03cba24efabcd600b30540140634fc06cfa603822d508d5361e9f799", "6c3cb24f344923d30b2785d5ad75182c8ea7ac1b6171b08657258ec7429d50fa"]
+more-itertools = ["c187a73da93e7a8acc0001572aebc7e3c69daf7bf6881a2cea10650bd4420092", "c476b5d3a34e12d40130bc2f935028b5f636df8f372dc2c1c01dc19681b2039e", "fcbfeaea0be121980e15bc97b3817b5202ca73d0eae185b4550cbfce2a3ebb3d"]
+msgpack = ["0b3b1773d2693c70598585a34ca2715873ba899565f0a7c9a1545baef7e7fbdc", "0bae5d1538c5c6a75642f75a1781f3ac2275d744a92af1a453c150da3446138b", "0ee8c8c85aa651be3aa0cd005b5931769eaa658c948ce79428766f1bd46ae2c3", "1369f9edba9500c7a6489b70fdfac773e925342f4531f1e3d4c20ac3173b1ae0", "22d9c929d1d539f37da3d1b0e16270fa9d46107beab8c0d4d2bddffffe895cee", "2ff43e3247a1e11d544017bb26f580a68306cec7a6257d8818893c1fda665f42", "31a98047355d34d047fcdb55b09cb19f633cf214c705a765bd745456c142130c", "8767eb0032732c3a0da92cbec5ac186ef89a3258c6edca09161472ca0206c45f", "8acc8910218555044e23826980b950e96685dc48124a290c86f6f41a296ea172", "ab189a6365be1860a5ecf8159c248f12d33f79ea799ae9695fa6a29896dcf1d4", "cfd6535feb0f1cf1c7cdb25773e965cc9f92928244a8c3ef6f8f8a8e1f7ae5c4", "e274cd4480d8c76ec467a85a9c6635bbf2258f0649040560382ab58cabb44bcf", "f86642d60dca13e93260187d56c2bef2487aa4d574a669e8ceefcf9f4c26fd00", "f8a57cbda46a94ed0db55b73e6ab0c15e78b4ede8690fa491a0e55128d552bb0", "fcea97a352416afcbccd7af9625159d80704a25c519c251c734527329bb20d0e"]
+pluggy = ["6e3836e39f4d36ae72840833db137f7b7d35105079aee6ec4a62d9f80d594dd1", "95eb8364a4708392bae89035f45341871286a333f749c3141c20573d2b3876e1"]
+py = ["06a30435d058473046be836d3fc4f27167fd84c45b99704f2fb5509ef61f9af1", "50402e9d1c9005d759426988a492e0edaadb7f4e68bcddfea586bc7432d009c6"]
+pytest = ["2d7c49e931316cc7d1638a3e5f54f5d7b4e5225972b3c9838f3584788d27f349", "ad0c7db7b5d4081631e0155f5c61b80ad76ce148551aaafe3a718d65a7508b18"]
+pywikibot = ["5cd191c509af78698bef3d5bb444780d5be63deb8c811ea6028290994c9c9b90"]
+requests = ["63b52e3c866428a224f97cab011de738c36aec0185aa91cfacd418b5d58911d1", "ec22d826a36ed72a7358ff3fe56cbd4ba69dd7a6718ffd450ff0e9df7a47ce6a"]
+six = ["70e8a77beed4562e7f14fe23a786b54f6296e34344c23bc42f07b15018ff98e9", "832dc0e10feb1aa2c68dcc57dbb658f1c7e65b9b61af69048abc87a2db00a0eb"]
+toml = ["8e86bd6ce8cc11b9620cb637466453d94f5d57ad86f17e98a98d1f73e3baab2d"]
+urllib3 = ["a68ac5e15e76e7e5dd2b8f94007233e01effe3e50e8daddf69acfd81cb686baf", "b5725a0bd4ba422ab0e66e89e030c806576753ea3ee08554382c14e685d117b5"]
