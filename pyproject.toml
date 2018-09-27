@@ -12,4 +12,4 @@ dataclasses = "^0.6.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^3.8"
-black = "^18.6b4"
+black = "^18.9b0"
