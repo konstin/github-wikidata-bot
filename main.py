@@ -13,6 +13,7 @@ import pywikibot
 import requests
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
+
 # noinspection PyProtectedMember
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
@@ -249,7 +250,10 @@ def query_projects(project_filter: Optional[str] = None) -> List[Dict[str, str]]
             "repo": project["repo"]["value"],
         }
 
-        if project_filter and project_filter.lower() not in project["projectLabel"].lower():
+        if (
+            project_filter
+            and project_filter.lower() not in project["projectLabel"].lower()
+        ):
             continue
         if project["project"][31:] in Settings.blacklist:
             continue

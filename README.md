@@ -28,6 +28,8 @@ First install python >=3.6 and [poetry][poetry], then run `poetry install`.
 
 Then run `main.py` in a terminal and enter the password for your bot account.
 
+Run `pytest` and `black .` after making code changes.
+
 ## Implementation notes
 
 First, a SPARQL query gathers all the free software projects in Wikidata

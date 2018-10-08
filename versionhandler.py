@@ -24,14 +24,18 @@ def extract_version(
     if name:
         namere = re.compile(r"^" + re.escape(name) + r"[ _-]?", re.IGNORECASE)
         string = re.sub(namere, "", string)
-    string = re.sub(r"^(releases|release|rel|version|vers|v\.)[ _/-]?", "",
-                    string, flags=re.IGNORECASE)
+    string = re.sub(
+        r"^(releases|release|rel|version|vers|v\.)[ _/-]?",
+        "",
+        string,
+        flags=re.IGNORECASE,
+    )
 
     # Replace underscore/hyphen with dots if only underscores/hyphens are used
     if re.fullmatch(r"[0-9_]*", string):
-        string = string.replace('_', '.')
+        string = string.replace("_", ".")
     if re.fullmatch(r"[0-9-]*", string):
-        string = string.replace('-', '.')
+        string = string.replace("-", ".")
 
     # Check for proper stable versions such as `v1.2.3`
     exact = re.compile(r"[vV]?(\d{1,3}(\.\d{1,3})*)")

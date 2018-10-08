@@ -13,3 +13,17 @@ dataclasses = "^0.6.0"
 [tool.poetry.dev-dependencies]
 pytest = "^3.8"
 black = "^18.9b0"
+
+[tool.black]
+py36 = true
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.tox
+  | \.venv
+  | \.pytext_cache
+  | apicache-py3
+  | cache
+)/
+'''

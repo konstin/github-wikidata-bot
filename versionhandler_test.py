@@ -1,3 +1,5 @@
+import pytest
+
 from versionhandler import extract_version
 
 
@@ -71,6 +73,7 @@ def test_invalid():
     assert extract_version("mame0199", "mame") is None
 
 
+@pytest.mark.skip(reason="Not yet supported formats")
 def test_not_supported_yet():
     """
     Not yet supported formats
