@@ -6,6 +6,7 @@ apicache/
 cache/
 src/
 .venv/
+.pytest_cache/
 apicache-py3
 all.log
 error.log
