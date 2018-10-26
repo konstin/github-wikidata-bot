@@ -5,7 +5,7 @@ description = "Updates Wikidata entries using metadata from github"
 authors = ["konstin <konstin@mailbox.org>", "Michael Schönitzer <michael@schoenitzer.de>"]
 
 [tool.poetry.dependencies]
-python = "^3.6"
+python = "^3.5"
 pywikibot = "^3.0"
 CacheControl = {version = "^0.12.5", extras = ["filecache"]}
 dataclasses = "^0.6.0"
