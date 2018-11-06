@@ -2,8 +2,8 @@
 import argparse
 import json
 import logging.config
+import os
 import re
-from dataclasses import dataclass
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
 from typing import Any, Dict, List, Optional, Tuple
@@ -13,6 +13,7 @@ import pywikibot
 import requests
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
+from dataclasses import dataclass
 
 # noinspection PyProtectedMember
 from pywikibot import Claim, ItemPage, WbTime
@@ -30,7 +31,7 @@ class Settings:
     # Read also tags if a project doesn't use githubs releases
     read_tags = True
 
-    normalize_url = True
+    normalize_repo_url = True
 
     blacklist_page = "User:Github-wiki-bot/Exceptions"
     whitelist_page = "User:Github-wiki-bot/Whitelist"
@@ -59,6 +60,39 @@ class Properties:
     source_code_repository = "P1324"
     title = "P1476"
     protocol = "P2700"
+
+
+class RedirectDict:
+    _redirect_dict: Dict[str, str] = None
+
+    @classmethod
+    def get_or_add(cls, start_url: str) -> Optional[str]:
+        if not cls._redirect_dict:
+            cls._load()
+        if start_url in cls._redirect_dict:
+            return cls._redirect_dict[start_url]
+        else:
+            try:
+                response = requests.head(start_url, allow_redirects=True)
+            except HTTPError:
+                return None
+            end_url = response.url
+            cls._redirect_dict[start_url] = end_url
+            cls._save()
+            return end_url
+
+    @classmethod
+    def _load(cls):
+        if os.path.isfile("redirects.json"):
+            with open("redirects.json") as fp:
+                cls._redirect_dict = json.load(fp)
+        else:
+            cls._redirect_dict = dict()
+
+    @classmethod
+    def _save(cls):
+        with open("redirect.json", "w") as fp:
+            json.dump(cls._redirect_dict, fp)
 
 
 @dataclass
@@ -443,7 +477,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     )
 
 
-def do_normalize_url(item: ItemPage, url_normalized: str, url_raw: str, q_value: str):
+def normalize_repo_url(item: ItemPage, url_normalized: str, url_raw: str, q_value: str):
     """ Canonicalize the github url
     This use the format https://github.com/[owner]/[repo]
 
@@ -503,6 +537,28 @@ def set_claim_rank(claim: Claim, latest_version: str, release: Release):
             claim.changeRank("normal")
 
 
+def set_website(item, properties, url_normalized):
+    """ Add the website if does not already exists """
+    if not properties.website or not properties.website.startswith("http"):
+        return
+
+    redirected = RedirectDict.get_or_add(properties.website)
+
+    websites = [x.getTarget() for x in item.claims[Properties.official_website]]
+    if properties.website in websites or redirected in websites:
+        return
+
+    url = redirected or properties.website
+    print(url, redirected, properties.website)
+
+    claim, created = get_or_create_claim(item, Properties.official_website, url)
+    if created:
+        logger.info("Added the website: {}".format(url))
+    get_or_create_sources(
+        claim, github_repo_to_api(url_normalized), properties.retrieved
+    )
+
+
 def update_wikidata(properties: Project):
     """ Update wikidata entry with data from github """
     # Wikidata boilerplate
@@ -513,19 +569,10 @@ def update_wikidata(properties: Project):
 
     url_raw = properties.repo
     url_normalized = normalize_url(url_raw)
-    if Settings.normalize_url:
-        do_normalize_url(item, url_normalized, url_raw, q_value)
+    if Settings.normalize_repo_url:
+        normalize_repo_url(item, url_normalized, url_raw, q_value)
 
-    # Add the website if doesn't not already exists
-    if (properties.website or "").startswith("http"):
-        claim, created = get_or_create_claim(
-            item, Properties.official_website, properties.website
-        )
-        if created:
-            logger.info("Added the website: {}".format(properties.website))
-        get_or_create_sources(
-            claim, github_repo_to_api(url_normalized), properties.retrieved
-        )
+    set_website(item, properties, url_normalized)
 
     # Add all stable releases
     stable_releases = properties.stable_release
