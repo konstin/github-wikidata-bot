@@ -18,7 +18,7 @@ from dataclasses import dataclass
 # noinspection PyProtectedMember
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
-from requests import HTTPError
+from requests import HTTPError, RequestException
 
 from versionhandler import extract_version
 
@@ -74,7 +74,7 @@ class RedirectDict:
         else:
             try:
                 response = requests.head(start_url, allow_redirects=True)
-            except HTTPError:
+            except RequestException:
                 return None
             end_url = response.url
             cls._redirect_dict[start_url] = end_url
@@ -549,7 +549,6 @@ def set_website(item, properties, url_normalized):
         return
 
     url = redirected or properties.website
-    print(url, redirected, properties.website)
 
     claim, created = get_or_create_claim(item, Properties.official_website, url)
     if created:
