@@ -100,7 +100,7 @@ def test_invalid_version_with_name(version):
     assert extract_version(*version) is None
 
 
-@pytest.mark.skip(reason="Not yet supported formats")
+@pytest.mark.xfail(reason="Not yet supported formats")
 @pytest.mark.parametrize(
     "version_str, result",
     [
