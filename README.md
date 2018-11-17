@@ -1,5 +1,6 @@
 ## Github to wikidata bot
 
+[![Build Status](https://travis-ci.org/konstin/github-wikidata-bot.svg?branch=master)](https://travis-ci.org/konstin/github-wikidata-bot)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
 Update Wikidata entries using metadata from GitHub.
