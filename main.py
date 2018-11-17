@@ -368,7 +368,9 @@ def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
     )
 
 
-def analyse_tag(release: dict, project_info: dict) -> Optional[Release]:
+def analyse_tag(
+    release: dict, project_info: dict, invalid_version_strings: List[str]
+) -> Optional[Release]:
     """
     Heuristics to find the version number and according meta-data for a release
     not marked with githubs release-feature but tagged with git.
@@ -382,7 +384,7 @@ def analyse_tag(release: dict, project_info: dict) -> Optional[Release]:
     if match_name is not None:
         release_type, version = match_name
     else:
-        logger.warning("Invalid version string '{}'".format(tag_name))
+        invalid_version_strings.append(tag_name)
         return None
 
     tag_type = release["object"]["type"]
@@ -461,7 +463,15 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
                 )
             )
             releases = []
-        extracted = [analyse_tag(release, project_info) for release in releases]
+        invalid_version_strings = []
+        extracted = [
+            analyse_tag(release, project_info, invalid_version_strings)
+            for release in releases
+        ]
+        if invalid_version_strings:
+            logger.warning(
+                f"Invalid version strings in tags: {invalid_version_strings}"
+            )
 
     stable_release = []
     for extract in extracted:
