@@ -664,15 +664,19 @@ def configure_logging(quiet: bool, http_debug: bool):
         "handlers": {
             "console": {"class": "logging.StreamHandler"},
             "all": {
-                "class": "logging.FileHandler",
+                "class": "logging.handlers.RotatingFileHandler",
                 "filename": "all.log",
                 "formatter": "extended",
+                "maxBytes": 8 * 1024 * 1024,
+                "backupCount": 2,
             },
             "error": {
-                "class": "logging.FileHandler",
+                "class": "logging.handlers.RotatingFileHandler",
                 "filename": "error.log",
                 "formatter": "extended",
                 "level": "WARN",
+                "maxBytes": 8 * 1024 * 1024,
+                "backupCount": 2,
             },
         },
         "loggers": {__name__: {"handlers": handlers, "level": "INFO"}},
