@@ -554,7 +554,7 @@ def set_website(item, properties, url_normalized):
 
     redirected = RedirectDict.get_or_add(properties.website)
 
-    websites = [x.getTarget() for x in item.claims[Properties.official_website]]
+    websites = [x.getTarget() for x in item.claims.get(Properties.official_website, [])]
     if properties.website in websites or redirected in websites:
         return
 
