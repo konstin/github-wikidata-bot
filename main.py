@@ -73,7 +73,7 @@ class RedirectDict:
             return cls._redirect_dict[start_url]
         else:
             try:
-                response = requests.head(start_url, allow_redirects=True)
+                response = requests.head(start_url, allow_redirects=True, timeout=6.1)
             except RequestException:
                 return None
             end_url = response.url
