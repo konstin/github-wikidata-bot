@@ -11,7 +11,7 @@ CacheControl = {version = "^0.12.5", extras = ["filecache"]}
 dataclasses = "^0.6.0"
 
 [tool.poetry.dev-dependencies]
-pytest = "^3.8"
+pytest = "^4.0"
 black = "^18.9b0"
 
 [tool.black]
