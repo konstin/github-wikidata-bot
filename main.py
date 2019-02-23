@@ -104,6 +104,15 @@ class Release:
 
 
 @dataclass
+class ReleaseTag:
+    version: str
+    page: str
+    release_type: str
+    tag_url: str
+    tag_type: str
+
+
+@dataclass
 class Project:
     project: str
     stable_release: List[Release]
@@ -370,7 +379,7 @@ def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
 
 def analyse_tag(
     release: dict, project_info: dict, invalid_version_strings: List[str]
-) -> Optional[Release]:
+) -> Optional[ReleaseTag]:
     """
     Heuristics to find the version number and according meta-data for a release
     not marked with githubs release-feature but tagged with git.
@@ -389,23 +398,35 @@ def analyse_tag(
 
     tag_type = release["object"]["type"]
     tag_url = release["object"]["url"]
-    tag_details = get_json_cached(tag_url)
-    if tag_type == "tag":
+    html_url = project_info["html_url"] + "/releases/tag/" + quote_plus(tag_name)
+
+    return ReleaseTag(
+        version=version,
+        page=html_url,
+        release_type=release_type,
+        tag_type=tag_type,
+        tag_url=tag_url,
+    )
+
+
+def get_date_from_tagurl(release: ReleaseTag) -> Release:
+    tag_details = get_json_cached(release.tag_url)
+    if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
         if not tag_details["tagger"]["date"]:
             logger.warning("No tag date for {} {}".format(tag_name, tag_url))
             return None
         date = string_to_wddate(tag_details["tagger"]["date"])
-    elif tag_type == "commit":
+    elif release.tag_type == "commit":
         if not tag_details["committer"]["date"]:
             logger.warning("No tag date for {} {}".format(tag_name, tag_url))
             return None
         date = string_to_wddate(tag_details["committer"]["date"])
     else:
-        raise NotImplementedError("Unknown type of tag: %s" % tag_type)
-    html_url = project_info["html_url"] + "/releases/tag/" + quote_plus(tag_name)
+        raise NotImplementedError("Unknown type of tag: %s" % releases.tag_type)
 
-    return Release(version=version, date=date, page=html_url, release_type=release_type)
+    release.date = date
+    return release
 
 
 def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
@@ -456,18 +477,22 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
                 releases = []
             else:
                 raise e
-        if len(releases) > 300:
-            logger.warning(
-                "To many tags ({}), skipping for performance reasons.".format(
-                    len(releases)
-                )
-            )
-            releases = []
+
         invalid_version_strings = []
         extracted = [
             analyse_tag(release, project_info, invalid_version_strings)
             for release in releases
         ]
+        extracted = [v for v in extracted if v is not None]
+        extracted.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
+        if len(extracted) > 300:
+            logger.warning(
+                "To many tags ({}), limiting to 300 for performance reasons.".format(
+                    len(extracted)
+                )
+            )
+            extracted = extracted[-300:]
+        extracted = map(get_date_from_tagurl, extracted)
         if invalid_version_strings:
             logger.warning(
                 f"Invalid version strings in tags: {invalid_version_strings}"
