@@ -39,6 +39,9 @@ class Settings:
     whitelist: List[str] = []
     sparql_file = "free_software_items.rq"
 
+    license_sparql_file = "free_licenses.rq"
+    licenses = {}
+
     # pywikibot is too stupid to cache the calendar model, so let's do this manually
     calendarmodel = pywikibot.Site().data_repository().calendarmodel()
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
@@ -60,6 +63,7 @@ class Properties:
     source_code_repository = "P1324"
     title = "P1476"
     protocol = "P2700"
+    license = "P275"
 
 
 class RedirectDict:
@@ -117,6 +121,7 @@ class Project:
     project: str
     stable_release: List[Release]
     website: Optional[str]
+    license: Optional[str]
     repo: str
     retrieved: WbTime
 
@@ -460,7 +465,10 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
         website = None
 
     if project_info.get("license"):
-        properties["license"] = project_info["license"]["spdx_id"]
+        license = project_info["license"]["spdx_id"]
+    else:
+        license = None
+
     apiurl = github_repo_to_api_releases(url)
     q_value = properties["project"].replace("http://www.wikidata.org/entity/", "")
     releases = get_all_pages(apiurl)
@@ -506,6 +514,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     return Project(
         stable_release=stable_release,
         website=website,
+        license=license,
         retrieved=retrieved,
         repo=properties["repo"],
         project=properties["project"],
@@ -593,6 +602,23 @@ def set_website(item, properties, url_normalized):
     )
 
 
+def set_license(item, properties, url_normalized):
+    """ Add the license if does not already exists """
+    if properties.license and Properties.license not in item.claims:
+        if properties.license in Settings.licenses:
+            license = Settings.licenses[properties.license]
+            claim, created = get_or_create_claim(
+                item,
+                Properties.license,
+                pywikibot.ItemPage(Settings.wikidata_repo, license),
+            )
+            if created:
+                logger.info("Added the license: {}".format(license))
+            get_or_create_sources(
+                claim, github_repo_to_api(url_normalized), properties.retrieved
+            )
+
+
 def update_wikidata(properties: Project):
     """ Update wikidata entry with data from github """
     # Wikidata boilerplate
@@ -607,6 +633,7 @@ def update_wikidata(properties: Project):
         normalize_repo_url(item, url_normalized, url_raw, q_value)
 
     set_website(item, properties, url_normalized)
+    set_license(item, properties, url_normalized)
 
     # Add all stable releases
     stable_releases = properties.stable_release
@@ -749,6 +776,13 @@ def main():
     Settings.cached_session.headers.update(
         {"Authorization": "token " + github_oath_token}
     )
+
+    sparql_license_items = "".join(open(Settings.license_sparql_file).readlines())
+    response = sparql.SparqlQuery().query(sparql_license_items)
+    Settings.licenses = {
+        row["spdx"]["value"]: row["license"]["value"][31:]
+        for row in response["results"]["bindings"]
+    }
 
     Settings.blacklist = get_filter_list(Settings.blacklist_page)
     Settings.whitelist = get_filter_list(Settings.whitelist_page)
