@@ -1,0 +1,3 @@
+select ?license ?spdx where {
+  ?license wdt:P2479 ?spdx.
+}
