@@ -108,8 +108,8 @@ class ReleaseTag:
     version: str
     page: str
     release_type: str
-    tag_url: str = None
-    tag_type: str = None
+    tag_url: str
+    tag_type: str
 
 
 @dataclass
@@ -400,9 +400,16 @@ def analyse_tag(
     tag_url = release["object"]["url"]
     html_url = project_info["html_url"] + "/releases/tag/" + quote_plus(tag_name)
 
-    return ReleaseTag(version=version, page=html_url, release_type=release_type, tag_type=tag_type, tag_url=tag_url)
+    return ReleaseTag(
+        version=version,
+        page=html_url,
+        release_type=release_type,
+        tag_type=tag_type,
+        tag_url=tag_url,
+    )
 
-def get_date_from_tagurl( release: ReleaseTag) -> Release:
+
+def get_date_from_tagurl(release: ReleaseTag) -> Release:
     tag_details = get_json_cached(release.tag_url)
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
@@ -484,7 +491,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
                     len(extracted)
                 )
             )
-            extracted = extracted[-100:]
+            extracted = extracted[-300:]
         extracted = map(get_date_from_tagurl, extracted)
         if invalid_version_strings:
             logger.warning(
