@@ -360,11 +360,6 @@ def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
         release_type, version = match_name
         original_version = release["name"]
     else:
-        logger.warning(
-            "Invalid version strings '{}' and '{}'".format(
-                release["tag_name"], release["name"]
-            )
-        )
         return None
 
     # Often prereleases aren't marked as such, so we need manually catch those cases
@@ -473,8 +468,21 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     q_value = properties["project"].replace("http://www.wikidata.org/entity/", "")
     releases = get_all_pages(apiurl)
 
-    extracted = [analyse_release(release, project_info) for release in releases]
-    if Settings.read_tags and (len(releases) == 0 or q_value in Settings.whitelist):
+    invalid_releases = []
+    extracted = []
+    for release in releases:
+        result = analyse_release(release, project_info)
+        if result:
+            extracted.append(result)
+        else:
+            invalid_releases.append((release["tag_name"], release["name"]))
+
+    if invalid_releases:
+        logger.warning(
+            f"{len(invalid_releases)} invalid releases: {invalid_releases[:10]}"
+        )
+
+    if Settings.read_tags and (len(extracted) == 0 or q_value in Settings.whitelist):
         logger.info("Falling back to tags")
         apiurl = github_repo_to_api_tags(url)
         try:
