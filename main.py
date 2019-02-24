@@ -409,21 +409,21 @@ def analyse_tag(
     )
 
 
-def get_date_from_tagurl(release: ReleaseTag) -> Release:
+def get_date_from_tagurl(release: ReleaseTag) -> Optional[ReleaseTag]:
     tag_details = get_json_cached(release.tag_url)
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
         if not tag_details["tagger"]["date"]:
-            logger.warning("No tag date for {} {}".format(tag_name, tag_url))
+            logger.warning("No tag date for {}".format(release.tag_url))
             return None
         date = string_to_wddate(tag_details["tagger"]["date"])
     elif release.tag_type == "commit":
         if not tag_details["committer"]["date"]:
-            logger.warning("No tag date for {} {}".format(tag_name, tag_url))
+            logger.warning("No tag date for {}".format(release.tag_url))
             return None
         date = string_to_wddate(tag_details["committer"]["date"])
     else:
-        raise NotImplementedError("Unknown type of tag: %s" % releases.tag_type)
+        raise NotImplementedError(f"Unknown type of tag: {release.tag_type}")
 
     release.date = date
     return release
