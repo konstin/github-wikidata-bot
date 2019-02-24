@@ -39,6 +39,9 @@ class Settings:
     whitelist: List[str] = []
     sparql_file = "free_software_items.rq"
 
+    license_sparql_file = "free_licenses.rq"
+    licenses = {}
+
     # pywikibot is too stupid to cache the calendar model, so let's do this manually
     calendarmodel = pywikibot.Site().data_repository().calendarmodel()
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
@@ -60,6 +63,7 @@ class Properties:
     source_code_repository = "P1324"
     title = "P1476"
     protocol = "P2700"
+    license = "P275"
 
 
 class RedirectDict:
@@ -117,6 +121,7 @@ class Project:
     project: str
     stable_release: List[Release]
     website: Optional[str]
+    license: Optional[str]
     repo: str
     retrieved: WbTime
 
@@ -460,7 +465,10 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
         website = None
 
     if project_info.get("license"):
-        properties["license"] = project_info["license"]["spdx_id"]
+        license = project_info["license"]["spdx_id"]
+    else:
+        license = None
+
     apiurl = github_repo_to_api_releases(url)
     q_value = properties["project"].replace("http://www.wikidata.org/entity/", "")
     releases = get_all_pages(apiurl)
@@ -506,6 +514,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     return Project(
         stable_release=stable_release,
         website=website,
+        license=license,
         retrieved=retrieved,
         repo=properties["repo"],
         project=properties["project"],
@@ -572,44 +581,60 @@ def set_claim_rank(claim: Claim, latest_version: str, release: Release):
             claim.changeRank("normal")
 
 
-def set_website(item, properties, url_normalized):
+def set_website(item: ItemPage, project: Project, url_normalized: str):
     """ Add the website if does not already exists """
-    if not properties.website or not properties.website.startswith("http"):
+    if not project.website or not project.website.startswith("http"):
         return
 
-    redirected = RedirectDict.get_or_add(properties.website)
+    redirected = RedirectDict.get_or_add(project.website)
 
     websites = [x.getTarget() for x in item.claims.get(Properties.official_website, [])]
-    if properties.website in websites or redirected in websites:
+    if project.website in websites or redirected in websites:
         return
 
-    url = redirected or properties.website
+    url = redirected or project.website
 
     claim, created = get_or_create_claim(item, Properties.official_website, url)
     if created:
         logger.info("Added the website: {}".format(url))
-    get_or_create_sources(
-        claim, github_repo_to_api(url_normalized), properties.retrieved
-    )
+    get_or_create_sources(claim, github_repo_to_api(url_normalized), project.retrieved)
 
 
-def update_wikidata(properties: Project):
+def set_license(item: ItemPage, project: Project, url_normalized: str):
+    """ Add the license if does not already exists """
+    if project.license and Properties.license not in item.claims:
+        if project.license in Settings.licenses:
+            license = Settings.licenses[project.license]
+            claim, created = get_or_create_claim(
+                item,
+                Properties.license,
+                pywikibot.ItemPage(Settings.wikidata_repo, license),
+            )
+            if created:
+                logger.info("Added the license: {}".format(license))
+            get_or_create_sources(
+                claim, github_repo_to_api(url_normalized), project.retrieved
+            )
+
+
+def update_wikidata(project: Project):
     """ Update wikidata entry with data from github """
     # Wikidata boilerplate
     wikidata = Settings.wikidata_repo
-    q_value = properties.project.replace("http://www.wikidata.org/entity/", "")
+    q_value = project.project.replace("http://www.wikidata.org/entity/", "")
     item = ItemPage(wikidata, title=q_value)
     item.get()
 
-    url_raw = properties.repo
+    url_raw = project.repo
     url_normalized = normalize_url(url_raw)
     if Settings.normalize_repo_url:
         normalize_repo_url(item, url_normalized, url_raw, q_value)
 
-    set_website(item, properties, url_normalized)
+    set_website(item, project, url_normalized)
+    set_license(item, project, url_normalized)
 
     # Add all stable releases
-    stable_releases = properties.stable_release
+    stable_releases = project.stable_release
     stable_releases.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
 
     if len(stable_releases) == 0:
@@ -664,7 +689,7 @@ def update_wikidata(properties: Project):
 
         title = "Release %s" % release.version
         get_or_create_sources(
-            claim, release.page, properties.retrieved, title, release.date
+            claim, release.page, project.retrieved, title, release.date
         )
 
         # Give the latest release the preferred rank
@@ -749,6 +774,13 @@ def main():
     Settings.cached_session.headers.update(
         {"Authorization": "token " + github_oath_token}
     )
+
+    sparql_license_items = "".join(open(Settings.license_sparql_file).readlines())
+    response = sparql.SparqlQuery().query(sparql_license_items)
+    Settings.licenses = {
+        row["spdx"]["value"]: row["license"]["value"][31:]
+        for row in response["results"]["bindings"]
+    }
 
     Settings.blacklist = get_filter_list(Settings.blacklist_page)
     Settings.whitelist = get_filter_list(Settings.whitelist_page)
