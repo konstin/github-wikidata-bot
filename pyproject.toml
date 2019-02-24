@@ -9,6 +9,7 @@ python = "^3.6"
 pywikibot = "^3.0"
 CacheControl = {version = "^0.12.5", extras = ["filecache"]}
 dataclasses = "^0.6.0"
+lockfile = "^0.12.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^4.2"
