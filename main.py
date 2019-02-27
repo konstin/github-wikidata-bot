@@ -594,6 +594,10 @@ def set_website(item: ItemPage, project: Project, url_normalized: str):
     if not project.website or not project.website.startswith("http"):
         return
 
+    # There's a single value constraint on official website (which is not yet reflected below)
+    if Properties.official_website in item.claims:
+        return
+
     redirected = RedirectDict.get_or_add(project.website)
 
     websites = [x.getTarget() for x in item.claims.get(Properties.official_website, [])]
