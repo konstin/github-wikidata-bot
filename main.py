@@ -349,7 +349,11 @@ def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
     ):
         logger.warning(
             "Conflicting versions {} and {} for {} and {} in {}".format(
-                match_tag_name, match_name, release["tag_name"], release["name"], project_name
+                match_tag_name,
+                match_name,
+                release["tag_name"],
+                release["name"],
+                project_name,
             )
         )
         return None
@@ -681,7 +685,9 @@ def update_wikidata(project: Project):
 
     if len(stable_releases) > 100:
         logger.warning(
-            "Limiting {} to 100 of {} stable releases".format(q_value, len(stable_releases))
+            "Limiting {} to 100 of {} stable releases".format(
+                q_value, len(stable_releases)
+            )
         )
         stable_releases = stable_releases[-100:]
     else:
@@ -709,7 +715,9 @@ def update_wikidata(project: Project):
         try:
             set_claim_rank(claim, latest_version, release)
         except AssertionError:
-            logger.warning("Using the fallback for setting the preferred rank of {}", q_value)
+            logger.warning(
+                "Using the fallback for setting the preferred rank of {}", q_value
+            )
 
             item.get(force=True)
 
