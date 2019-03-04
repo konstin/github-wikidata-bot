@@ -348,8 +348,8 @@ def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
         and match_tag_name != match_name
     ):
         logger.warning(
-            "Conflicting versions {} and {} for {} and {}".format(
-                match_tag_name, match_name, release["tag_name"], release["name"]
+            "Conflicting versions {} and {} for {} and {} in {}".format(
+                match_tag_name, match_name, release["tag_name"], release["name"], project_name
             )
         )
         return None
@@ -503,15 +503,15 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
         extracted.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
         if len(extracted) > 300:
             logger.warning(
-                "To many tags ({}), limiting to 300 for performance reasons.".format(
-                    len(extracted)
+                "Limiting {} to 300 of {} tags for performance reasons.".format(
+                    q_value, len(extracted)
                 )
             )
             extracted = extracted[-300:]
         extracted = map(get_date_from_tagurl, extracted)
         if invalid_version_strings:
             logger.warning(
-                f"Invalid version strings in tags: {invalid_version_strings}"
+                f"Invalid version strings in tags of {q_value}: {invalid_version_strings}"
             )
 
     stable_release = []
@@ -660,7 +660,7 @@ def update_wikidata(project: Project):
             for release in stable_releases
             if versions.count(release.version) > 1
         ]
-        logger.error(
+        logger.warning(
             "There are duplicate releases in {}: {}".format(q_value, duplicates)
         )
         return
@@ -673,15 +673,15 @@ def update_wikidata(project: Project):
     for i in existing_versions:
         if i.getRank() == "preferred" and i.getTarget() not in github_version_names:
             logger.warning(
-                "There's a preferred rank for a version which is not in the github page: {}".format(
-                    i.getTarget()
+                "There's a preferred rank for {} for a version which is not in the github page: {}".format(
+                    q_value, i.getTarget()
                 )
             )
             latest_version = None
 
     if len(stable_releases) > 100:
         logger.warning(
-            "Limiting to 100 stable releases of {}".format(len(stable_releases))
+            "Limiting {} to 100 of {} stable releases".format(q_value, len(stable_releases))
         )
         stable_releases = stable_releases[-100:]
     else:
@@ -709,7 +709,7 @@ def update_wikidata(project: Project):
         try:
             set_claim_rank(claim, latest_version, release)
         except AssertionError:
-            logger.warning("Using the fallback for setting the preferred rank")
+            logger.warning("Using the fallback for setting the preferred rank of {}", q_value)
 
             item.get(force=True)
 
