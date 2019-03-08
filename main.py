@@ -716,7 +716,7 @@ def update_wikidata(project: Project):
             set_claim_rank(claim, latest_version, release)
         except AssertionError:
             logger.warning(
-                "Using the fallback for setting the preferred rank of {}", q_value
+                f"Using the fallback for setting the preferred rank of {q_value}"
             )
 
             item.get(force=True)
