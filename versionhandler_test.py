@@ -104,12 +104,12 @@ def test_invalid_version_with_name(version):
 @pytest.mark.parametrize(
     "version_str, result",
     [
-        ("4.9.0 RC2", ("rc", "4.9.0")),
+        ("4.9.0 RC2", ("rc", "4.9.0 RC2")),
         ("v3.0.5.RELEASE", ("stable", "3.0.5")),
         ("3.0.5-RELEASE", ("stable", "3.0.5")),
         ("3.0.5.Final", ("stable", "3.0.5")),
-        ("v3.0-dev", ("dev", "3.0")),
-        ("v3.0.5dev", ("dev", "3.0.5")),
+        ("v3.0-dev", ("unstable", "3.0-dev")),
+        ("v3.0.5dev", ("unstable", "3.0.5dev")),
         ("v3-0-5", ("stable", "3.0.5")),
     ],
     ids=lambda x: "|".join(x) if isinstance(x, tuple) else x,
