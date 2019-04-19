@@ -5,6 +5,13 @@ from typing import Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
+def number_of_unique_values(values: [str]) -> int:
+    """
+    Count number of unique strings in list, ignoring the case
+    """
+    return len(set(map(lambda s: s.lower(), values)))
+
+
 def extract_version(
     string: str, name: Optional[str] = None
 ) -> Optional[Tuple[str, str]]:
@@ -20,15 +27,26 @@ def extract_version(
              - type of version ("stable", "beta", "alpha", "rc" or "unstable")
              - version number
     """
+    string = string.strip()
+    VALID_TYPES = ["stable", "beta", "alpha", "rc", "unstable"]
+    versiontype = None
+    extracted_version = None
+
     # Remove a prefix of the name of the program if existent
     if name:
-        namere = re.compile(r"^" + re.escape(name) + r"[ _-]?", re.IGNORECASE)
+        namere = re.compile(r"^" + re.escape(name) + r"[ _/-]?", re.IGNORECASE)
         string = re.sub(namere, "", string)
+
+    # Remove common prefixes/postfixes
     string = re.sub(
         r"^(releases|release|rel|version|vers|v\.)[ _/-]?",
         "",
         string,
         flags=re.IGNORECASE,
+    )
+    string = re.sub(r"^(v|r)(?<![0-9])", "", string, flags=re.IGNORECASE)
+    string = re.sub(
+        r"(^|[._ -])(final|release)([._ -]|$)", " ", string, flags=re.IGNORECASE
     )
 
     # Replace underscore/hyphen with dots if only underscores/hyphens are used
@@ -37,46 +55,39 @@ def extract_version(
     if re.fullmatch(r"[0-9-]*", string):
         string = string.replace("-", ".")
 
-    # Check for proper stable versions such as `v1.2.3`
-    exact = re.compile(r"[vV]?(\d{1,3}(\.\d{1,3})*)")
-    match = exact.fullmatch(string)
-    if match:
-        return "stable", match.group(1)
-
-    stable = re.compile(
-        r"(\s|^|v)(\d{1,3}(\.\d{1,3})+(-\d\d?|[a-z])?)(\s|$)", re.IGNORECASE
-    )
-    pre = re.compile(
-        r"(\s|^|v)((\d{1,3}(\.\d{1,3})+)[._ -]?(alpha|beta|pre|rc|b|preview)[._-]?\d*)(\s|$)",
-        re.IGNORECASE,
-    )
-    explicitstable = re.compile(
-        r"(\s|^|v)(\d{1,3}(\.\d{1,3})+)(-stable)(\s|$)", re.IGNORECASE
-    )
-
-    match_stable = list(stable.finditer(string))
-    match_pre = list(pre.finditer(string))
-    match_explicit = list(explicitstable.finditer(string))
-    if len(match_stable) + len(match_pre) + len(match_explicit) > 1:
-        logger.warning("Multiple versions found for {} in '{}'".format(name, string))
+    # Detect type of version
+    words = ["stable", "beta", "alpha", "rc", "pre", "preview", "b\d", "dev"]
+    res = re.findall(r"(" + "|".join(words) + r")", string, re.IGNORECASE)
+    if number_of_unique_values(res) == 1:
+        versiontype = res[0].lower()
+        if versiontype[0] == "b":
+            versiontype = "beta"
+        if versiontype not in VALID_TYPES:
+            versiontype = "unstable"
+    elif number_of_unique_values(res) > 1:
         return None
 
-    if match_stable:
-        return "stable", match_stable[0].group(2).strip()
+    # Detect version string
+    gen = re.compile(
+        r"((?<=\s)|^)(\d{1,3}(\.\d{1,3})+[a-z]?([._ -]?(alpha|beta|pre|rc|b|stable|preview|dev)[._-]?\d*|-\d+)?)(\s|$)",
+        re.IGNORECASE,
+    )
+    res = gen.findall(string)
+    # remove "stable" from version string
+    res = list(map(lambda s: re.sub(r"[._-]stable[._-]?", "", s[1]), res))
+    if number_of_unique_values(res) == 1:
+        extracted_version = res[0]
+    else:
+        # If the string contains nothing but a version-number we are more gratefully with what we accept
+        full = re.compile(r"[1-9]\d{0,4}", re.IGNORECASE)
+        if full.fullmatch(string):
+            extracted_version = string
 
-    if match_pre:
-        state = re.search(
-            r"[^a-zA-Z](alpha|beta|rc|b)($|[^a-zA-Z])", string, re.IGNORECASE
-        )
-        if state:
-            statestr = state.group(1).lower()
-            if statestr == "b":
-                statestr = "beta"
-            return statestr, match_pre[0].group(2).strip()
-        else:
-            return "unstable", match_pre[0].group(2).strip()
-
-    if match_explicit:
-        return "stable", match_explicit[0].group(2).strip()
+    if extracted_version is not None:
+        # if we don't find any indication about the state of the version,
+        # we assume it's a stable version
+        if versiontype is None:
+            versiontype = "stable"
+        return (versiontype, extracted_version)
 
     return None

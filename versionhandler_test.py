@@ -29,6 +29,10 @@ from versionhandler import extract_version
         ("v.1.2", ("stable", "1.2")),
         ("3_0_5", ("stable", "3.0.5")),
         ("3-0-5", ("stable", "3.0.5")),
+        ("v3.0.5.RELEASE", ("stable", "3.0.5")),
+        ("3.0.5-RELEASE", ("stable", "3.0.5")),
+        ("3.0.5.Final", ("stable", "3.0.5")),
+        ("v3-0-5", ("stable", "3.0.5")),
         # Unstables
         ("1.4alpha", ("alpha", "1.4alpha")),
         ("1.3beta", ("beta", "1.3beta")),
@@ -48,6 +52,9 @@ from versionhandler import extract_version
         ("9.3.2_RC1", ("rc", "9.3.2_RC1")),
         ("v2.1-rc1", ("rc", "2.1-rc1")),
         ("v4.9.0-RC2", ("rc", "4.9.0-RC2")),
+        ("4.9.0 RC2", ("rc", "4.9.0 RC2")),
+        ("v3.0-dev", ("unstable", "3.0-dev")),
+        ("v3.0.5dev", ("unstable", "3.0.5dev")),
     ],
     ids=lambda x: "|".join(x) if isinstance(x, tuple) else x,
 )
@@ -98,27 +105,3 @@ def test_invalid_version_str(version_str):
 )
 def test_invalid_version_with_name(version):
     assert extract_version(*version) is None
-
-
-@pytest.mark.xfail(reason="Not yet supported formats")
-@pytest.mark.parametrize(
-    "version_str, result",
-    [
-        ("4.9.0 RC2", ("rc", "4.9.0")),
-        ("v3.0.5.RELEASE", ("stable", "3.0.5")),
-        ("3.0.5-RELEASE", ("stable", "3.0.5")),
-        ("3.0.5.Final", ("stable", "3.0.5")),
-        ("v3.0-dev", ("dev", "3.0")),
-        ("v3.0.5dev", ("dev", "3.0.5")),
-        ("v3-0-5", ("stable", "3.0.5")),
-    ],
-    ids=lambda x: "|".join(x) if isinstance(x, tuple) else x,
-)
-def test_not_supported_yet(version_str, result):
-    """
-    Not yet supported formats
-
-    These asserts will all fail. Improve the versionhandler to support them if
-    possible and then move them up to the corresponding test.
-    """
-    assert extract_version(version_str) == result
