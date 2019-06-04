@@ -4,6 +4,7 @@ import json
 import logging.config
 import os
 import re
+from dataclasses import dataclass
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
 from typing import Any, Dict, List, Optional, Tuple
@@ -13,8 +14,6 @@ import pywikibot
 import requests
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
-from dataclasses import dataclass
-
 # noinspection PyProtectedMember
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
@@ -40,7 +39,7 @@ class Settings:
     sparql_file = "free_software_items.rq"
 
     license_sparql_file = "free_licenses.rq"
-    licenses = {}
+    licenses: Dict[str, str] = {}
 
     # pywikibot is too stupid to cache the calendar model, so let's do this manually
     calendarmodel = pywikibot.Site().data_repository().calendarmodel()
@@ -67,7 +66,7 @@ class Properties:
 
 
 class RedirectDict:
-    _redirect_dict: Dict[str, str] = None
+    _redirect_dict: Dict[str, str] = {}
 
     @classmethod
     def get_or_add(cls, start_url: str) -> Optional[str]:
@@ -324,7 +323,7 @@ def query_projects(project_filter: Optional[str] = None) -> List[Dict[str, str]]
 def get_all_pages(url: str) -> List[dict]:
     """ Gets all pages of the release/tag information """
     page_number = 1
-    results = []
+    results: List[dict] = []
     while True:
         page = get_json_cached(url + "?page=" + str(page_number))
         if not page:
@@ -413,7 +412,7 @@ def analyse_tag(
     )
 
 
-def get_date_from_tagurl(release: ReleaseTag) -> Optional[ReleaseTag]:
+def get_date_from_tagurl(release: ReleaseTag) -> Optional[Release]:
     tag_details = get_json_cached(release.tag_url)
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
@@ -429,8 +428,12 @@ def get_date_from_tagurl(release: ReleaseTag) -> Optional[ReleaseTag]:
     else:
         raise NotImplementedError(f"Unknown type of tag: {release.tag_type}")
 
-    release.date = date
-    return release
+    return Release(
+        version=release.version,
+        release_type=release.release_type,
+        date=date,
+        page=release.page,
+    )
 
 
 def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
@@ -473,7 +476,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     releases = get_all_pages(apiurl)
 
     invalid_releases = []
-    extracted = []
+    extracted: List[Optional[Release]] = []
     for release in releases:
         result = analyse_release(release, project_info)
         if result:
@@ -490,29 +493,29 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
         logger.info("Falling back to tags")
         apiurl = github_repo_to_api_tags(url)
         try:
-            releases = get_json_cached(apiurl)
+            tags = get_json_cached(apiurl)
         except HTTPError as e:
-            # Gitub raises a 404 if there are no releases
+            # Gitub raises a 404 if there are no tags
             if e.response.status_code == 404:
-                releases = []
+                tags = {}
             else:
                 raise e
 
-        invalid_version_strings = []
-        extracted = [
+        invalid_version_strings: List[str] = []
+        extractedtags = [
             analyse_tag(release, project_info, invalid_version_strings)
-            for release in releases
+            for release in tags
         ]
-        extracted = [v for v in extracted if v is not None]
-        extracted.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
-        if len(extracted) > 300:
+        filterd = [v for v in extractedtags if v is not None]
+        filterd.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
+        if len(filterd) > 300:
             logger.warning(
                 "Limiting {} to 300 of {} tags for performance reasons.".format(
-                    q_value, len(extracted)
+                    q_value, len(filterd)
                 )
             )
-            extracted = extracted[-300:]
-        extracted = map(get_date_from_tagurl, extracted)
+            filterd = filterd[-300:]
+        extracted = list(map(get_date_from_tagurl, filterd))
         if invalid_version_strings:
             logger.warning(
                 f"Invalid version strings in tags of {q_value}: {invalid_version_strings}"
@@ -580,7 +583,7 @@ def normalize_repo_url(item: ItemPage, url_normalized: str, url_raw: str, q_valu
     get_or_create_qualifiers(claim, Properties.protocol, git)
 
 
-def set_claim_rank(claim: Claim, latest_version: str, release: Release):
+def set_claim_rank(claim: Claim, latest_version: Optional[str], release: Release):
     if latest_version is None:
         return
     if release.version == latest_version:
@@ -669,7 +672,7 @@ def update_wikidata(project: Project):
         )
         return
 
-    latest_version = stable_releases[-1].version
+    latest_version: Optional[str] = stable_releases[-1].version
 
     existing_versions = item.claims.get(Properties.software_version, [])
     github_version_names = [i.version for i in stable_releases]

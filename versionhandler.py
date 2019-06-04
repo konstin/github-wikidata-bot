@@ -1,11 +1,11 @@
 import logging
 import re
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 
-def number_of_unique_values(values: [str]) -> int:
+def number_of_unique_values(values: List[str]) -> int:
     """
     Count number of unique strings in list, ignoring the case
     """
