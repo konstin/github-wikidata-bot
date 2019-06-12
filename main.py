@@ -14,6 +14,7 @@ import pywikibot
 import requests
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
+
 # noinspection PyProtectedMember
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
