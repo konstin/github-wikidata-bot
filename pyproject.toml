@@ -16,7 +16,7 @@ pytest = "^4.5"
 black = "^19.3b0"
 
 [tool.black]
-py36 = true
+target-version = ['py36']
 include = '\.pyi?$'
 exclude = '''
 /(
