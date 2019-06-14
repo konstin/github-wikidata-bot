@@ -56,7 +56,7 @@ def extract_version(
         string = string.replace("-", ".")
 
     # Detect type of version
-    words = ["stable", "beta", "alpha", "rc", "pre", "preview", "b\d", "dev"]
+    words = ["stable", "beta", "alpha", "rc", "pre", "preview", r"b\d", "dev"]
     res = re.findall(r"(" + "|".join(words) + r")", string, re.IGNORECASE)
     if number_of_unique_values(res) == 1:
         versiontype = res[0].lower()
