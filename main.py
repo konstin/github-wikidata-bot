@@ -20,6 +20,7 @@ from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
 from requests import HTTPError, RequestException
 
+from utils import parse_filter_list
 from versionhandler import extract_version
 
 logger = logging.getLogger(__name__)
@@ -129,13 +130,7 @@ class Project:
 def get_filter_list(pagetitle: str) -> List[str]:
     site = pywikibot.Site()
     page = pywikibot.Page(site, pagetitle)
-    text = page.text
-    r = re.compile(r"Q\d+")
-    filterlist = []
-    for line in text.split():
-        if len(line) > 0 and r.fullmatch(line):
-            filterlist.append(line)
-    return filterlist
+    return parse_filter_list(page.text)
 
 
 def github_repo_to_api(url: str) -> str:
