@@ -592,7 +592,7 @@ def set_claim_rank(claim: Claim, latest_version: Optional[str], release: Release
             logger.info("Setting prefered rank for {}".format(claim.getTarget()))
             claim.changeRank("preferred")
     else:
-        if claim.getRank() != "normal":
+        if claim.getRank() == "preferred":
             logger.info("Setting normal rank for {}".format(claim.getTarget()))
             claim.changeRank("normal")
 
