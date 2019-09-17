@@ -20,6 +20,7 @@ from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
 from requests import HTTPError, RequestException
 
+from utils import parse_filter_list
 from versionhandler import extract_version
 
 logger = logging.getLogger(__name__)
@@ -129,13 +130,7 @@ class Project:
 def get_filter_list(pagetitle: str) -> List[str]:
     site = pywikibot.Site()
     page = pywikibot.Page(site, pagetitle)
-    text = page.text
-    r = re.compile(r"Q\d+")
-    filterlist = []
-    for line in text.split():
-        if len(line) > 0 and r.fullmatch(line):
-            filterlist.append(line)
-    return filterlist
+    return parse_filter_list(page.text)
 
 
 def github_repo_to_api(url: str) -> str:
@@ -468,9 +463,9 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
         website = None
 
     if project_info.get("license"):
-        license = project_info["license"]["spdx_id"]
+        spdx_id = project_info["license"]["spdx_id"]
     else:
-        license = None
+        spdx_id = None
 
     apiurl = github_repo_to_api_releases(url)
     q_value = properties["project"].replace("http://www.wikidata.org/entity/", "")
@@ -530,7 +525,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     return Project(
         stable_release=stable_release,
         website=website,
-        license=license,
+        license=spdx_id,
         retrieved=retrieved,
         repo=properties["repo"],
         project=properties["project"],
@@ -624,14 +619,14 @@ def set_license(item: ItemPage, project: Project, url_normalized: str):
     """ Add the license if does not already exists """
     if project.license and Properties.license not in item.claims:
         if project.license in Settings.licenses:
-            license = Settings.licenses[project.license]
+            project_license = Settings.licenses[project.license]
             claim, created = get_or_create_claim(
                 item,
                 Properties.license,
-                pywikibot.ItemPage(Settings.wikidata_repo, license),
+                pywikibot.ItemPage(Settings.wikidata_repo, project_license),
             )
             if created:
-                logger.info("Added the license: {}".format(license))
+                logger.info("Added the license: {}".format(project_license))
             get_or_create_sources(
                 claim, github_repo_to_api(url_normalized), project.retrieved
             )

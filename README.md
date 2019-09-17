@@ -13,6 +13,7 @@ using metadata collected from the GitHub API:
 * Update the project website
 * Normalize the GitHub link
 
+It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki-bot/Exceptions) from being edited by the bot, and also to [allow using tags](https://www.wikidata.org/w/index.php?title=User:Github-wiki-bot/Whitelist) for projects without github releases.
 
 ## Setup and usage
 
