@@ -44,9 +44,9 @@ def extract_version(
         string,
         flags=re.IGNORECASE,
     )
-    string = re.sub(r"^(v|r)(?<![0-9])", "", string, flags=re.IGNORECASE)
+    string = re.sub(r"^[vr](?<![0-9])", "", string, flags=re.IGNORECASE)
     string = re.sub(
-        r"(^|[._ -])(final|release)([._ -]|$)", " ", string, flags=re.IGNORECASE
+        r"(^|[._ -])(final|release)([._ -]|$)", "", string, flags=re.IGNORECASE
     )
 
     # Replace underscore/hyphen with dots if only underscores/hyphens are used
@@ -69,7 +69,7 @@ def extract_version(
 
     # Detect version string
     gen = re.compile(
-        r"((?<=\s)|^)(\d{1,3}(\.\d{1,3})+[a-z]?([._ -]?(alpha|beta|pre|rc|b|stable|preview|dev)[._-]?\d*|-\d+)?)(\s|$)",
+        r"(\s|^)(\d{1,3}(\.\d{1,3})+[a-z]?([._ -]?(alpha|beta|pre|rc|b|stable|preview|dev)[._-]?\d*|-\d+)?)(\s|$)",
         re.IGNORECASE,
     )
     res = gen.findall(string)
@@ -88,6 +88,6 @@ def extract_version(
         # we assume it's a stable version
         if versiontype is None:
             versiontype = "stable"
-        return (versiontype, extracted_version)
+        return versiontype, extracted_version
 
     return None
