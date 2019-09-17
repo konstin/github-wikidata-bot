@@ -269,7 +269,9 @@ def get_json_cached(url: str) -> dict:
         return {}
 
 
-def query_projects(project_filter: Optional[str] = None) -> List[Dict[str, str]]:
+def query_projects(
+    project_filter: Optional[str] = None, ignore_blacklist: bool = False
+) -> List[Dict[str, str]]:
     """
     Queries for all software projects and returns them as an array of simplified dicts
     :return: the data splitted into projects with and without github
@@ -298,7 +300,10 @@ def query_projects(project_filter: Optional[str] = None) -> List[Dict[str, str]]
             and project_filter.lower() not in project["projectLabel"].lower()
         ):
             continue
-        if project["project"][31:] in Settings.blacklist:
+        if project["project"][31:] in Settings.blacklist and not ignore_blacklist:
+            logger.info(
+                f"{project['projectLabel']} ({project['project'][31:]}) is blacklisted"
+            )
             continue
 
         if not Settings.repo_regex.match(project["repo"]):
@@ -778,6 +783,7 @@ def main():
     parser.add_argument("--filter", default="")
     parser.add_argument("--github-oauth-token")
     parser.add_argument("--debug-http", action="store_true")
+    parser.add_argument("--ignore-blacklist", action="store_true")
     parser.add_argument(
         "--quiet", action="store_true", help="Do not log to stdout/stderr"
     )
@@ -805,7 +811,7 @@ def main():
     Settings.whitelist = get_filter_list(Settings.whitelist_page)
 
     logger.info("# Querying Projects")
-    projects = query_projects(args.filter)
+    projects = query_projects(args.filter, args.ignore_blacklist)
     logger.info("{} projects were found".format(len(projects)))
 
     logger.info("# Processing projects")
@@ -814,8 +820,10 @@ def main():
 
         try:
             properties = get_data_from_github(project["repo"], project)
-        except requests.exceptions.HTTPError:
-            logger.error("HTTP request for {} failed".format(project["projectLabel"]))
+        except requests.exceptions.HTTPError as e:
+            logger.error(
+                "HTTP request for {} failed: {}".format(project["projectLabel"], e)
+            )
             continue
 
         if Settings.do_update_wikidata:
