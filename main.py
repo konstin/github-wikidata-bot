@@ -4,7 +4,6 @@ import json
 import logging.config
 import os
 import re
-from dataclasses import dataclass
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
 from typing import Any, Dict, List, Optional, Tuple
@@ -14,11 +13,13 @@ import pywikibot
 import requests
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
+from dataclasses import dataclass
 
 # noinspection PyProtectedMember
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
 from requests import HTTPError, RequestException
+from yarl import URL
 
 from utils import parse_filter_list
 from versionhandler import extract_version
@@ -136,8 +137,8 @@ def get_filter_list(pagetitle: str) -> List[str]:
 def github_repo_to_api(url: str) -> str:
     """Converts a github repository url to the api entry with the general information"""
     url = normalize_url(url)
-    url = url.replace("https://github.com/", "https://api.github.com/repos/")
-    return url
+    url = url.with_host("api.github.com").with_path("/repos" + url.path)
+    return str(url)
 
 
 def github_repo_to_api_releases(url: str) -> str:
@@ -154,17 +155,16 @@ def github_repo_to_api_tags(url: str) -> str:
     return url
 
 
-def normalize_url(url: str) -> str:
+def normalize_url(url: str) -> URL:
     """
     Canonical urls be like: https, no slash, no file extension
 
     :param url:
     :return:
     """
-    url = url.strip("/")
-    url = "https://" + url.split("://")[1]
-    if url.endswith(".git"):
-        url = url[:-4]
+    url = URL(url).with_host("https").with_fragment(None)
+    if url.path.endswith(".git"):
+        url = url.with_path(url.path[:-4])
     return url
 
 
@@ -646,7 +646,7 @@ def update_wikidata(project: Project):
     item.get()
 
     url_raw = project.repo
-    url_normalized = normalize_url(url_raw)
+    url_normalized = str(normalize_url(url_raw))
     if Settings.normalize_repo_url:
         normalize_repo_url(item, url_normalized, url_raw, q_value)
 
