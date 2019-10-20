@@ -19,9 +19,14 @@ from dataclasses import dataclass
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
 from requests import HTTPError, RequestException
-from yarl import URL
 
-from utils import parse_filter_list
+from utils import (
+    parse_filter_list,
+    github_repo_to_api,
+    github_repo_to_api_releases,
+    github_repo_to_api_tags,
+    normalize_url,
+)
 from versionhandler import extract_version
 
 logger = logging.getLogger(__name__)
@@ -132,40 +137,6 @@ def get_filter_list(pagetitle: str) -> List[str]:
     site = pywikibot.Site()
     page = pywikibot.Page(site, pagetitle)
     return parse_filter_list(page.text)
-
-
-def github_repo_to_api(url: str) -> str:
-    """Converts a github repository url to the api entry with the general information"""
-    url = normalize_url(url)
-    url = url.with_host("api.github.com").with_path("/repos" + url.path)
-    return str(url)
-
-
-def github_repo_to_api_releases(url: str) -> str:
-    """Converts a github repository url to the api entry with the releases"""
-    url = github_repo_to_api(url)
-    url += "/releases"
-    return url
-
-
-def github_repo_to_api_tags(url: str) -> str:
-    """Converts a github repository url to the api entry with the tags"""
-    url = github_repo_to_api(url)
-    url += "/git/refs/tags"
-    return url
-
-
-def normalize_url(url: str) -> URL:
-    """
-    Canonical urls be like: https, no slash, no file extension
-
-    :param url:
-    :return:
-    """
-    url = URL(url).with_host("https").with_fragment(None)
-    if url.path.endswith(".git"):
-        url = url.with_path(url.path[:-4])
-    return url
 
 
 def string_to_wddate(isotimestamp: str) -> WbTime:

@@ -1,4 +1,4 @@
-from utils import parse_filter_list
+from utils import parse_filter_list, github_repo_to_api_releases
 
 exceptions_page = """
 This page defines exceptions for [[User:Github-wiki-bot|Github-wiki-bot]]. You can add an item here to stop Github-wiki-bot to update this item.
@@ -18,3 +18,12 @@ def test_parse_filter_list():
 
     actual = parse_filter_list(exceptions_page)
     assert expected == actual
+
+
+def test_url_editing_with_fragment():
+    url = "https://github.com/data2health/contributor-role-ontology#relevant-publications-and-scholarly-products"
+    actual = github_repo_to_api_releases(url)
+    expected = (
+        "https://api.github.com/repos/data2health/contributor-role-ontology/releases"
+    )
+    assert actual == expected

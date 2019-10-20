@@ -9,11 +9,10 @@ from main import (
     analyse_release,
     get_all_pages,
     get_json_cached,
-    github_repo_to_api,
-    github_repo_to_api_releases,
     logger,
     query_projects,
 )
+from utils import github_repo_to_api, github_repo_to_api_releases
 
 
 def safe_sample(population: Iterable[Dict[str, str]], size: int):
