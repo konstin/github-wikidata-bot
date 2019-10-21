@@ -153,6 +153,7 @@ def string_to_wddate(isotimestamp: str) -> WbTime:
 
 
 def get_sumary(edit_group_hash: str) -> str:
+    """ https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots """
     return f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
 
 
