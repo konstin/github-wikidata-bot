@@ -539,8 +539,7 @@ def normalize_repo_url(item: ItemPage, url_normalized: str, url_raw: str, q_valu
 
     if urls[0].getTarget() != url_raw:
         logger.error(
-            "The url on the object doesn't match the url from the sparql query "
-            + q_value
+            f"The url on the object ({urls[0].getTarget()}) doesn't match the url from the sparql query ({url_raw}) for {q_value}"
         )
         return
 

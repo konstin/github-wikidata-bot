@@ -40,13 +40,8 @@ def github_repo_to_api_tags(url: str) -> str:
 
 
 def normalize_url(url: str) -> URL:
-    """
-    Canonical urls be like: https, no slash, no file extension
-
-    :param url:
-    :return:
-    """
-    url = URL(url).with_host("https").with_fragment(None)
+    """Canonical urls be like: https, no slash, no file extension"""
+    url = URL(url).with_scheme("https").with_fragment(None)
     if url.path.endswith(".git"):
         url = url.with_path(url.path[:-4])
     return url

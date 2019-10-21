@@ -1,4 +1,4 @@
-from utils import parse_filter_list, github_repo_to_api_releases
+from utils import parse_filter_list, github_repo_to_api_releases, normalize_url
 
 exceptions_page = """
 This page defines exceptions for [[User:Github-wiki-bot|Github-wiki-bot]]. You can add an item here to stop Github-wiki-bot to update this item.
@@ -26,4 +26,11 @@ def test_url_editing_with_fragment():
     expected = (
         "https://api.github.com/repos/data2health/contributor-role-ontology/releases"
     )
+    assert actual == expected
+
+
+def test_repo_normalization():
+    url = "git://github.com/certbot/certbot.git"
+    actual = str(normalize_url(url))
+    expected = "https://github.com/certbot/certbot"
     assert actual == expected
