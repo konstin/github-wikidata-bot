@@ -3,6 +3,7 @@ import argparse
 import json
 import logging.config
 import os
+import random
 import re
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
@@ -151,7 +152,14 @@ def string_to_wddate(isotimestamp: str) -> WbTime:
     return date
 
 
-def get_or_create_claim(item: ItemPage, p_value: str, value: Any) -> Tuple[Claim, bool]:
+def get_sumary(edit_group_hash: str) -> str:
+    """ https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots """
+    return f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
+
+
+def get_or_create_claim(
+    item: ItemPage, p_value: str, value: Any, edit_group_hash: str
+) -> Tuple[Claim, bool]:
     """
     Gets or creates a claim with `value` under the property `p_value` to `item`
     """
@@ -163,12 +171,14 @@ def get_or_create_claim(item: ItemPage, p_value: str, value: Any) -> Tuple[Claim
 
     claim = Claim(Settings.wikidata_repo, p_value)
     claim.setTarget(value)
-    item.addClaim(claim)
+    item.addClaim(claim, summary=get_sumary(edit_group_hash))
 
     return claim, True
 
 
-def get_or_create_qualifiers(claim: Claim, p_value: str, value: Any) -> Claim:
+def get_or_create_qualifiers(
+    claim: Claim, p_value: str, value: Any, edit_group_hash: str
+) -> Claim:
     """
     Gets or creates a `qualifier` under the property `p_value` to `claim`
     """
@@ -180,7 +190,8 @@ def get_or_create_qualifiers(claim: Claim, p_value: str, value: Any) -> Claim:
     else:
         qualifier = Claim(Settings.wikidata_repo, p_value)
         qualifier.setTarget(value)
-        claim.addQualifier(qualifier)
+        summary = get_sumary(edit_group_hash)
+        claim.addQualifier(qualifier, summary=summary)
 
     return qualifier
 
@@ -189,6 +200,7 @@ def get_or_create_sources(
     claim: Claim,
     url: str,
     retrieved,
+    edit_group_hash: str,
     title: Optional[str] = None,
     date: Optional[WbTime] = None,
 ):
@@ -222,7 +234,7 @@ def get_or_create_sources(
             src_date = Claim(Settings.wikidata_repo, Properties.publication_date)
             src_date.setTarget(date)
             sources.append(src_date)
-        claim.addSources(sources)
+        claim.addSources(sources, summary=get_sumary(edit_group_hash))
 
     return src_url
 
@@ -508,7 +520,13 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     )
 
 
-def normalize_repo_url(item: ItemPage, url_normalized: str, url_raw: str, q_value: str):
+def normalize_repo_url(
+    item: ItemPage,
+    url_normalized: str,
+    url_raw: str,
+    q_value: str,
+    edit_group_hash: str,
+):
     """ Canonicalize the github url
     This use the format https://github.com/[owner]/[repo]
 
@@ -524,11 +542,11 @@ def normalize_repo_url(item: ItemPage, url_normalized: str, url_raw: str, q_valu
     if source_p in item.claims and len(urls) == 2:
         if urls[0].getTarget() == url_normalized and urls[1].getTarget() == url_raw:
             logger.info("The old and the new url are already set, removing the old")
-            item.removeClaims(urls[1])
+            item.removeClaims(urls[1], summary=get_sumary(edit_group_hash))
             return
         if urls[0].getTarget() == url_raw and urls[1].getTarget() == url_normalized:
             logger.info("The old and the new url are already set, removing the old")
-            item.removeClaims(urls[0])
+            item.removeClaims(urls[0], summary=get_sumary(edit_group_hash))
             return
 
     if source_p in item.claims and len(urls) > 1:
@@ -547,27 +565,31 @@ def normalize_repo_url(item: ItemPage, url_normalized: str, url_raw: str, q_valu
     claim = Claim(Settings.wikidata_repo, source_p)
     claim.setTarget(url_normalized)
     claim.setSnakType("value")
-    item.addClaim(claim)
-    item.removeClaims(urls[0])
+    item.addClaim(claim, summary=get_sumary(edit_group_hash))
+    item.removeClaims(urls[0], summary=get_sumary(edit_group_hash))
     # Add git as protocol
     git = ItemPage(Settings.wikidata_repo, "Q186055")
-    get_or_create_qualifiers(claim, Properties.protocol, git)
+    get_or_create_qualifiers(claim, Properties.protocol, git, edit_group_hash)
 
 
-def set_claim_rank(claim: Claim, latest_version: Optional[str], release: Release):
+def set_claim_rank(
+    claim: Claim, latest_version: Optional[str], release: Release, edit_group_hash: str
+):
     if latest_version is None:
         return
     if release.version == latest_version:
         if claim.getRank() == "normal":
             logger.info("Setting prefered rank for {}".format(claim.getTarget()))
-            claim.changeRank("preferred")
+            claim.changeRank("preferred", summary=get_sumary(edit_group_hash))
     else:
         if claim.getRank() == "preferred":
             logger.info("Setting normal rank for {}".format(claim.getTarget()))
-            claim.changeRank("normal")
+            claim.changeRank("normal", summary=get_sumary(edit_group_hash))
 
 
-def set_website(item: ItemPage, project: Project, url_normalized: str):
+def set_website(
+    item: ItemPage, project: Project, url_normalized: str, edit_group_hash: str
+):
     """ Add the website if does not already exists """
     if not project.website or not project.website.startswith("http"):
         return
@@ -584,13 +606,19 @@ def set_website(item: ItemPage, project: Project, url_normalized: str):
 
     url = redirected or project.website
 
-    claim, created = get_or_create_claim(item, Properties.official_website, url)
+    claim, created = get_or_create_claim(
+        item, Properties.official_website, url, edit_group_hash
+    )
     if created:
         logger.info("Added the website: {}".format(url))
-    get_or_create_sources(claim, github_repo_to_api(url_normalized), project.retrieved)
+    get_or_create_sources(
+        claim, github_repo_to_api(url_normalized), project.retrieved, edit_group_hash
+    )
 
 
-def set_license(item: ItemPage, project: Project, url_normalized: str):
+def set_license(
+    item: ItemPage, project: Project, url_normalized: str, edit_group_hash: str
+):
     """ Add the license if does not already exists """
     if project.license and Properties.license not in item.claims:
         if project.license in Settings.licenses:
@@ -599,15 +627,19 @@ def set_license(item: ItemPage, project: Project, url_normalized: str):
                 item,
                 Properties.license,
                 pywikibot.ItemPage(Settings.wikidata_repo, project_license),
+                edit_group_hash,
             )
             if created:
                 logger.info("Added the license: {}".format(project_license))
             get_or_create_sources(
-                claim, github_repo_to_api(url_normalized), project.retrieved
+                claim,
+                github_repo_to_api(url_normalized),
+                project.retrieved,
+                edit_group_hash,
             )
 
 
-def update_wikidata(project: Project):
+def update_wikidata(project: Project, edit_group_hash: str):
     """ Update wikidata entry with data from github """
     # Wikidata boilerplate
     wikidata = Settings.wikidata_repo
@@ -618,10 +650,10 @@ def update_wikidata(project: Project):
     url_raw = project.repo
     url_normalized = str(normalize_url(url_raw))
     if Settings.normalize_repo_url:
-        normalize_repo_url(item, url_normalized, url_raw, q_value)
+        normalize_repo_url(item, url_normalized, url_raw, q_value, edit_group_hash)
 
-    set_website(item, project, url_normalized)
-    set_license(item, project, url_normalized)
+    set_website(item, project, url_normalized, edit_group_hash)
+    set_license(item, project, url_normalized, edit_group_hash)
 
     # Add all stable releases
     stable_releases = project.stable_release
@@ -669,7 +701,7 @@ def update_wikidata(project: Project):
 
     for release in stable_releases:
         claim, created = get_or_create_claim(
-            item, Properties.software_version, release.version
+            item, Properties.software_version, release.version, edit_group_hash
         )
         if created:
             logger.info("Added '{}'".format(release.version))
@@ -677,17 +709,17 @@ def update_wikidata(project: Project):
         # Assumption: A preexisting publication date is more reliable than the one from github
         date_p = Properties.publication_date
         if date_p not in claim.qualifiers:
-            get_or_create_qualifiers(claim, date_p, release.date)
+            get_or_create_qualifiers(claim, date_p, release.date, edit_group_hash)
 
         title = "Release %s" % release.version
         get_or_create_sources(
-            claim, release.page, project.retrieved, title, release.date
+            claim, release.page, project.retrieved, title, edit_group_hash, release.date
         )
 
         # Give the latest release the preferred rank
         # And work around a bug in pywikibot
         try:
-            set_claim_rank(claim, latest_version, release)
+            set_claim_rank(claim, latest_version, release, edit_group_hash)
         except AssertionError:
             logger.warning(
                 f"Using the fallback for setting the preferred rank of {q_value}"
@@ -696,10 +728,10 @@ def update_wikidata(project: Project):
             item.get(force=True)
 
             claim, created = get_or_create_claim(
-                item, Properties.software_version, release.version
+                item, Properties.software_version, release.version, edit_group_hash
             )
             assert not created
-            set_claim_rank(claim, latest_version, release)
+            set_claim_rank(claim, latest_version, release, edit_group_hash)
 
 
 def configure_logging(quiet: bool, http_debug: bool):
@@ -760,6 +792,8 @@ def main():
     args = parser.parse_args()
 
     configure_logging(args.quiet, args.debug_http)
+    # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
+    edit_group_hash = "{:x}".format(random.randrange(0, 2 ** 48))
 
     if args.github_oauth_token:
         github_oath_token = args.github_oauth_token
@@ -798,7 +832,7 @@ def main():
 
         if Settings.do_update_wikidata:
             try:
-                update_wikidata(properties)
+                update_wikidata(properties, edit_group_hash)
             except Exception as e:
                 logger.error("Failed to update {}: {}".format(properties.project, e))
                 raise e
