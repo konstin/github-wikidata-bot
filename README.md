@@ -1,4 +1,4 @@
-## Github to wikidata bot
+## GitHub to Wikidata bot
 
 [![Build Status](https://travis-ci.org/konstin/github-wikidata-bot.svg?branch=master)](https://travis-ci.org/konstin/github-wikidata-bot)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
@@ -13,13 +13,13 @@ using metadata collected from the GitHub API:
 * Update the project website
 * Normalize the GitHub link
 
-It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki-bot/Exceptions) from being edited by the bot, and also to [allow using tags](https://www.wikidata.org/w/index.php?title=User:Github-wiki-bot/Whitelist) for projects without github releases.
+It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki-bot/Exceptions) from being edited by the bot, and also to [allow using tags](https://www.wikidata.org/w/index.php?title=User:Github-wiki-bot/Whitelist) for projects without GitHub releases.
 
 ## Setup and usage
 
 First install python >=3.6 and [poetry][poetry], then run `poetry install`. 
 
-[Generate a personal access token on GitHub][github-token]. Create a config.json file with that token and your wikidata username:
+[Generate a personal access token on GitHub][github-token]. Create a config.json file with that token and your Wikidata username:
 
 ```json
 {
