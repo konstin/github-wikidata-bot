@@ -713,7 +713,7 @@ def update_wikidata(project: Project, edit_group_hash: str):
 
         title = "Release %s" % release.version
         get_or_create_sources(
-            claim, release.page, project.retrieved, title, edit_group_hash, release.date
+            claim, release.page, project.retrieved, edit_group_hash, title, release.date
         )
 
         # Give the latest release the preferred rank
