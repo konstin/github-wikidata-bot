@@ -5,10 +5,10 @@ description = "Updates Wikidata entries using metadata from github"
 authors = ["konstin <konstin@mailbox.org>", "Michael Schönitzer <michael@schoenitzer.de>"]
 
 [tool.poetry.dependencies]
-python = "^3.6"
+python = "~3.6"
 pywikibot = "^3.0"
-CacheControl = {version = "^0.12.5", extras = ["filecache"]}
-dataclasses = "^0.6.0"
+CacheControl = { version = "^0.12.5", extras = ["filecache"] }
+dataclasses = "^0.7.0"
 lockfile = "^0.12.2"
 yarl = "^1.3"
 
@@ -29,3 +29,7 @@ exclude = '''
   | cache
 )/
 '''
+
+[build-system]
+requires = ["poetry~=1.0.0"]
+build-backend = "poetry.masonry.api"
