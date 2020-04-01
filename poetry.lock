@@ -211,14 +211,6 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 version = "1.8.1"
 
 [[package]]
-category = "main"
-description = "C parser in Python"
-name = "pycparser"
-optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "2.19"
-
-[[package]]
 category = "dev"
 description = "Python parsing module"
 name = "pyparsing"
@@ -258,11 +250,9 @@ description = "Python MediaWiki Bot Framework"
 name = "pywikibot"
 optional = false
 python-versions = ">=2.7.4, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "3.0.20200111"
+version = "3.0.20200326"
 
 [package.dependencies]
-pycparser = "!=2.14"
-
 [package.dependencies.requests]
 python = "<3.4.0 || >=3.5.0"
 version = ">=2.20.1"
@@ -270,19 +260,23 @@ version = ">=2.20.1"
 [package.extras]
 Google = ["google (>=1.7)"]
 Graphviz = ["pydot (>=1.2)"]
-Tkinter = ["Pillow (<7.0.0)", "Pillow (<6.0.0)", "pillow"]
+Tkinter = ["Pillow (>=6.2.0,<7.0.0)", "Pillow (<6.0.0)", "Pillow (>=6.2.1)"]
 csv = ["unicodecsv"]
 "data_ingestion.py" = ["unicodecsv"]
 eventstreams = ["sseclient (>=0.0.18,<0.0.23 || >0.0.23,<0.0.24 || >0.0.24)"]
-flake8 = ["flake8 (>=3.7.5)", "hacking", "flake8-coding", "flake8-comprehensions", "flake8-docstrings (>=1.3.1)", "flake8-future-import", "flake8-mock (>=0.3)", "flake8-print (>=2.0.1)", "flake8-quotes (>=2.0.1)", "flake8-string-format", "flake8-tuple (>=0.2.8)", "flake8-no-u-prefixed-strings (>=0.2)", "pep8-naming (>=0.7)", "pyflakes (>=2.1.0)", "pydocstyle (<=3.0.0)", "pydocstyle (>=4.0.0)"]
-"flickrripper.py" = ["flickrapi", "Pillow (<7.0.0)", "Pillow (<6.0.0)", "pillow"]
+flake8 = ["flake8 (>=3.7.5)", "hacking", "flake8-coding", "flake8-docstrings (>=1.3.1)", "flake8-future-import", "flake8-mock (>=0.3)", "flake8-print (>=2.0.1)", "flake8-quotes (>=2.0.1)", "flake8-string-format", "flake8-tuple (>=0.2.8)", "flake8-no-u-prefixed-strings (>=0.2)", "pep8-naming (>=0.7)", "pyflakes (>=2.1.0)", "pydocstyle (<=3.0.0)", "flake8-comprehensions (<2.0.0)", "flake8-comprehensions (>=2.0.0,<2.2.0)", "pydocstyle (>=4.0.0)", "flake8-comprehensions (>=2.2.0)", "flake8-comprehensions (>=3.1.4)"]
+"flickrripper.py" = ["Pillow (>=6.2.0,<7.0.0)", "flickrapi (<3.0.0)", "Pillow (<6.0.0)", "flickrapi (>=2.2)", "Pillow (>=6.2.1)"]
 html = ["beautifulsoup4"]
 http = ["fake-useragent"]
-isbn = ["python-stdnum"]
+"imageharvest.py" = ["beautifulsoup4"]
+isbn = ["python-stdnum (>=1.13)"]
+"isbn.py" = ["python-stdnum (>=1.13)"]
+"match_images.py" = ["Pillow (>=6.2.0,<7.0.0)", "Pillow (<6.0.0)", "Pillow (>=6.2.1)"]
 mwoauth = ["mwoauth (>=0.2.4,<0.3.1 || >0.3.1)"]
 mwparserfromhell = ["mwparserfromhell (>=0.3.3)"]
 "patrol.py" = ["mwparserfromhell (>=0.3.3)"]
-security = ["pycparser (!=2.14)", "requests"]
+scripts = ["python-stdnum (>=1.13)", "beautifulsoup4", "memento_client (>=0.5.1,<0.6.0 || >0.6.0)", "mwparserfromhell (>=0.3.3)", "pycountry", "Pillow (>=6.2.0,<7.0.0)", "unicodecsv", "Pillow (>=6.2.0,<7.0.0)", "flickrapi (<3.0.0)", "Pillow (<6.0.0)", "Pillow (<6.0.0)", "flickrapi (>=2.2)", "Pillow (>=6.2.1)", "Pillow (>=6.2.1)"]
+security = ["requests"]
 "states_redirect.py" = ["pycountry"]
 "weblinkchecker.py" = ["memento_client (>=0.5.1,<0.6.0 || >0.6.0)"]
 
@@ -503,9 +497,6 @@ py = [
     {file = "py-1.8.1-py2.py3-none-any.whl", hash = "sha256:c20fdd83a5dbc0af9efd622bee9a5564e278f6380fffcacc43ba6f43db2813b0"},
     {file = "py-1.8.1.tar.gz", hash = "sha256:5e27081401262157467ad6e7f851b7aa402c5852dbcb3dae06768434de5752aa"},
 ]
-pycparser = [
-    {file = "pycparser-2.19.tar.gz", hash = "sha256:a988718abfad80b6b157acce7bf130a30876d27603738ac39f140993246b25b3"},
-]
 pyparsing = [
     {file = "pyparsing-2.4.6-py2.py3-none-any.whl", hash = "sha256:c342dccb5250c08d45fd6f8b4a559613ca603b57498511740e65cd11a2e7dcec"},
     {file = "pyparsing-2.4.6.tar.gz", hash = "sha256:4c830582a84fb022400b85429791bc551f1f4871c33f23e44f353119e92f969f"},
@@ -515,7 +506,7 @@ pytest = [
     {file = "pytest-5.3.4.tar.gz", hash = "sha256:1d122e8be54d1a709e56f82e2d85dcba3018313d64647f38a91aec88c239b600"},
 ]
 pywikibot = [
-    {file = "pywikibot-3.0.20200111.tar.gz", hash = "sha256:55cffa9133df0ffa6f30cedbdff34d76f61c314bf51e2b0f67755ec4da8d4c84"},
+    {file = "pywikibot-3.0.20200326.tar.gz", hash = "sha256:505b043c0711a3f9c7a674ac20864b501e9dd15baeddf27e60e2516f98fef5a3"},
 ]
 regex = [
     {file = "regex-2020.1.8-cp27-cp27m-win32.whl", hash = "sha256:4e8f02d3d72ca94efc8396f8036c0d3bcc812aefc28ec70f35bb888c74a25161"},
@@ -582,6 +573,7 @@ urllib3 = [
 ]
 wcwidth = [
     {file = "wcwidth-0.1.8-py2.py3-none-any.whl", hash = "sha256:8fd29383f539be45b20bd4df0dc29c20ba48654a41e661925e612311e9f3c603"},
+    {file = "wcwidth-0.1.8.tar.gz", hash = "sha256:f28b3e8a6483e5d49e7f8949ac1a78314e740333ae305b4ba5defd3e74fb37a8"},
 ]
 yarl = [
     {file = "yarl-1.4.2-cp35-cp35m-macosx_10_13_x86_64.whl", hash = "sha256:3ce3d4f7c6b69c4e4f0704b32eca8123b9c58ae91af740481aa57d7857b5e41b"},
