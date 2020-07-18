@@ -250,7 +250,7 @@ description = "Python MediaWiki Bot Framework"
 name = "pywikibot"
 optional = false
 python-versions = ">=2.7.4, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "3.0.20200508"
+version = "3.0.20200609"
 
 [package.dependencies]
 [package.dependencies.requests]
@@ -506,7 +506,7 @@ pytest = [
     {file = "pytest-5.4.3.tar.gz", hash = "sha256:7979331bfcba207414f5e1263b5a0f8f521d0f457318836a7355531ed1a4c7d8"},
 ]
 pywikibot = [
-    {file = "pywikibot-3.0.20200508.tar.gz", hash = "sha256:c61095a8d56c02ebc73f5c23f7e75248f11e0272d88cbe6b5d258b0438cbb0b6"},
+    {file = "pywikibot-3.0.20200609.tar.gz", hash = "sha256:24b918d2df9ba16b8506e77dfb8a4f78446b1052f38e232d4f6fa20141b44d8d"},
 ]
 regex = [
     {file = "regex-2020.1.8-cp27-cp27m-win32.whl", hash = "sha256:4e8f02d3d72ca94efc8396f8036c0d3bcc812aefc28ec70f35bb888c74a25161"},
