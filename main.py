@@ -5,6 +5,7 @@ import logging.config
 import os
 import random
 import re
+from dataclasses import dataclass
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
 from typing import Any, Dict, List, Optional, Tuple
@@ -14,7 +15,7 @@ import pywikibot
 import requests
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
-from dataclasses import dataclass
+from cachecontrol.heuristics import ExpiresAfter
 
 # noinspection PyProtectedMember
 from pywikibot import Claim, ItemPage, WbTime
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 class Settings:
     do_update_wikidata = True
 
-    # Read also tags if a project doesn't use githubs releases
+    # Read also tags if a project doesn't use github's releases
     read_tags = True
 
     normalize_repo_url = True
@@ -50,14 +51,14 @@ class Settings:
     license_sparql_file = "free_licenses.rq"
     licenses: Dict[str, str] = {}
 
-    # pywikibot is too stupid to cache the calendar model, so let's do this manually
-    calendarmodel = pywikibot.Site().data_repository().calendarmodel()
+    # pywikibot doesn't cache the calendar model, so let's do this manually
+    calendar_model = pywikibot.Site().data_repository().calendarmodel()
     wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
 
     cached_session: requests.Session = CacheControl(
-        requests.Session(), cache=FileCache("cache")
+        requests.Session(), cache=FileCache("cache"), heuristic=ExpiresAfter(days=30)
     )
 
 
@@ -134,17 +135,17 @@ class Project:
     retrieved: WbTime
 
 
-def get_filter_list(pagetitle: str) -> List[str]:
+def get_filter_list(page_title: str) -> List[str]:
     site = pywikibot.Site()
-    page = pywikibot.Page(site, pagetitle)
+    page = pywikibot.Page(site, page_title)
     return parse_filter_list(page.text)
 
 
-def string_to_wddate(isotimestamp: str) -> WbTime:
+def string_to_wddate(iso_timestamp: str) -> WbTime:
     """
     Create a wikidata compatible wikibase date from an ISO 8601 timestamp
     """
-    date = WbTime.fromTimestr(isotimestamp, calendarmodel=Settings.calendarmodel)
+    date = WbTime.fromTimestr(iso_timestamp, calendarmodel=Settings.calendar_model)
     date.hour = 0
     date.minute = 0
     date.second = 0
@@ -152,7 +153,7 @@ def string_to_wddate(isotimestamp: str) -> WbTime:
     return date
 
 
-def get_sumary(edit_group_hash: str) -> str:
+def get_summary(edit_group_hash: str) -> str:
     """ https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots """
     return f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
 
@@ -171,7 +172,7 @@ def get_or_create_claim(
 
     claim = Claim(Settings.wikidata_repo, p_value)
     claim.setTarget(value)
-    item.addClaim(claim, summary=get_sumary(edit_group_hash))
+    item.addClaim(claim, summary=get_summary(edit_group_hash))
 
     return claim, True
 
@@ -190,7 +191,7 @@ def get_or_create_qualifiers(
     else:
         qualifier = Claim(Settings.wikidata_repo, p_value)
         qualifier.setTarget(value)
-        summary = get_sumary(edit_group_hash)
+        summary = get_summary(edit_group_hash)
         claim.addQualifier(qualifier, summary=summary)
 
     return qualifier
@@ -234,7 +235,7 @@ def get_or_create_sources(
             src_date = Claim(Settings.wikidata_repo, Properties.publication_date)
             src_date.setTarget(date)
             sources.append(src_date)
-        claim.addSources(sources, summary=get_sumary(edit_group_hash))
+        claim.addSources(sources, summary=get_summary(edit_group_hash))
 
     return src_url
 
@@ -259,9 +260,9 @@ def query_projects(
     Queries for all software projects and returns them as an array of simplified dicts
     :return: the data splitted into projects with and without github
     """
-    wikdata_sparql = sparql.SparqlQuery()
+    wikidata_sparql = sparql.SparqlQuery()
     sparql_free_software_items = "".join(open(Settings.sparql_file).readlines())
-    response = wikdata_sparql.query(sparql_free_software_items)
+    response = wikidata_sparql.query(sparql_free_software_items)
 
     projects = []
     logger.info(
@@ -320,7 +321,7 @@ def get_all_pages(url: str) -> List[dict]:
 def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
     """
     Heuristics to find the version number and according meta-data for a release
-    marked with githubs release-feature
+    marked with github's release-feature
     """
     project_name = project_info["name"]
     match_tag_name = extract_version(release.get("tag_name") or "", project_name)
@@ -369,7 +370,7 @@ def analyse_tag(
 ) -> Optional[ReleaseTag]:
     """
     Heuristics to find the version number and according meta-data for a release
-    not marked with githubs release-feature but tagged with git.
+    not marked with github's release-feature but tagged with git.
 
     Compared to analyse_release this needs an extra API-call which makes this
     function considerably slower.
@@ -396,7 +397,7 @@ def analyse_tag(
     )
 
 
-def get_date_from_tagurl(release: ReleaseTag) -> Optional[Release]:
+def get_date_from_tag_url(release: ReleaseTag) -> Optional[Release]:
     tag_details = get_json_cached(release.tag_url)
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
@@ -426,7 +427,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
      - website / homepage
      - version number string and release date of all stable releases
 
-    Version marked with githubs own release-function are received primarily.
+    Version marked with github's own release-function are received primarily.
     Only if a project has none releases marked that way this function will fall
     back to parsing the tags of the project.
 
@@ -439,8 +440,8 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     """
     # "retrieved" does only accept dates without time, so create a timestamp with no date
     # noinspection PyUnresolvedReferences
-    isotimestamp = pywikibot.Timestamp.utcnow().toISOformat()
-    retrieved = string_to_wddate(isotimestamp)
+    iso_timestamp = pywikibot.Timestamp.utcnow().toISOformat()
+    retrieved = string_to_wddate(iso_timestamp)
 
     # General project information
     project_info = get_json_cached(github_repo_to_api(url))
@@ -455,9 +456,9 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     else:
         spdx_id = None
 
-    apiurl = github_repo_to_api_releases(url)
+    api_url = github_repo_to_api_releases(url)
     q_value = properties["project"].replace("http://www.wikidata.org/entity/", "")
-    releases = get_all_pages(apiurl)
+    releases = get_all_pages(api_url)
 
     invalid_releases = []
     extracted: List[Optional[Release]] = []
@@ -475,31 +476,31 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
 
     if Settings.read_tags and (len(extracted) == 0 or q_value in Settings.whitelist):
         logger.info("Falling back to tags")
-        apiurl = github_repo_to_api_tags(url)
+        api_url = github_repo_to_api_tags(url)
         try:
-            tags = get_json_cached(apiurl)
+            tags = get_json_cached(api_url)
         except HTTPError as e:
-            # Gitub raises a 404 if there are no tags
+            # Github raises a 404 if there are no tags
             if e.response.status_code == 404:
                 tags = {}
             else:
                 raise e
 
         invalid_version_strings: List[str] = []
-        extractedtags = [
+        extracted_tags = [
             analyse_tag(release, project_info, invalid_version_strings)
             for release in tags
         ]
-        filterd = [v for v in extractedtags if v is not None]
-        filterd.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
-        if len(filterd) > 300:
+        filtered = [v for v in extracted_tags if v is not None]
+        filtered.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
+        if len(filtered) > 300:
             logger.warning(
                 "Limiting {} to 300 of {} tags for performance reasons.".format(
-                    q_value, len(filterd)
+                    q_value, len(filtered)
                 )
             )
-            filterd = filterd[-300:]
-        extracted = list(map(get_date_from_tagurl, filterd))
+            filtered = filtered[-300:]
+        extracted = list(map(get_date_from_tag_url, filtered))
         if invalid_version_strings:
             logger.warning(
                 f"Invalid version strings in tags of {q_value}: {invalid_version_strings}"
@@ -542,11 +543,11 @@ def normalize_repo_url(
     if source_p in item.claims and len(urls) == 2:
         if urls[0].getTarget() == url_normalized and urls[1].getTarget() == url_raw:
             logger.info("The old and the new url are already set, removing the old")
-            item.removeClaims(urls[1], summary=get_sumary(edit_group_hash))
+            item.removeClaims(urls[1], summary=get_summary(edit_group_hash))
             return
         if urls[0].getTarget() == url_raw and urls[1].getTarget() == url_normalized:
             logger.info("The old and the new url are already set, removing the old")
-            item.removeClaims(urls[0], summary=get_sumary(edit_group_hash))
+            item.removeClaims(urls[0], summary=get_summary(edit_group_hash))
             return
 
     if source_p in item.claims and len(urls) > 1:
@@ -557,7 +558,8 @@ def normalize_repo_url(
 
     if urls[0].getTarget() != url_raw:
         logger.error(
-            f"The url on the object ({urls[0].getTarget()}) doesn't match the url from the sparql query ({url_raw}) for {q_value}"
+            f"The url on the object ({urls[0].getTarget()}) doesn't match "
+            f"the url from the sparql query ({url_raw}) for {q_value}"
         )
         return
 
@@ -565,8 +567,8 @@ def normalize_repo_url(
     claim = Claim(Settings.wikidata_repo, source_p)
     claim.setTarget(url_normalized)
     claim.setSnakType("value")
-    item.addClaim(claim, summary=get_sumary(edit_group_hash))
-    item.removeClaims(urls[0], summary=get_sumary(edit_group_hash))
+    item.addClaim(claim, summary=get_summary(edit_group_hash))
+    item.removeClaims(urls[0], summary=get_summary(edit_group_hash))
     # Add git as protocol
     git = ItemPage(Settings.wikidata_repo, "Q186055")
     get_or_create_qualifiers(claim, Properties.protocol, git, edit_group_hash)
@@ -579,12 +581,12 @@ def set_claim_rank(
         return
     if release.version == latest_version:
         if claim.getRank() == "normal":
-            logger.info("Setting prefered rank for {}".format(claim.getTarget()))
-            claim.changeRank("preferred", summary=get_sumary(edit_group_hash))
+            logger.info("Setting preferred rank for {}".format(claim.getTarget()))
+            claim.changeRank("preferred", summary=get_summary(edit_group_hash))
     else:
         if claim.getRank() == "preferred":
             logger.info("Setting normal rank for {}".format(claim.getTarget()))
-            claim.changeRank("normal", summary=get_sumary(edit_group_hash))
+            claim.changeRank("normal", summary=get_summary(edit_group_hash))
 
 
 def set_website(
