@@ -528,7 +528,7 @@ def normalize_repo_url(
     q_value: str,
     edit_group_hash: str,
 ):
-    """ Canonicalize the github url
+    """Canonicalize the github url
     This use the format https://github.com/[owner]/[repo]
 
     Note: This apparently only works with a bot account
