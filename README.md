@@ -1,6 +1,6 @@
 ## GitHub to Wikidata bot
 
-[![Build Status](https://travis-ci.org/konstin/github-wikidata-bot.svg?branch=master)](https://travis-ci.org/konstin/github-wikidata-bot)
+![Tests](https://github.com/konstin/github-wikidata-bot/workflows/Tests/badge.svg)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
 Update Wikidata entries using metadata from GitHub.
@@ -17,7 +17,7 @@ It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki
 
 ## Setup and usage
 
-First install python >=3.6 and [poetry][poetry], then run `poetry install`. 
+First install python >=3.6 and [poetry][poetry], then run `poetry install`.
 
 [Generate a personal access token on GitHub][github-token]. Create a config.json file with that token and your Wikidata username:
 
