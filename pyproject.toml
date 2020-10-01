@@ -9,7 +9,7 @@ python = "^3.7"
 pywikibot = "^4.2"
 CacheControl = { version = "^0.12.5", extras = ["filecache"] }
 lockfile = "^0.12.2"
-yarl = "^1.3"
+yarl = "^1.6"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.1"
