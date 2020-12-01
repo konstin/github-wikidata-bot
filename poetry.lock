@@ -237,7 +237,7 @@ testing = ["argcomplete", "hypothesis (>=3.56)", "mock", "nose", "requests", "xm
 
 [[package]]
 name = "pywikibot"
-version = "4.3.0"
+version = "5.1.0"
 description = "Python MediaWiki Bot Framework"
 category = "main"
 optional = false
@@ -256,13 +256,13 @@ flake8 = ["flake8 (>=3.7.5)", "pydocstyle (>=4.0.0)", "hacking", "flake8-coding"
 html = ["beautifulsoup4"]
 http = ["fake-useragent"]
 "imageharvest.py" = ["beautifulsoup4"]
-isbn = ["python-stdnum (>=1.13)"]
-"isbn.py" = ["python-stdnum (>=1.13)"]
+isbn = ["python-stdnum (>=1.14)"]
+"isbn.py" = ["python-stdnum (>=1.14)"]
 "match_images.py" = ["Pillow (>=6.2.2)"]
 mwoauth = ["mwoauth (>=0.2.4,!=0.3.1)"]
 mwparserfromhell = ["mwparserfromhell (>=0.3.3)"]
 "patrol.py" = ["mwparserfromhell (>=0.3.3)"]
-scripts = ["flickrapi (>=2.2)", "Pillow (>=6.2.2)", "beautifulsoup4", "python-stdnum (>=1.13)", "Pillow (>=6.2.2)", "mwparserfromhell (>=0.3.3)", "pycountry", "memento_client (>=0.5.1,!=0.6.0)"]
+scripts = ["flickrapi (>=2.2)", "Pillow (>=6.2.2)", "beautifulsoup4", "python-stdnum (>=1.14)", "Pillow (>=6.2.2)", "mwparserfromhell (>=0.3.3)", "pycountry", "memento_client (>=0.5.1,!=0.6.0)"]
 "states_redirect.py" = ["pycountry"]
 "weblinkchecker.py" = ["memento_client (>=0.5.1,!=0.6.0)"]
 
@@ -365,7 +365,7 @@ testing = ["jaraco.itertools", "func-timeout"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "582c36cb6cab70f9c067d51ed798c217cffbe87d347398f5701336b35d23b608"
+content-hash = "cf52e1307f778912ef35df181227142b746f29d5aa96f4a27845e87e40abb682"
 
 [metadata.files]
 appdirs = [
@@ -487,7 +487,7 @@ pytest = [
     {file = "pytest-6.1.2.tar.gz", hash = "sha256:c0a7e94a8cdbc5422a51ccdad8e6f1024795939cc89159a0ae7f0b316ad3823e"},
 ]
 pywikibot = [
-    {file = "pywikibot-4.3.0.tar.gz", hash = "sha256:873208fe4c284521051b45488e9d72df5af7803e2fb280974d07842d30894f6a"},
+    {file = "pywikibot-5.1.0.tar.gz", hash = "sha256:e81aca046439c8809e3b0132016ff59198e3a90231751e217f451e0eae372a1e"},
 ]
 regex = [
     {file = "regex-2020.7.14-cp27-cp27m-win32.whl", hash = "sha256:e46d13f38cfcbb79bfdb2964b0fe12561fe633caf964a77a5f8d4e45fe5d2ef7"},
