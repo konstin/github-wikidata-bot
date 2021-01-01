@@ -236,32 +236,32 @@ testing = ["argcomplete", "hypothesis (>=3.56)", "mock", "nose", "requests", "xm
 
 [[package]]
 name = "pywikibot"
-version = "4.3.0"
+version = "5.3.0"
 description = "Python MediaWiki Bot Framework"
 category = "main"
 optional = false
 python-versions = ">=3.5.0"
 
 [package.dependencies]
-requests = ">=2.20.1"
+requests = {version = ">=2.20.1", markers = "python_version >= \"3.6\""}
 
 [package.extras]
 Google = ["google (>=1.7)"]
 Graphviz = ["pydot (>=1.2)"]
-Tkinter = ["Pillow (>=6.2.2)"]
+Tkinter = ["Pillow (>=6.2.2,<8.0.0)", "Pillow (>=6.2.2)", "Pillow (>=8.0.0)"]
 eventstreams = ["sseclient (>=0.0.18,!=0.0.23,!=0.0.24)"]
 flake8 = ["flake8 (>=3.7.5)", "pydocstyle (>=4.0.0)", "hacking", "flake8-coding", "flake8-colors", "flake8-comprehensions (>=2.2.0)", "flake8-docstrings (>=1.3.1)", "flake8-future-import", "flake8-mock (>=0.3)", "flake8-print (>=2.0.1)", "flake8-quotes (>=2.0.1)", "flake8-string-format", "flake8-tuple (>=0.2.8)", "flake8-no-u-prefixed-strings (>=0.2)", "pep8-naming (>=0.7)", "pyflakes (>=2.1.0)", "flake8-comprehensions (>=3.1.4)"]
-"flickrripper.py" = ["flickrapi (>=2.2)", "Pillow (>=6.2.2)"]
+"flickrripper.py" = ["flickrapi (>=2.2)", "Pillow (>=6.2.2,<8.0.0)", "Pillow (>=6.2.2)", "Pillow (>=8.0.0)"]
 html = ["beautifulsoup4"]
 http = ["fake-useragent"]
 "imageharvest.py" = ["beautifulsoup4"]
-isbn = ["python-stdnum (>=1.13)"]
-"isbn.py" = ["python-stdnum (>=1.13)"]
-"match_images.py" = ["Pillow (>=6.2.2)"]
+isbn = ["python-stdnum (>=1.14)"]
+"isbn.py" = ["python-stdnum (>=1.14)"]
+"match_images.py" = ["Pillow (>=6.2.2,<8.0.0)", "Pillow (>=6.2.2)", "Pillow (>=8.0.0)"]
 mwoauth = ["mwoauth (>=0.2.4,!=0.3.1)"]
 mwparserfromhell = ["mwparserfromhell (>=0.3.3)"]
 "patrol.py" = ["mwparserfromhell (>=0.3.3)"]
-scripts = ["flickrapi (>=2.2)", "Pillow (>=6.2.2)", "beautifulsoup4", "python-stdnum (>=1.13)", "Pillow (>=6.2.2)", "mwparserfromhell (>=0.3.3)", "pycountry", "memento_client (>=0.5.1,!=0.6.0)"]
+scripts = ["flickrapi (>=2.2)", "beautifulsoup4", "python-stdnum (>=1.14)", "mwparserfromhell (>=0.3.3)", "pycountry", "memento_client (>=0.5.1,!=0.6.0)", "Pillow (>=6.2.2,<8.0.0)", "Pillow (>=6.2.2,<8.0.0)", "Pillow (>=6.2.2)", "Pillow (>=6.2.2)", "Pillow (>=8.0.0)", "Pillow (>=8.0.0)"]
 "states_redirect.py" = ["pycountry"]
 "weblinkchecker.py" = ["memento_client (>=0.5.1,!=0.6.0)"]
 
@@ -364,7 +364,7 @@ testing = ["jaraco.itertools", "func-timeout"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "ac249ac960f2c00fb91bc2204476f88c39820af1d860731dfbaf1ef2fe1631a9"
+content-hash = "aaaeb7cc69a0374b972f9eaa0c8152979244716c2ccee2b75f06ffe48308e63b"
 
 [metadata.files]
 appdirs = [
@@ -486,7 +486,7 @@ pytest = [
     {file = "pytest-6.2.1.tar.gz", hash = "sha256:66e419b1899bc27346cb2c993e12c5e5e8daba9073c1fbce33b9807abc95c306"},
 ]
 pywikibot = [
-    {file = "pywikibot-4.3.0.tar.gz", hash = "sha256:873208fe4c284521051b45488e9d72df5af7803e2fb280974d07842d30894f6a"},
+    {file = "pywikibot-5.3.0.tar.gz", hash = "sha256:6ba165ef166d150209567d928614344f4d6522f5cb5226d3ede072c7449eb9d2"},
 ]
 regex = [
     {file = "regex-2020.7.14-cp27-cp27m-win32.whl", hash = "sha256:e46d13f38cfcbb79bfdb2964b0fe12561fe633caf964a77a5f8d4e45fe5d2ef7"},
