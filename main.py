@@ -438,8 +438,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     :return: dict of dicts
     """
     # "retrieved" does only accept dates without time, so create a timestamp with no date
-    # noinspection PyUnresolvedReferences
-    iso_timestamp = pywikibot.Timestamp.utcnow().toISOformat()
+    iso_timestamp = pywikibot.Timestamp.utcnow().isoformat()
     retrieved = string_to_wddate(iso_timestamp)
 
     # General project information
