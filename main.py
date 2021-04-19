@@ -17,7 +17,6 @@ from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import ExpiresAfter
 
-# noinspection PyProtectedMember
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
 from requests import HTTPError, RequestException
