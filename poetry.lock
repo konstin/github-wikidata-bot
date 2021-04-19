@@ -320,7 +320,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "38e54e020c7596f73808030f928b576b2aad582eab12f7387f8dcfeec3f5eaba"
+content-hash = "cd082a0cef6fe909fc0dd76cafb64ad8ffb229f9f2a1c6011f5caab4402b32d0"
 
 [metadata.files]
 appdirs = [
