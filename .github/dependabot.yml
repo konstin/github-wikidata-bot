@@ -5,11 +5,3 @@ updates:
   schedule:
     interval: monthly
     time: "04:00"
-  ignore:
-  - dependency-name: pywikibot
-    versions:
-    - 5.3.0
-    - 5.6.0
-  - dependency-name: yarl
-    versions:
-    - 1.6.3
