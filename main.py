@@ -153,7 +153,7 @@ def string_to_wddate(iso_timestamp: str) -> WbTime:
 
 
 def get_summary(edit_group_hash: str) -> str:
-    """ https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots """
+    """https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots"""
     return f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
 
 
@@ -305,7 +305,7 @@ def query_projects(
 
 
 def get_all_pages(url: str) -> List[dict]:
-    """ Gets all pages of the release/tag information """
+    """Gets all pages of the release/tag information"""
     page_number = 1
     results: List[dict] = []
     while True:
@@ -590,7 +590,7 @@ def set_claim_rank(
 def set_website(
     item: ItemPage, project: Project, url_normalized: str, edit_group_hash: str
 ):
-    """ Add the website if does not already exists """
+    """Add the website if does not already exists"""
     if not project.website or not project.website.startswith("http"):
         return
 
@@ -619,7 +619,7 @@ def set_website(
 def set_license(
     item: ItemPage, project: Project, url_normalized: str, edit_group_hash: str
 ):
-    """ Add the license if does not already exists """
+    """Add the license if does not already exists"""
     if project.license and Properties.license not in item.claims:
         if project.license in Settings.licenses:
             project_license = Settings.licenses[project.license]
@@ -640,7 +640,7 @@ def set_license(
 
 
 def update_wikidata(project: Project, edit_group_hash: str):
-    """ Update wikidata entry with data from github """
+    """Update wikidata entry with data from github"""
     # Wikidata boilerplate
     wikidata = Settings.wikidata_repo
     q_value = project.project.replace("http://www.wikidata.org/entity/", "")
