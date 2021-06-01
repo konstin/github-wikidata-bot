@@ -215,7 +215,7 @@ testing = ["argcomplete", "hypothesis (>=3.56)", "mock", "nose", "requests", "xm
 
 [[package]]
 name = "pywikibot"
-version = "6.1.0"
+version = "6.3.0"
 description = "Python MediaWiki Bot Framework"
 category = "main"
 optional = false
@@ -303,7 +303,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "1737014c9a9d77015d929960b10b38880e168542b7c4e169fcb2a3ab8d410af9"
+content-hash = "c9e6025c2325cc2d4407cedc6ae2160c1c1917dfa6ea01408f1264298f6dd866"
 
 [metadata.files]
 appdirs = [
@@ -452,7 +452,7 @@ pytest = [
     {file = "pytest-6.2.4.tar.gz", hash = "sha256:50bcad0a0b9c5a72c8e4e7c9855a3ad496ca6a881a3641b4260605450772c54b"},
 ]
 pywikibot = [
-    {file = "pywikibot-6.1.0.tar.gz", hash = "sha256:3dcce98eb31922382a356af705a443c0412a48672f8931a74ff980d5edb59bfd"},
+    {file = "pywikibot-6.3.0.tar.gz", hash = "sha256:bcbafba40878102c0a4233dbcb1be2f51d4d55960d1b9b33f18b65188b6581bd"},
 ]
 regex = [
     {file = "regex-2021.4.4-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:619d71c59a78b84d7f18891fe914446d07edd48dc8328c8e149cbe0929b4e000"},
