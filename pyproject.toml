@@ -14,7 +14,7 @@ msgpack = "^1.0.2"  # Required for cachecontrol
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2"
-black = "^21.4b2"
+black = "^21.9b0"
 
 [tool.black]
 target-version = ['py37']
