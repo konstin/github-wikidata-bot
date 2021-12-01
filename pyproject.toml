@@ -7,7 +7,7 @@ authors = ["konstin <konstin@mailbox.org>", "Michael Schönitzer <michael@schoen
 [tool.poetry.dependencies]
 python = "^3.8"
 pywikibot = "^6.1.0"
-CacheControl = { version = "^0.12.5", extras = ["filecache"] }
+CacheControl = { version = "^0.12.10", extras = ["filecache"] }
 lockfile = "^0.12.2"
 yarl = "^1.3"
 msgpack = "^1.0.2"  # Required for cachecontrol
