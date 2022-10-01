@@ -18,7 +18,7 @@ jobs:
       - name: Install poetry
         run: |
           curl -sSL https://install.python-poetry.org | python
-          $HOME/.poetry/bin/poetry config virtualenvs.in-project true
+          poetry config virtualenvs.in-project true
       - uses: actions/cache@v1
         with:
           path: .venv
@@ -26,7 +26,7 @@ jobs:
           restore-keys: |
             poetry-${{ runner.os }}-${{ matrix.python-version }}-
       - name: Install depencies
-        run: $HOME/.poetry/bin/poetry install
+        run: poetry install
       - name: Check formatting
         run: .venv/bin/black . --check
       - name: Run pytest
