@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import enum
 import json
 import logging.config
 import os
@@ -8,7 +9,7 @@ import re
 from dataclasses import dataclass
 from distutils.version import LooseVersion
 from json.decoder import JSONDecodeError
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
 
 import pywikibot
@@ -18,6 +19,7 @@ from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import ExpiresAfter
 
 from pywikibot import Claim, ItemPage, WbTime
+from pywikibot.bot import WikidataBot
 from pywikibot.data import sparql
 from requests import HTTPError, RequestException
 
@@ -50,9 +52,14 @@ class Settings:
     license_sparql_file = "free_licenses.rq"
     licenses: Dict[str, str] = {}
 
+    # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
+    edit_group_hash = "{:x}".format(random.randrange(0, 2 ** 48))
+    """https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots"""
+    edit_summary = f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
+
+    bot = WikidataBot(always=True)
     # pywikibot doesn't cache the calendar model, so let's do this manually
-    calendar_model = pywikibot.Site().data_repository().calendarmodel()
-    wikidata_repo = pywikibot.Site("wikidata", "wikidata").data_repository()
+    calendar_model = bot.repo.calendarmodel()
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
 
@@ -61,8 +68,9 @@ class Settings:
     )
 
 
-@dataclass
-class Properties:
+class Properties(enum.Enum):
+    """Commonly used Wikidata properties"""
+
     software_version = "P348"
     publication_date = "P577"
     retrieved = "P813"
@@ -72,6 +80,19 @@ class Properties:
     title = "P1476"
     protocol = "P2700"
     license = "P275"
+
+    def new_claim(self, value: Any) -> Claim:
+        """Builds a new claim for this property and the given target value."""
+        claim = Claim(Settings.bot.repo, self.value)
+        claim.setTarget(value)
+        return claim
+
+    def get_claim(self, item: ItemPage, target: Any) -> Optional[Claim]:
+        """Returns an existing claim for this property and the given target value."""
+        if self.value not in item.claims:
+            return None
+        all_claims: List[Claim] = item.claims.get(self.value, [])
+        return next((c for c in all_claims if c.target_equals(target)), None)
 
 
 class RedirectDict:
@@ -152,91 +173,25 @@ def string_to_wddate(iso_timestamp: str) -> WbTime:
     return date
 
 
-def get_summary(edit_group_hash: str) -> str:
-    """https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots"""
-    return f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
-
-
-def get_or_create_claim(
-    item: ItemPage, p_value: str, value: Any, edit_group_hash: str
-) -> Tuple[Claim, bool]:
-    """
-    Gets or creates a claim with `value` under the property `p_value` to `item`
-    """
-    all_claims = item.claims.get(p_value, [])
-
-    for claim in all_claims:
-        if claim.target_equals(value):
-            return claim, False
-
-    claim = Claim(Settings.wikidata_repo, p_value)
-    claim.setTarget(value)
-    item.addClaim(claim, summary=get_summary(edit_group_hash))
-
-    return claim, True
-
-
-def get_or_create_qualifiers(
-    claim: Claim, p_value: str, value: Any, edit_group_hash: str
-) -> Claim:
-    """
-    Gets or creates a `qualifier` under the property `p_value` to `claim`
-    """
-    all_qualifiers = claim.qualifiers.get(p_value, [])
-
-    for qualifier in all_qualifiers:
-        if qualifier.target_equals(value):
-            break
-    else:
-        qualifier = Claim(Settings.wikidata_repo, p_value)
-        qualifier.setTarget(value)
-        summary = get_summary(edit_group_hash)
-        claim.addQualifier(qualifier, summary=summary)
-
-    return qualifier
-
-
-def get_or_create_sources(
-    claim: Claim,
+def create_sources(
     url: str,
-    retrieved,
-    edit_group_hash: str,
+    retrieved: WbTime,
     title: Optional[str] = None,
     date: Optional[WbTime] = None,
-):
+) -> List[Claim]:
     """
     Gets or creates a `source` under the property `claim` to `url`
     """
-    all_sources = []
-
-    src_p = Properties.reference_url
-
-    for i in claim.sources or []:
-        if src_p in i:
-            all_sources.append(i[src_p][0])
-
-    for src_url in all_sources:
-        if src_url.target_equals(url):
-            break
-    else:
-        src_url = Claim(Settings.wikidata_repo, src_p)
-        src_url.setTarget(url)
-        src_retrieved = Claim(Settings.wikidata_repo, Properties.retrieved)
-        src_retrieved.setTarget(retrieved)
-
-        sources = [src_url, src_retrieved]
-
-        if title:
-            src_title = Claim(Settings.wikidata_repo, Properties.title)
-            src_title.setTarget(pywikibot.WbMonolingualText(title, "en"))
-            sources.append(src_title)
-        if date:
-            src_date = Claim(Settings.wikidata_repo, Properties.publication_date)
-            src_date.setTarget(date)
-            sources.append(src_date)
-        claim.addSources(sources, summary=get_summary(edit_group_hash))
-
-    return src_url
+    sources: List[Claim] = [
+        Properties.reference_url.new_claim(url),
+        Properties.retrieved.new_claim(retrieved),
+    ]
+    if title:
+        text = pywikibot.WbMonolingualText(title, "en")
+        sources.append(Properties.title.new_claim(text))
+    if date:
+        sources.append(Properties.publication_date.new_claim(date))
+    return sources
 
 
 def get_json_cached(url: str) -> dict:
@@ -512,7 +467,6 @@ def normalize_repo_url(
     url_normalized: str,
     url_raw: str,
     q_value: str,
-    edit_group_hash: str,
 ):
     """Canonicalize the github url
     This use the format https://github.com/[owner]/[repo]
@@ -524,16 +478,16 @@ def normalize_repo_url(
 
     logger.info("Normalizing {} to {}".format(url_raw, url_normalized))
 
-    source_p = Properties.source_code_repository
+    source_p = Properties.source_code_repository.value
     urls = item.claims[source_p]
     if source_p in item.claims and len(urls) == 2:
         if urls[0].getTarget() == url_normalized and urls[1].getTarget() == url_raw:
             logger.info("The old and the new url are already set, removing the old")
-            item.removeClaims(urls[1], summary=get_summary(edit_group_hash))
+            item.removeClaims(urls[1], summary=Settings.edit_summary)
             return
         if urls[0].getTarget() == url_raw and urls[1].getTarget() == url_normalized:
             logger.info("The old and the new url are already set, removing the old")
-            item.removeClaims(urls[0], summary=get_summary(edit_group_hash))
+            item.removeClaims(urls[0], summary=Settings.edit_summary)
             return
 
     if source_p in item.claims and len(urls) > 1:
@@ -549,99 +503,62 @@ def normalize_repo_url(
         )
         return
 
-    # Editing is in this case actually remove the old value and adding the new one
-    claim = Claim(Settings.wikidata_repo, source_p)
-    claim.setTarget(url_normalized)
-    claim.setSnakType("value")
-    item.addClaim(claim, summary=get_summary(edit_group_hash))
-    item.removeClaims(urls[0], summary=get_summary(edit_group_hash))
     # Add git as protocol
-    git = ItemPage(Settings.wikidata_repo, "Q186055")
-    get_or_create_qualifiers(claim, Properties.protocol, git, edit_group_hash)
+    git = ItemPage(Settings.bot.repo, "Q186055")
+    # Editing is in this case actually remove the old value and adding the new one
+    claim = Properties.source_code_repository.new_claim(url_normalized)
+    claim.addQualifier(Properties.protocol.new_claim(git))
+    claim.setSnakType("value")
+    item.addClaim(claim, summary=Settings.edit_summary)
+    item.removeClaims(urls[0], summary=Settings.edit_summary)
 
 
-def set_claim_rank(
-    claim: Claim, latest_version: Optional[str], release: Release, edit_group_hash: str
-):
-    if latest_version is None:
-        return
-    if release.version == latest_version:
-        if claim.getRank() == "normal":
-            logger.info("Setting preferred rank for {}".format(claim.getTarget()))
-            claim.changeRank("preferred", summary=get_summary(edit_group_hash))
-    else:
-        if claim.getRank() == "preferred":
-            logger.info("Setting normal rank for {}".format(claim.getTarget()))
-            claim.changeRank("normal", summary=get_summary(edit_group_hash))
-
-
-def set_website(
-    item: ItemPage, project: Project, url_normalized: str, edit_group_hash: str
-):
+def set_website(project: Project) -> Optional[Claim]:
     """Add the website if does not already exists"""
     if not project.website or not project.website.startswith("http"):
         return
 
-    # There's a single value constraint on official website (which is not yet reflected below)
-    if Properties.official_website in item.claims:
-        return
-
-    redirected = RedirectDict.get_or_add(project.website)
-
-    websites = [x.getTarget() for x in item.claims.get(Properties.official_website, [])]
-    if project.website in websites or redirected in websites:
-        return
-
-    url = redirected or project.website
-
-    claim, created = get_or_create_claim(
-        item, Properties.official_website, url, edit_group_hash
-    )
-    if created:
-        logger.info("Added the website: {}".format(url))
-    get_or_create_sources(
-        claim, github_repo_to_api(url_normalized), project.retrieved, edit_group_hash
-    )
+    url = RedirectDict.get_or_add(project.website) or project.website
+    return Properties.official_website.new_claim(url)
 
 
-def set_license(
-    item: ItemPage, project: Project, url_normalized: str, edit_group_hash: str
-):
+def set_license(project: Project) -> Optional[Claim]:
     """Add the license if does not already exists"""
-    if project.license and Properties.license not in item.claims:
-        if project.license in Settings.licenses:
-            project_license = Settings.licenses[project.license]
-            claim, created = get_or_create_claim(
-                item,
-                Properties.license,
-                pywikibot.ItemPage(Settings.wikidata_repo, project_license),
-                edit_group_hash,
-            )
-            if created:
-                logger.info("Added the license: {}".format(project_license))
-            get_or_create_sources(
-                claim,
-                github_repo_to_api(url_normalized),
-                project.retrieved,
-                edit_group_hash,
-            )
+    if not project.license or project.license not in Settings.licenses:
+        return
+
+    project_license = Settings.licenses[project.license]
+    page = pywikibot.ItemPage(Settings.bot.repo, project_license)
+    return Properties.license.new_claim(page)
 
 
-def update_wikidata(project: Project, edit_group_hash: str):
+def update_wikidata(project: Project):
     """Update wikidata entry with data from github"""
     # Wikidata boilerplate
-    wikidata = Settings.wikidata_repo
     q_value = project.project.replace("http://www.wikidata.org/entity/", "")
-    item = ItemPage(wikidata, title=q_value)
+    item = ItemPage(Settings.bot.repo, title=q_value)
     item.get()
 
     url_raw = project.repo
     url_normalized = str(normalize_url(url_raw))
     if Settings.normalize_repo_url:
-        normalize_repo_url(item, url_normalized, url_raw, q_value, edit_group_hash)
+        normalize_repo_url(item, url_normalized, url_raw, q_value)
 
-    set_website(item, project, url_normalized, edit_group_hash)
-    set_license(item, project, url_normalized, edit_group_hash)
+    for claim in (
+        set_website(project),
+        set_license(project),
+    ):
+        if not claim:
+            continue
+        claim.addSources(
+            create_sources(
+                url=github_repo_to_api(url_normalized),
+                retrieved=project.retrieved,
+            )
+        )
+        Settings.bot.user_add_claim_unless_exists(
+            item, claim, exists_arg="", summary=Settings.edit_summary
+        )
 
     # Add all stable releases
     stable_releases = project.stable_release
@@ -688,38 +605,36 @@ def update_wikidata(project: Project, edit_group_hash: str):
         logger.info("There are {} stable releases".format(len(stable_releases)))
 
     for release in stable_releases:
-        claim, created = get_or_create_claim(
-            item, Properties.software_version, release.version, edit_group_hash
-        )
-        if created:
-            logger.info("Added '{}'".format(release.version))
+        existing = Properties.software_version.get_claim(item, release.version)
+        if (
+            existing
+            and existing.getRank() == "preferred"
+            and latest_version
+            and release.version != latest_version
+        ):
+            logger.info("Setting normal rank for {}".format(existing.getTarget()))
+            existing.changeRank("normal", summary=Settings.edit_summary)
 
-        # Assumption: A preexisting publication date is more reliable than the one from github
-        date_p = Properties.publication_date
-        if date_p not in claim.qualifiers:
-            get_or_create_qualifiers(claim, date_p, release.date, edit_group_hash)
-
-        title = "Release %s" % release.version
-        get_or_create_sources(
-            claim, release.page, project.retrieved, edit_group_hash, title, release.date
-        )
-
-        # Give the latest release the preferred rank
-        # And work around a bug in pywikibot
-        try:
-            set_claim_rank(claim, latest_version, release, edit_group_hash)
-        except AssertionError:
-            logger.warning(
-                f"Using the fallback for setting the preferred rank of {q_value}"
+        claim = Properties.software_version.new_claim(release.version)
+        claim.addQualifier(Properties.publication_date.new_claim(release.date))
+        claim.addSources(
+            create_sources(
+                url=release.page,
+                retrieved=project.retrieved,
+                title="Release %s" % release.version,
+                date=release.date,
             )
-
-            item.get(force=True)
-
-            claim, created = get_or_create_claim(
-                item, Properties.software_version, release.version, edit_group_hash
-            )
-            assert not created
-            set_claim_rank(claim, latest_version, release, edit_group_hash)
+        )
+        if latest_version and release.version == latest_version:
+            logger.info("Setting preferred rank for {}".format(claim.getTarget()))
+            claim.setRank("preferred")
+        Settings.bot.user_add_claim_unless_exists(
+            item,
+            claim,
+            # add when claim with same property, but not same target exists
+            exists_arg="p",
+            summary=Settings.edit_summary,
+        )
 
 
 def configure_logging(quiet: bool, http_debug: bool):
@@ -780,8 +695,6 @@ def main():
     args = parser.parse_args()
 
     configure_logging(args.quiet, args.debug_http)
-    # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
-    edit_group_hash = "{:x}".format(random.randrange(0, 2 ** 48))
 
     if args.github_oauth_token:
         github_oath_token = args.github_oauth_token
@@ -817,7 +730,7 @@ def main():
 
         if Settings.do_update_wikidata:
             try:
-                update_wikidata(properties, edit_group_hash)
+                update_wikidata(properties)
             except Exception as e:
                 logger.error("Failed to update {}: {}".format(properties.project, e))
                 raise e
