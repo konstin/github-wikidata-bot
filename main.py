@@ -268,6 +268,7 @@ def query_projects(
     for project in response:
         if (
             project_filter
+            and project_filter.lower() not in project["project"].lower()
             and project_filter.lower() not in project["projectLabel"].lower()
         ):
             continue
