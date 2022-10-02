@@ -261,23 +261,11 @@ def query_projects(
     """
     wikidata_sparql = sparql.SparqlQuery()
     sparql_free_software_items = "".join(open(Settings.sparql_file).readlines())
-    response = wikidata_sparql.query(sparql_free_software_items)
+    response = wikidata_sparql.select(sparql_free_software_items)
 
     projects = []
-    logger.info(
-        "{} projects were found by the sparql query".format(
-            len(response["results"]["bindings"])
-        )
-    )
-    for project in response["results"]["bindings"]:
-        # Remove bloating type information
-
-        project = {
-            "projectLabel": project["projectLabel"]["value"],
-            "project": project["project"]["value"],
-            "repo": project["repo"]["value"],
-        }
-
+    logger.info("{} projects were found by the sparql query".format(len(response)))
+    for project in response:
         if (
             project_filter
             and project_filter.lower() not in project["projectLabel"].lower()
@@ -805,11 +793,8 @@ def main():
     )
 
     sparql_license_items = "".join(open(Settings.license_sparql_file).readlines())
-    response = sparql.SparqlQuery().query(sparql_license_items)
-    Settings.licenses = {
-        row["spdx"]["value"]: row["license"]["value"][31:]
-        for row in response["results"]["bindings"]
-    }
+    response = sparql.SparqlQuery().select(sparql_license_items)
+    Settings.licenses = {row["spdx"]: row["license"][31:] for row in response}
 
     Settings.blacklist = get_filter_list(Settings.blacklist_page)
     Settings.whitelist = get_filter_list(Settings.whitelist_page)
