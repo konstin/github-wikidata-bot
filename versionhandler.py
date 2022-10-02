@@ -44,7 +44,7 @@ def extract_version(
         string,
         flags=re.IGNORECASE,
     )
-    string = re.sub(r"^[vr](?<![0-9])", "", string, flags=re.IGNORECASE)
+    string = re.sub(r"^[vr]_?(?<![0-9])", "", string, flags=re.IGNORECASE)
     string = re.sub(
         r"(^|[._ -])(final|release)([._ -]|$)", "", string, flags=re.IGNORECASE
     )

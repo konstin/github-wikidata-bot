@@ -27,6 +27,7 @@ from versionhandler import extract_version
         ("REL-1.2", ("stable", "1.2")),
         ("vers1.2", ("stable", "1.2")),
         ("v.1.2", ("stable", "1.2")),
+        ("v_2.0.3", ("stable", "2.0.3")),
         ("3_0_5", ("stable", "3.0.5")),
         ("3-0-5", ("stable", "3.0.5")),
         ("v3.0.5.RELEASE", ("stable", "3.0.5")),
