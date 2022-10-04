@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import enum
-import json
+import logging
 import logging.config
 import re
 from distutils.version import LooseVersion
@@ -17,11 +17,7 @@ from pywikibot.data import sparql
 from github import Project, get_data_from_github
 from redirects import RedirectDict
 from settings import Settings
-from utils import (
-    parse_filter_list,
-    github_repo_to_api,
-    normalize_url,
-)
+from utils import github_repo_to_api, normalize_url
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +47,6 @@ class Properties(enum.Enum):
             return None
         all_claims: List[Claim] = item.claims.get(self.value, [])
         return next((c for c in all_claims if c.target_equals(target)), None)
-
-
-def get_filter_list(page_title: str) -> List[str]:
-    site = pywikibot.Site()
-    page = pywikibot.Page(site, page_title)
-    return parse_filter_list(page.text)
 
 
 def create_sources(
@@ -355,21 +345,9 @@ def main():
 
     configure_logging(args.quiet, args.debug_http)
 
-    if args.github_oauth_token:
-        github_oath_token = args.github_oauth_token
-    else:
-        with open("config.json") as config:
-            github_oath_token = json.load(config)["github-oauth-token"]
-    Settings.cached_session.headers.update(
-        {"Authorization": "token " + github_oath_token}
-    )
-
-    sparql_license_items = "".join(open(Settings.license_sparql_file).readlines())
-    response = sparql.SparqlQuery().select(sparql_license_items)
-    Settings.licenses = {row["spdx"]: row["license"][31:] for row in response}
-
-    Settings.blacklist = get_filter_list(Settings.blacklist_page)
-    Settings.whitelist = get_filter_list(Settings.whitelist_page)
+    Settings.init_github(args.github_oauth_token)
+    Settings.init_licenses()
+    Settings.init_filter_lists()
 
     logger.info("# Querying Projects")
     projects = query_projects(args.filter, args.ignore_blacklist)

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import json
 from random import sample
 from typing import Dict, Iterable
 
@@ -51,12 +50,5 @@ if __name__ == "__main__":
     parser.add_argument("--github-oauth-token")
     args = parser.parse_args()
 
-    if args.github_oauth_token:
-        github_oath_token = args.github_oauth_token
-    else:
-        with open("config.json") as config:
-            github_oath_token = json.load(config)["github-oauth-token"]
-    Settings.cached_session.headers.update(
-        {"Authorization": "token " + github_oath_token}
-    )
+    Settings.init_github(args.github_oauth_token)
     debug_version_handling(args.threshold, args.maxsize, args.no_sampling)
