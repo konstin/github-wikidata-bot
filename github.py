@@ -18,7 +18,7 @@ from utils import (
 )
 from versionhandler import extract_version
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("github-wikidata-bot")
 
 
 @dataclass

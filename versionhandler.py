@@ -2,7 +2,7 @@ import logging
 import re
 from typing import List, Optional, Tuple
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("github-wikidata-bot")
 
 
 def number_of_unique_values(values: List[str]) -> int:

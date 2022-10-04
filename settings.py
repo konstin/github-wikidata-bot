@@ -1,4 +1,6 @@
 import json
+import logging
+import logging.config
 import random
 import re
 from typing import List, Dict
@@ -44,6 +46,52 @@ class Settings:
     cached_session: requests.Session = CacheControl(
         requests.Session(), cache=FileCache("cache"), heuristic=ExpiresAfter(days=30)
     )
+
+    @staticmethod
+    def init_logging(quiet: bool, http_debug: bool) -> None:
+        """
+        In cron jobs you do not want logging to stdout / stderr,
+        therefore the quiet option allows disabling that.
+        """
+        if quiet:
+            handlers = ["all", "error"]
+        else:
+            handlers = ["console", "all", "error"]
+
+        conf = {
+            "version": 1,
+            "formatters": {"extended": {"format": "%(levelname)-8s %(message)s"}},
+            "handlers": {
+                "console": {"class": "logging.StreamHandler"},
+                "all": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "filename": "all.log",
+                    "formatter": "extended",
+                    "maxBytes": 8 * 1024 * 1024,
+                    "backupCount": 2,
+                },
+                "error": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "filename": "error.log",
+                    "formatter": "extended",
+                    "level": "WARN",
+                    "maxBytes": 8 * 1024 * 1024,
+                    "backupCount": 2,
+                },
+            },
+            "loggers": {"github-wikidata-bot": {"handlers": handlers, "level": "INFO"}},
+        }
+
+        logging.config.dictConfig(conf)
+
+        if http_debug:
+            from http.client import HTTPConnection
+
+            HTTPConnection.debuglevel = 1
+
+            requests_log = logging.getLogger("urllib3")
+            requests_log.setLevel(logging.DEBUG)
+            requests_log.propagate = True
 
     @classmethod
     def init_github(cls, github_oauth_token: str) -> None:

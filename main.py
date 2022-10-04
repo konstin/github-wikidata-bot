@@ -19,7 +19,7 @@ from redirects import RedirectDict
 from settings import Settings
 from utils import github_repo_to_api, normalize_url
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("github-wikidata-bot")
 
 
 class Properties(enum.Enum):
@@ -286,52 +286,6 @@ def update_wikidata(project: Project):
         )
 
 
-def configure_logging(quiet: bool, http_debug: bool):
-    """
-    In cron jobs you do not want logging to stdout / stderr,
-    therefore the quiet option allows disabling that.
-    """
-    if quiet:
-        handlers = ["all", "error"]
-    else:
-        handlers = ["console", "all", "error"]
-
-    conf = {
-        "version": 1,
-        "formatters": {"extended": {"format": "%(levelname)-8s %(message)s"}},
-        "handlers": {
-            "console": {"class": "logging.StreamHandler"},
-            "all": {
-                "class": "logging.handlers.RotatingFileHandler",
-                "filename": "all.log",
-                "formatter": "extended",
-                "maxBytes": 8 * 1024 * 1024,
-                "backupCount": 2,
-            },
-            "error": {
-                "class": "logging.handlers.RotatingFileHandler",
-                "filename": "error.log",
-                "formatter": "extended",
-                "level": "WARN",
-                "maxBytes": 8 * 1024 * 1024,
-                "backupCount": 2,
-            },
-        },
-        "loggers": {__name__: {"handlers": handlers, "level": "INFO"}},
-    }
-
-    logging.config.dictConfig(conf)
-
-    if http_debug:
-        from http.client import HTTPConnection
-
-        HTTPConnection.debuglevel = 1
-
-        requests_log = logging.getLogger("urllib3")
-        requests_log.setLevel(logging.DEBUG)
-        requests_log.propagate = True
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--filter", default="")
@@ -343,8 +297,7 @@ def main():
     )
     args = parser.parse_args()
 
-    configure_logging(args.quiet, args.debug_http)
-
+    Settings.init_logging(args.quiet, args.debug_http)
     Settings.init_github(args.github_oauth_token)
     Settings.init_licenses()
     Settings.init_filter_lists()
