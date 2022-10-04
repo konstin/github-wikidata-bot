@@ -734,7 +734,7 @@ def main():
                 update_wikidata(properties)
             except Exception as e:
                 logger.error("Failed to update {}: {}".format(properties.project, e))
-                raise e
+                continue
 
     logger.info("# Finished successfully")
 
