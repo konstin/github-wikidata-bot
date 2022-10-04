@@ -3,69 +3,27 @@ import argparse
 import enum
 import json
 import logging.config
-import os
-import random
 import re
-from dataclasses import dataclass
 from distutils.version import LooseVersion
-from json.decoder import JSONDecodeError
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote_plus
+from typing import Any, Dict, List, Optional
 
 import pywikibot
 import requests
-from cachecontrol import CacheControl
-from cachecontrol.caches import FileCache
-from cachecontrol.heuristics import ExpiresAfter
 
 from pywikibot import Claim, ItemPage, WbTime
-from pywikibot.bot import WikidataBot
 from pywikibot.data import sparql
-from requests import HTTPError, RequestException
 
+from github import Project, get_data_from_github
+from redirects import RedirectDict
+from settings import Settings
 from utils import (
     parse_filter_list,
     github_repo_to_api,
-    github_repo_to_api_releases,
-    github_repo_to_api_tags,
     normalize_url,
 )
-from versionhandler import extract_version
 
 logger = logging.getLogger(__name__)
-
-
-class Settings:
-    do_update_wikidata = True
-
-    # Read also tags if a project doesn't use github's releases
-    read_tags = True
-
-    normalize_repo_url = True
-
-    blacklist_page = "User:Github-wiki-bot/Exceptions"
-    whitelist_page = "User:Github-wiki-bot/Whitelist"
-    blacklist: List[str] = []
-    whitelist: List[str] = []
-    sparql_file = "free_software_items.rq"
-
-    license_sparql_file = "free_licenses.rq"
-    licenses: Dict[str, str] = {}
-
-    # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
-    edit_group_hash = "{:x}".format(random.randrange(0, 2 ** 48))
-    """https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots"""
-    edit_summary = f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
-
-    bot = WikidataBot(always=True)
-    # pywikibot doesn't cache the calendar model, so let's do this manually
-    calendar_model = bot.repo.calendarmodel()
-
-    repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
-
-    cached_session: requests.Session = CacheControl(
-        requests.Session(), cache=FileCache("cache"), heuristic=ExpiresAfter(days=30)
-    )
 
 
 class Properties(enum.Enum):
@@ -95,82 +53,10 @@ class Properties(enum.Enum):
         return next((c for c in all_claims if c.target_equals(target)), None)
 
 
-class RedirectDict:
-    _redirect_dict: Dict[str, str] = {}
-
-    @classmethod
-    def get_or_add(cls, start_url: str) -> Optional[str]:
-        if not cls._redirect_dict:
-            cls._load()
-        if start_url in cls._redirect_dict:
-            return cls._redirect_dict[start_url]
-        else:
-            try:
-                response = requests.head(start_url, allow_redirects=True, timeout=6.1)
-            except RequestException:
-                return None
-            end_url = response.url
-            cls._redirect_dict[start_url] = end_url
-            cls._save()
-            return end_url
-
-    @classmethod
-    def _load(cls):
-        if os.path.isfile("redirects.json"):
-            with open("redirects.json") as fp:
-                cls._redirect_dict = json.load(fp)
-        else:
-            cls._redirect_dict = dict()
-
-    @classmethod
-    def _save(cls):
-        with open("redirect.json", "w") as fp:
-            json.dump(cls._redirect_dict, fp)
-
-
-@dataclass
-class Release:
-    version: str
-    date: WbTime
-    page: str
-    release_type: str
-
-
-@dataclass
-class ReleaseTag:
-    version: str
-    page: str
-    release_type: str
-    tag_url: str
-    tag_type: str
-
-
-@dataclass
-class Project:
-    project: str
-    stable_release: List[Release]
-    website: Optional[str]
-    license: Optional[str]
-    repo: str
-    retrieved: WbTime
-
-
 def get_filter_list(page_title: str) -> List[str]:
     site = pywikibot.Site()
     page = pywikibot.Page(site, page_title)
     return parse_filter_list(page.text)
-
-
-def string_to_wddate(iso_timestamp: str) -> WbTime:
-    """
-    Create a wikidata compatible wikibase date from an ISO 8601 timestamp
-    """
-    date = WbTime.fromTimestr(iso_timestamp, calendarmodel=Settings.calendar_model)
-    date.hour = 0
-    date.minute = 0
-    date.second = 0
-    date.precision = WbTime.PRECISION["day"]
-    return date
 
 
 def create_sources(
@@ -192,19 +78,6 @@ def create_sources(
     if date:
         sources.append(Properties.publication_date.new_claim(date))
     return sources
-
-
-def get_json_cached(url: str) -> dict:
-    """
-    Get JSON from an API and cache the result
-    """
-    response = Settings.cached_session.get(url)
-    response.raise_for_status()
-    try:
-        return response.json()
-    except JSONDecodeError as e:
-        logger.error("JSONDecodeError for {}: {}".format(url, e))
-        return {}
 
 
 def query_projects(
@@ -246,221 +119,6 @@ def query_projects(
     logger.info("{} projects remained after filtering".format(len(projects)))
 
     return projects
-
-
-def get_all_pages(url: str) -> List[dict]:
-    """Gets all pages of the release/tag information"""
-    page_number = 1
-    results: List[dict] = []
-    while True:
-        page = get_json_cached(url + "?page=" + str(page_number))
-        if not page:
-            break
-        page_number += 1
-        results += page
-    return results
-
-
-def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
-    """
-    Heuristics to find the version number and according meta-data for a release
-    marked with github's release-feature
-    """
-    project_name = project_info["name"]
-    match_tag_name = extract_version(release.get("tag_name") or "", project_name)
-    match_name = extract_version(release.get("name") or "", project_name)
-    if (
-        match_tag_name is not None
-        and match_name is not None
-        and match_tag_name != match_name
-    ):
-        logger.warning(
-            "Conflicting versions {} and {} for {} and {} in {}".format(
-                match_tag_name,
-                match_name,
-                release["tag_name"],
-                release["name"],
-                project_name,
-            )
-        )
-        return None
-    elif match_tag_name is not None:
-        release_type, version = match_tag_name
-        original_version = release["tag_name"]
-    elif match_name is not None:
-        release_type, version = match_name
-        original_version = release["name"]
-    else:
-        return None
-
-    # Often prereleases aren't marked as such, so we need manually catch those cases
-    if not release["prerelease"] and release_type != "stable":
-        logger.info("Diverting release type: " + original_version)
-        release["prerelease"] = True
-    elif release["prerelease"] and release_type == "stable":
-        release_type = "unstable"
-
-    # Convert github's timestamps to wikidata dates
-    date = string_to_wddate(release["published_at"])
-
-    return Release(
-        version=version, date=date, page=release["html_url"], release_type=release_type
-    )
-
-
-def analyse_tag(
-    release: dict, project_info: dict, invalid_version_strings: List[str]
-) -> Optional[ReleaseTag]:
-    """
-    Heuristics to find the version number and according meta-data for a release
-    not marked with github's release-feature but tagged with git.
-
-    Compared to analyse_release this needs an extra API-call which makes this
-    function considerably slower.
-    """
-    project_name = project_info["name"]
-    tag_name = release.get("ref", "refs/tags/")[10:]
-    match_name = extract_version(tag_name, project_name)
-    if match_name is not None:
-        release_type, version = match_name
-    else:
-        invalid_version_strings.append(tag_name)
-        return None
-
-    tag_type = release["object"]["type"]
-    tag_url = release["object"]["url"]
-    html_url = project_info["html_url"] + "/releases/tag/" + quote_plus(tag_name)
-
-    return ReleaseTag(
-        version=version,
-        page=html_url,
-        release_type=release_type,
-        tag_type=tag_type,
-        tag_url=tag_url,
-    )
-
-
-def get_date_from_tag_url(release: ReleaseTag) -> Optional[Release]:
-    tag_details = get_json_cached(release.tag_url)
-    if release.tag_type == "tag":
-        # For some weird reason the api might not always have a date
-        if not tag_details["tagger"]["date"]:
-            logger.warning("No tag date for {}".format(release.tag_url))
-            return None
-        date = string_to_wddate(tag_details["tagger"]["date"])
-    elif release.tag_type == "commit":
-        if not tag_details["committer"]["date"]:
-            logger.warning("No tag date for {}".format(release.tag_url))
-            return None
-        date = string_to_wddate(tag_details["committer"]["date"])
-    else:
-        raise NotImplementedError(f"Unknown type of tag: {release.tag_type}")
-
-    return Release(
-        version=release.version,
-        release_type=release.release_type,
-        date=date,
-        page=release.page,
-    )
-
-
-def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
-    """
-    Retrieve the following data from github:
-     - website / homepage
-     - version number string and release date of all stable releases
-
-    Version marked with github's own release-function are received primarily.
-    Only if a project has none releases marked that way this function will fall
-    back to parsing the tags of the project.
-
-    All data is preprocessed, i.e. the version numbers are extracted and
-    unmarked prereleases are discovered
-
-    :param url: The url of the github repository
-    :param properties: The already gathered information
-    :return: dict of dicts
-    """
-    # "retrieved" does only accept dates without time, so create a timestamp with no date
-    iso_timestamp = pywikibot.Timestamp.utcnow().isoformat()
-    retrieved = string_to_wddate(iso_timestamp)
-
-    # General project information
-    project_info = get_json_cached(github_repo_to_api(url))
-
-    if project_info.get("homepage"):
-        website = project_info["homepage"]
-    else:
-        website = None
-
-    if project_info.get("license"):
-        spdx_id = project_info["license"]["spdx_id"]
-    else:
-        spdx_id = None
-
-    api_url = github_repo_to_api_releases(url)
-    q_value = properties["project"].replace("http://www.wikidata.org/entity/", "")
-    releases = get_all_pages(api_url)
-
-    invalid_releases = []
-    extracted: List[Optional[Release]] = []
-    for release in releases:
-        result = analyse_release(release, project_info)
-        if result:
-            extracted.append(result)
-        else:
-            invalid_releases.append((release["tag_name"], release["name"]))
-
-    if invalid_releases:
-        logger.warning(
-            f"{len(invalid_releases)} invalid releases: {invalid_releases[:10]}"
-        )
-
-    if Settings.read_tags and (len(extracted) == 0 or q_value in Settings.whitelist):
-        logger.info("Falling back to tags")
-        api_url = github_repo_to_api_tags(url)
-        try:
-            tags = get_json_cached(api_url)
-        except HTTPError as e:
-            # Github raises a 404 if there are no tags
-            if e.response.status_code == 404:
-                tags = {}
-            else:
-                raise e
-
-        invalid_version_strings: List[str] = []
-        extracted_tags = [
-            analyse_tag(release, project_info, invalid_version_strings)
-            for release in tags
-        ]
-        filtered = [v for v in extracted_tags if v is not None]
-        filtered.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
-        if len(filtered) > 300:
-            logger.warning(
-                "Limiting {} to 300 of {} tags for performance reasons.".format(
-                    q_value, len(filtered)
-                )
-            )
-            filtered = filtered[-300:]
-        extracted = list(map(get_date_from_tag_url, filtered))
-        if invalid_version_strings:
-            logger.warning(
-                f"Invalid version strings in tags of {q_value}: {invalid_version_strings}"
-            )
-
-    stable_release = []
-    for extract in extracted:
-        if extract and extract.release_type == "stable":
-            stable_release.append(extract)
-
-    return Project(
-        stable_release=stable_release,
-        website=website,
-        license=spdx_id,
-        retrieved=retrieved,
-        repo=properties["repo"],
-        project=properties["project"],
-    )
 
 
 def normalize_repo_url(

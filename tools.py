@@ -4,14 +4,9 @@ import json
 from random import sample
 from typing import Dict, Iterable
 
-from main import (
-    Settings,
-    analyse_release,
-    get_all_pages,
-    get_json_cached,
-    logger,
-    query_projects,
-)
+from main import logger, query_projects
+from settings import Settings
+from github import get_json_cached, get_all_pages, analyse_release
 from utils import github_repo_to_api, github_repo_to_api_releases
 
 
