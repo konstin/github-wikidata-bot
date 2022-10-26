@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 import argparse
-import json
 from random import sample
 from typing import Dict, Iterable
 
-from main import (
-    Settings,
-    analyse_release,
-    get_all_pages,
-    get_json_cached,
-    logger,
-    query_projects,
-)
-from utils import github_repo_to_api, github_repo_to_api_releases
+from github_wikidata_bot.main import logger, query_projects
+from github_wikidata_bot.settings import Settings
+from github_wikidata_bot.github import get_json_cached, get_all_pages, analyse_release
+from github_wikidata_bot.utils import github_repo_to_api, github_repo_to_api_releases
 
 
 def safe_sample(population: Iterable[Dict[str, str]], size: int):
@@ -56,12 +50,5 @@ if __name__ == "__main__":
     parser.add_argument("--github-oauth-token")
     args = parser.parse_args()
 
-    if args.github_oauth_token:
-        github_oath_token = args.github_oauth_token
-    else:
-        with open("config.json") as config:
-            github_oath_token = json.load(config)["github-oauth-token"]
-    Settings.cached_session.headers.update(
-        {"Authorization": "token " + github_oath_token}
-    )
+    Settings.init_github(args.github_oauth_token)
     debug_version_handling(args.threshold, args.maxsize, args.no_sampling)

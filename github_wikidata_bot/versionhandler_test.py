@@ -1,6 +1,6 @@
 import pytest
 
-from versionhandler import extract_version
+from .versionhandler import extract_version
 
 
 @pytest.mark.parametrize(
