@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import enum
 import logging
@@ -14,12 +13,12 @@ import requests
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
 
-from github import Project, get_data_from_github
-from redirects import RedirectDict
-from settings import Settings
-from utils import github_repo_to_api, normalize_url
+from .github import Project, get_data_from_github
+from .redirects import RedirectDict
+from .settings import Settings
+from .utils import github_repo_to_api, normalize_url
 
-logger = logging.getLogger("github-wikidata-bot")
+logger = logging.getLogger(__name__)
 
 
 class Properties(enum.Enum):
@@ -326,7 +325,3 @@ def main():
                 raise e
 
     logger.info("# Finished successfully")
-
-
-if __name__ == "__main__":
-    main()

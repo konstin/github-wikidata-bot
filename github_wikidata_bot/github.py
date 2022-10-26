@@ -10,15 +10,15 @@ import pywikibot
 from pywikibot import WbTime
 from requests import HTTPError
 
-from settings import Settings
-from utils import (
+from .settings import Settings
+from .utils import (
     github_repo_to_api,
     github_repo_to_api_releases,
     github_repo_to_api_tags,
 )
-from versionhandler import extract_version
+from .versionhandler import extract_version
 
-logger = logging.getLogger("github-wikidata-bot")
+logger = logging.getLogger(__name__)
 
 
 @dataclass

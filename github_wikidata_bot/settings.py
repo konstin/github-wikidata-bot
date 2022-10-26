@@ -12,7 +12,7 @@ from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import ExpiresAfter
 
-from utils import parse_filter_list
+from .utils import parse_filter_list
 
 
 class Settings:
@@ -79,7 +79,7 @@ class Settings:
                     "backupCount": 2,
                 },
             },
-            "loggers": {"github-wikidata-bot": {"handlers": handlers, "level": "INFO"}},
+            "loggers": {"github_wikidata_bot": {"handlers": handlers, "level": "INFO"}},
         }
 
         logging.config.dictConfig(conf)
