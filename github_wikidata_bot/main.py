@@ -31,7 +31,8 @@ class Properties(enum.Enum):
     official_website = "P856"
     source_code_repository = "P1324"
     title = "P1476"
-    protocol = "P2700"
+    vcs = "P8423"
+    web_interface_software = "P10627"
     license = "P275"
 
     def new_claim(self, value: Any) -> Claim:
@@ -151,18 +152,22 @@ def normalize_repo_url(
         )
         return
 
-    # Add git as protocol
+    # See https://www.wikidata.org/wiki/User_talk:Konstin#Github-wiki-bot_is_replacing_source_code_repository_qualifiers_with_obsolete_qualifier
+    # Add git as vcs and github as web ui
     git = ItemPage(Settings.bot.repo, "Q186055")
+    github = ItemPage(Settings.bot.repo, "Q364")
     # Editing is in this case actually remove the old value and adding the new one
     claim = Properties.source_code_repository.new_claim(url_normalized)
-    claim.addQualifier(Properties.protocol.new_claim(git))
+    claim.addQualifier(Properties.vcs.new_claim(git))
+    claim.addQualifier(Properties.web_interface_software.new_claim(github))
     claim.setSnakType("value")
     item.addClaim(claim, summary=Settings.edit_summary)
+
     item.removeClaims(urls[0], summary=Settings.edit_summary)
 
 
 def set_website(project: Project) -> Optional[Claim]:
-    """Add the website if does not already exists"""
+    """Add the website if does not already exist"""
     if not project.website or not project.website.startswith("http"):
         return
 
