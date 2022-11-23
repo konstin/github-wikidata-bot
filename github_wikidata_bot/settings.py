@@ -33,7 +33,7 @@ class Settings:
     licenses: Dict[str, str] = {}
 
     # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
-    edit_group_hash = "{:x}".format(random.randrange(0, 2 ** 48))
+    edit_group_hash = "{:x}".format(random.randrange(0, 2**48))
     """https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots"""
     edit_summary = f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
 
