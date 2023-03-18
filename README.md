@@ -17,7 +17,7 @@ It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki
 
 ## Setup and usage
 
-First install python >=3.6 and [poetry][poetry], then run `poetry install`.
+First install python >=3.8 and [poetry][poetry], then run `poetry install`.
 
 [Generate a personal access token on GitHub][github-token]. Create a config.json file with that token and your Wikidata username:
 

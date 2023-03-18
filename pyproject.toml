@@ -6,7 +6,7 @@ authors = ["konstin <konstin@mailbox.org>", "Michael Schönitzer <michael@schoen
 
 [tool.poetry.dependencies]
 python = "^3.8"
-pywikibot = "^7.7.1"
+pywikibot = "^8.0.1"
 mwparserfromhell = "^0.6.4"
 CacheControl = { version = "^0.12.5", extras = ["filecache"] }
 lockfile = "^0.12.2"
@@ -15,7 +15,7 @@ msgpack = "^1.0.2"  # Required for cachecontrol
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.2.0"
-black = "^22.10.0"
+black = "^23.1.0"
 
 [tool.black]
 target-version = ['py38']
