@@ -19,7 +19,7 @@ It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki
 
 First install python >=3.8 and [poetry][poetry], then run `poetry install`.
 
-[Generate a personal access token on GitHub][github-token]. Create a config.json file with that token and your Wikidata username:
+[Generate a personal access token on GitHub][github-token]. Create a `config.json` file with that token and your Wikidata username:
 
 ```json
 {
