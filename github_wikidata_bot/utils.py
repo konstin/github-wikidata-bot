@@ -45,6 +45,11 @@ def normalize_url(url: str) -> URL:
     url = URL(url).with_scheme("https").with_fragment(None)
     if url.path.endswith(".git"):
         url = url.with_path(url.path[:-4])
+    # remove a trailing slash
+    # ok: https://api.github.com/repos/simonmichael/hledger
+    # not found: https://api.github.com/repos/simonmichael/hledger/
+    # https://www.wikidata.org/wiki/User_talk:Konstin#How_to_run_/_how_often_is_it_run?
+    url = url.with_path(url.path.rstrip("/"))
     return url
 
 
