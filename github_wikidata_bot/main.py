@@ -1,22 +1,20 @@
 import argparse
 import enum
-import logging
 import logging.config
 import re
 from distutils.version import LooseVersion
 from typing import Any, Dict, List, Optional
-from typing import Any, Dict, List, Optional
 
 import pywikibot
 import requests
-
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
+from pywikibot.exceptions import APIError
 
 from .github import Project, get_data_from_github
 from .redirects import RedirectDict
 from .settings import Settings
-from .utils import github_repo_to_api, normalize_url
+from .utils import github_repo_to_api, normalize_url, is_edit_conflict
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +174,7 @@ def set_website(project: Project) -> Optional[Claim]:
 
 
 def set_license(project: Project) -> Optional[Claim]:
-    """Add the license if does not already exists"""
+    """Add the license if it does not already exist"""
     if not project.license or project.license not in Settings.licenses:
         return
 
@@ -185,8 +183,10 @@ def set_license(project: Project) -> Optional[Claim]:
     return Properties.license.new_claim(page)
 
 
+
+
 def update_wikidata(project: Project):
-    """Update wikidata entry with data from github"""
+    """Update wikidata entry with data from GitHub"""
     # Wikidata boilerplate
     q_value = project.project.replace("http://www.wikidata.org/entity/", "")
     item = ItemPage(Settings.bot.repo, title=q_value)
@@ -266,7 +266,16 @@ def update_wikidata(project: Project):
             and release.version != latest_version
         ):
             logger.info("Setting normal rank for {}".format(existing.getTarget()))
-            existing.changeRank("normal", summary=Settings.edit_summary)
+            try:
+                existing.changeRank("normal", summary=Settings.edit_summary)
+            except APIError as e:
+                if is_edit_conflict(e):
+                    logger.error(
+                        f"Edit conflict for setting the normal rank on {q_value}"
+                    )
+                    continue
+                else:
+                    raise
 
         claim = Properties.software_version.new_claim(release.version)
         claim.addQualifier(Properties.publication_date.new_claim(release.date))
