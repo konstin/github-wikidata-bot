@@ -80,7 +80,7 @@ def query_projects(
     response = wikidata_sparql.select(sparql_free_software_items)
 
     projects = []
-    logger.info("{} projects were found by the sparql query".format(len(response)))
+    logger.info(f"{len(response)} projects were found by the sparql query")
     for project in response:
         if (
             project_filter
@@ -96,15 +96,14 @@ def query_projects(
 
         if not Settings.repo_regex.match(project["repo"]):
             logger.info(
-                " - Removing {}: {} {}".format(
-                    project["projectLabel"], project["project"], project["repo"]
-                )
+                f" - Removing {project['projectLabel']}: "
+                f"{project['project']} {project['repo']}"
             )
             continue
 
         projects.append(project)
 
-    logger.info("{} projects remained after filtering".format(len(projects)))
+    logger.info(f"{len(projects)} projects remained after filtering")
 
     return projects
 
@@ -123,7 +122,7 @@ def normalize_repo_url(
     if url_raw == url_normalized:
         return
 
-    logger.info("Normalizing {} to {}".format(url_raw, url_normalized))
+    logger.info(f"Normalizing {url_raw} to {url_normalized}")
 
     source_p = Properties.source_code_repository.value
     urls = item.claims[source_p]
@@ -138,9 +137,7 @@ def normalize_repo_url(
             return
 
     if source_p in item.claims and len(urls) > 1:
-        logger.info(
-            "Multiple source code repositories for {} not supported".format(q_value)
-        )
+        logger.info(f"Multiple source code repositories for {q_value} not supported")
         return
 
     if urls[0].getTarget() != url_raw:
@@ -181,8 +178,6 @@ def set_license(project: Project) -> Optional[Claim]:
     project_license = Settings.licenses[project.license]
     page = pywikibot.ItemPage(Settings.bot.repo, project_license)
     return Properties.license.new_claim(page)
-
-
 
 
 def update_wikidata(project: Project):
@@ -228,9 +223,7 @@ def update_wikidata(project: Project):
             for release in stable_releases
             if versions.count(release.version) > 1
         ]
-        logger.warning(
-            "There are duplicate releases in {}: {}".format(q_value, duplicates)
-        )
+        logger.warning(f"There are duplicate releases in {q_value}: {duplicates}")
         return
 
     latest_version: Optional[str] = stable_releases[-1].version
@@ -241,9 +234,8 @@ def update_wikidata(project: Project):
     for i in existing_versions:
         if i.getRank() == "preferred" and i.getTarget() not in github_version_names:
             logger.warning(
-                "There's a preferred rank for {} for a version which is not in the github page: {}".format(
-                    q_value, i.getTarget()
-                )
+                f"There's a preferred rank for {q_value} for a version "
+                f"which is not in the github page: {i.getTarget()}"
             )
             latest_version = None
 
@@ -255,7 +247,7 @@ def update_wikidata(project: Project):
         )
         stable_releases = stable_releases[-100:]
     else:
-        logger.info("There are {} stable releases".format(len(stable_releases)))
+        logger.info(f"There are {len(stable_releases)} stable releases")
 
     for release in stable_releases:
         existing = Properties.software_version.get_claim(item, release.version)
@@ -265,7 +257,7 @@ def update_wikidata(project: Project):
             and latest_version
             and release.version != latest_version
         ):
-            logger.info("Setting normal rank for {}".format(existing.getTarget()))
+            logger.info(f"Setting normal rank for {existing.getTarget()}")
             try:
                 existing.changeRank("normal", summary=Settings.edit_summary)
             except APIError as e:
@@ -288,7 +280,7 @@ def update_wikidata(project: Project):
             )
         )
         if latest_version and release.version == latest_version:
-            logger.info("Setting preferred rank for {}".format(claim.getTarget()))
+            logger.info(f"Setting preferred rank for {claim.getTarget()}")
             claim.setRank("preferred")
         Settings.bot.user_add_claim_unless_exists(
             item,
@@ -317,7 +309,7 @@ def main():
 
     logger.info("# Querying Projects")
     projects = query_projects(args.filter, args.ignore_blacklist)
-    logger.info("{} projects were found".format(len(projects)))
+    logger.info(f"{len(projects)} projects were found")
 
     logger.info("# Processing projects")
     for project in projects:
@@ -335,7 +327,7 @@ def main():
             try:
                 update_wikidata(properties)
             except Exception as e:
-                logger.error("Failed to update {}: {}".format(properties.project, e))
+                logger.error(f"Failed to update {properties.project}: {e}")
                 raise e
 
     logger.info("# Finished successfully")

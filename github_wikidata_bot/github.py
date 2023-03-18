@@ -69,7 +69,7 @@ def get_json_cached(url: str) -> dict:
     try:
         return response.json()
     except JSONDecodeError as e:
-        logger.error("JSONDecodeError for {}: {}".format(url, e))
+        logger.error(f"JSONDecodeError for {url}: {e}")
         return {}
 
 
@@ -120,7 +120,7 @@ def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
 
     # Often prereleases aren't marked as such, so we need manually catch those cases
     if not release["prerelease"] and release_type != "stable":
-        logger.info("Diverting release type: " + original_version)
+        logger.info(f"Diverting release type: {original_version}")
         release["prerelease"] = True
     elif release["prerelease"] and release_type == "stable":
         release_type = "unstable"
@@ -170,12 +170,12 @@ def get_date_from_tag_url(release: ReleaseTag) -> Optional[Release]:
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
         if not tag_details["tagger"]["date"]:
-            logger.warning("No tag date for {}".format(release.tag_url))
+            logger.warning(f"No tag date for {release.tag_url}")
             return None
         date = string_to_wddate(tag_details["tagger"]["date"])
     elif release.tag_type == "commit":
         if not tag_details["committer"]["date"]:
-            logger.warning("No tag date for {}".format(release.tag_url))
+            logger.warning(f"No tag date for {release.tag_url}")
             return None
         date = string_to_wddate(tag_details["committer"]["date"])
     else:
@@ -206,20 +206,17 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     :param properties: The already gathered information
     :return: dict of dicts
     """
-    # "retrieved" does only accept dates without time, so create a timestamp with no date
+    # "retrieved" does only accept dates without time, so create a timestamp with no
+    # date
     iso_timestamp = pywikibot.Timestamp.utcnow().isoformat()
     retrieved = string_to_wddate(iso_timestamp)
 
     # General project information
     project_info = get_json_cached(github_repo_to_api(url))
 
-    if project_info.get("homepage"):
-        website = project_info["homepage"]
-    else:
-        website = None
-
-    if project_info.get("license"):
-        spdx_id = project_info["license"]["spdx_id"]
+    website = project_info.get("homepage")
+    if license := project_info.get("license"):
+        spdx_id = license["spdx_id"]
     else:
         spdx_id = None
 
@@ -262,15 +259,15 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
         filtered.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
         if len(filtered) > 300:
             logger.warning(
-                "Limiting {} to 300 of {} tags for performance reasons.".format(
-                    q_value, len(filtered)
-                )
+                f"Limiting {q_value} to 300 of {len(filtered)} tags "
+                f"for performance reasons."
             )
             filtered = filtered[-300:]
         extracted = list(map(get_date_from_tag_url, filtered))
         if invalid_version_strings:
             logger.warning(
-                f"Invalid version strings in tags of {q_value}: {invalid_version_strings}"
+                f"Invalid version strings in tags of {q_value}: "
+                f"{invalid_version_strings}"
             )
 
     stable_release = []

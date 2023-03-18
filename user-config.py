@@ -1,13 +1,13 @@
 import json
+from pathlib import Path
 
 family = "wikidata"
 mylang = "wikidata"  # Needed for editing of userpages
-with open("config.json") as config:
-    username = json.load(config)["username"]
-    # noinspection PyUnresolvedReferences
-    usernames["wikidata"]["wikidata"] = username
-    # noinspection PyUnresolvedReferences
-    usernames["wikipedia"]["en"] = username
+username = json.loads(Path("config.json").read_text())["username"]
+# noinspection PyUnresolvedReferences
+usernames["wikidata"]["wikidata"] = username  # noqa: F821
+# noinspection PyUnresolvedReferences
+usernames["wikipedia"]["en"] = username  # noqa: F821
 
 console_encoding = "utf-8"
 put_throttle = 1
@@ -16,7 +16,6 @@ minthrottle = 1
 # adapt to pywikibot's horrible configuration system
 del json
 del username
-del config
 
 # See https://github.com/konstin/github-wikidata-bot/issues/115#issuecomment-644403350
 # Maxlag. Higher values are more aggressive in seeking access to the wiki.

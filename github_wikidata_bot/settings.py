@@ -3,14 +3,15 @@ import logging
 import logging.config
 import random
 import re
+from pathlib import Path
 from typing import List, Dict
 
 import pywikibot
-from pywikibot.data import sparql
 import requests
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import ExpiresAfter
+from pywikibot.data import sparql
 
 from .utils import parse_filter_list
 
@@ -35,7 +36,10 @@ class Settings:
     # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
     edit_group_hash = "{:x}".format(random.randrange(0, 2**48))
     """https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots"""
-    edit_summary = f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
+    edit_summary = (
+        f"Update with GitHub data "
+        f"([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
+    )
 
     bot = pywikibot.WikidataBot(always=True)
     # pywikibot doesn't cache the calendar model, so let's do this manually
@@ -96,10 +100,11 @@ class Settings:
     @classmethod
     def init_github(cls, github_oauth_token: str) -> None:
         if not github_oauth_token:
-            with open("config.json") as config:
-                github_oath_token = json.load(config)["github-oauth-token"]
+            github_oauth_token = json.loads(Path("config.json").read_text())[
+                "github-oauth-token"
+            ]
         cls.cached_session.headers.update(
-            {"Authorization": "token " + github_oath_token}
+            {"Authorization": "token " + github_oauth_token}
         )
 
     @classmethod

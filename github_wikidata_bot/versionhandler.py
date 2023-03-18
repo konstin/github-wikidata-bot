@@ -69,7 +69,8 @@ def extract_version(
 
     # Detect version string
     gen = re.compile(
-        r"(\s|^)(\d{1,3}(\.\d{1,3})+[a-z]?([._ -]?(alpha|beta|pre|rc|b|stable|preview|dev)[._-]?\d*|-\d+)?)(\s|$)",
+        r"(\s|^)(\d{1,3}(\.\d{1,3})+[a-z]?"
+        r"([._ -]?(alpha|beta|pre|rc|b|stable|preview|dev)[._-]?\d*|-\d+)?)(\s|$)",
         re.IGNORECASE,
     )
     res = gen.findall(string)
@@ -78,7 +79,8 @@ def extract_version(
     if number_of_unique_values(res) == 1:
         extracted_version = res[0]
     else:
-        # If the string contains nothing but a version-number we are more gratefully with what we accept
+        # If the string contains nothing but a version-number we are more gratefully
+        # with what we accept
         full = re.compile(r"[1-9]\d{0,4}", re.IGNORECASE)
         if full.fullmatch(string):
             extracted_version = string
