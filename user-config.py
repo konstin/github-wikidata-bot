@@ -1,9 +1,15 @@
 import json
+import sys
 from pathlib import Path
 
 family = "wikidata"
 mylang = "wikidata"  # Needed for editing of userpages
-username = json.loads(Path("config.json").read_text())["username"]
+config_json = Path("config.json")
+if config_json.is_file():
+    username = json.loads(config_json.read_text())["username"]
+else:
+    # Mainly used for pytest
+    username = "unknown"
 # noinspection PyUnresolvedReferences
 usernames["wikidata"]["wikidata"] = username  # noqa: F821
 # noinspection PyUnresolvedReferences
@@ -14,6 +20,7 @@ put_throttle = 1
 minthrottle = 1
 
 # adapt to pywikibot's horrible configuration system
+del config_json
 del json
 del username
 
