@@ -6,17 +6,14 @@ logger = logging.getLogger(__name__)
 
 
 def number_of_unique_values(values: List[str]) -> int:
-    """
-    Count number of unique strings in list, ignoring the case
-    """
+    """Count number of unique strings in list, ignoring the case."""
     return len(set(map(lambda s: s.lower(), values)))
 
 
 def extract_version(
     string: str, name: Optional[str] = None
 ) -> Optional[Tuple[str, str]]:
-    """
-    Heuristic to extract a version-number from a string.
+    """Heuristic to extract a version-number from a string.
 
     See test file for supported formats. Returns None if no unambiguously
     version number could be found.
