@@ -24,6 +24,10 @@ pytest = "^7.2.0"
 [tool.poetry.group.dev.dependencies]
 ruff = "0.0.287"
 
+[tool.ruff]
+extend-select = ["B", "PT", "PTH", "TRY", "UP"]
+ignore = ["TRY400"]
+
 [build-system]
 requires = ["poetry~=1.0.0"]
 build-backend = "poetry.masonry.api"

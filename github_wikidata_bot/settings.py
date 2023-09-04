@@ -28,13 +28,13 @@ class Settings:
     whitelist_page = "User:Github-wiki-bot/Whitelist"
     blacklist: List[str] = []
     whitelist: List[str] = []
-    sparql_file = "free_software_items.rq"
+    sparql_file = Path("free_software_items.rq")
 
-    license_sparql_file = "free_licenses.rq"
+    license_sparql_file = Path("free_licenses.rq")
     licenses: Dict[str, str] = {}
 
     # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
-    edit_group_hash = "{:x}".format(random.randrange(0, 2**48))
+    edit_group_hash = f"{random.randrange(0, 2**48):x}"
     """https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots"""
     edit_summary = (
         f"Update with GitHub data "
@@ -109,8 +109,7 @@ class Settings:
 
     @classmethod
     def init_licenses(cls) -> None:
-        sparql_license_items = "".join(open(cls.license_sparql_file).readlines())
-        response = sparql.SparqlQuery().select(sparql_license_items)
+        response = sparql.SparqlQuery().select(cls.license_sparql_file.read_text())
         cls.licenses = {row["spdx"]: row["license"][31:] for row in response}
 
     @classmethod

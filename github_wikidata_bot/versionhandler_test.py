@@ -4,7 +4,7 @@ from .versionhandler import extract_version
 
 
 @pytest.mark.parametrize(
-    "version_str, result",
+    ("version_str", "result"),
     [
         # Stables
         ("0.23", ("stable", "0.23")),
@@ -64,7 +64,7 @@ def test_version_str(version_str, result):
 
 
 @pytest.mark.parametrize(
-    "version, result",
+    ("version", "result"),
     [
         (("program 1.2", "program"), ("stable", "1.2")),
         (("program-1.2", "program"), ("stable", "1.2")),

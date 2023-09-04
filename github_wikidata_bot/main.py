@@ -76,8 +76,7 @@ def query_projects(
     :return: the data splitted into projects with and without github
     """
     wikidata_sparql = sparql.SparqlQuery()
-    sparql_free_software_items = "".join(open(Settings.sparql_file).readlines())
-    response = wikidata_sparql.select(sparql_free_software_items)
+    response = wikidata_sparql.select(Settings.sparql_file.read_text())
 
     projects = []
     logger.info(f"{len(response)} projects were found by the sparql query")
@@ -192,16 +191,12 @@ def update_wikidata(project: Project):
     if Settings.normalize_repo_url:
         normalize_repo_url(item, url_normalized, url_raw, q_value)
 
-    for claim in (
-        set_website(project),
-        set_license(project),
-    ):
+    for claim in (set_website(project), set_license(project)):
         if not claim:
             continue
         claim.addSources(
             create_sources(
-                url=github_repo_to_api(url_normalized),
-                retrieved=project.retrieved,
+                url=github_repo_to_api(url_normalized), retrieved=project.retrieved
             )
         )
         Settings.bot.user_add_claim_unless_exists(
@@ -241,9 +236,7 @@ def update_wikidata(project: Project):
 
     if len(stable_releases) > 100:
         logger.warning(
-            "Limiting {} to 100 of {} stable releases".format(
-                q_value, len(stable_releases)
-            )
+            f"Limiting {q_value} to 100 of {len(stable_releases)} stable releases"
         )
         stable_releases = stable_releases[-100:]
     else:
@@ -275,7 +268,7 @@ def update_wikidata(project: Project):
             create_sources(
                 url=release.page,
                 retrieved=project.retrieved,
-                title="Release %s" % release.version,
+                title=f"Release {release.version}",
                 date=release.date,
             )
         )
@@ -313,7 +306,7 @@ def main():
 
     logger.info("# Processing projects")
     for project in projects:
-        logger.info("## " + project["projectLabel"] + ": " + project["project"])
+        logger.info(f"## {project['projectLabel']}: {project['project']}")
 
         try:
             properties = get_data_from_github(project["repo"], project)
@@ -328,6 +321,6 @@ def main():
                 update_wikidata(properties)
             except Exception as e:
                 logger.error(f"Failed to update {properties.project}: {e}")
-                raise e
+                raise
 
     logger.info("# Finished successfully")

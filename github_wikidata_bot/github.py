@@ -248,7 +248,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
             if e.response.status_code == 404:
                 tags = {}
             else:
-                raise e
+                raise
 
         invalid_version_strings: List[str] = []
         extracted_tags = [
