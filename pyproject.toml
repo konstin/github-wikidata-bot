@@ -1,4 +1,6 @@
 [project]
+name = "github-wikidata-bot"
+version = "0.4.0"
 requires-python = ">=3.8"
 
 [tool.poetry]
@@ -18,13 +20,9 @@ msgpack = "^1.0.2"  # Required for cachecontrol
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.2.0"
-black = "^23.1.0"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.0.257"
-
-[tool.black]
-target-version = ['py38']
+ruff = "0.0.287"
 
 [build-system]
 requires = ["poetry~=1.0.0"]
