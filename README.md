@@ -1,7 +1,6 @@
 ## GitHub to Wikidata bot
 
 ![Tests](https://github.com/konstin/github-wikidata-bot/workflows/Tests/badge.svg)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
 Update Wikidata entries using metadata from GitHub.
 
@@ -30,7 +29,7 @@ First install python >=3.8 and [poetry][poetry], then run `poetry install`.
 
 Then run `main.py` in a terminal and enter the password for your bot account.
 
-Run `pytest` and `black .` after making code changes.
+Run `pytest`, `ruff format .` and `ruff check .` after making code changes.
 
 ## Implementation notes
 
