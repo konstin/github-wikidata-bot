@@ -1,4 +1,4 @@
-## GitHub to Wikidata bot
+# GitHub to Wikidata bot
 
 ![Tests](https://github.com/konstin/github-wikidata-bot/workflows/Tests/badge.svg)
 
@@ -16,7 +16,7 @@ It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki
 
 ## Setup and usage
 
-First install python >=3.8 and [poetry][poetry], then run `poetry install`.
+First install python >=3.10 and [poetry][poetry], then run `poetry install`.
 
 [Generate a personal access token on GitHub][github-token]. Create a `config.json` file with that token and your Wikidata username:
 
