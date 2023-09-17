@@ -271,6 +271,8 @@ def update_wikidata(project: Project):
 
         claim = Properties.software_version.new_claim(release.version)
         claim.addQualifier(Properties.publication_date.new_claim(release.date))
+        stable_release = ItemPage(Settings.bot.repo, "Q2804309")
+        claim.addQualifier(Properties.version_type.new_claim(stable_release))
         claim.addSources(
             create_sources(
                 url=release.page,
