@@ -32,6 +32,7 @@ class Properties(enum.Enum):
     vcs = "P8423"
     web_interface_software = "P10627"
     license = "P275"
+    version_type = "P548"
 
     def new_claim(self, value: Any) -> Claim:
         """Builds a new claim for this property and the given target value."""
@@ -249,6 +250,12 @@ def update_wikidata(project: Project):
             and existing.getRank() == "preferred"
             and latest_version
             and release.version != latest_version
+            # Exclude long-term support releases
+            # https://www.wikidata.org/wiki/User_talk:Konstin#Github-wiki-bot_does_not_add_%22version_type%22_(P548)
+            and not any(
+                version_type.target.id == "Q15726348"
+                for version_type in existing.qualifiers.get(Properties.version_type, [])
+            )
         ):
             logger.info(f"Setting normal rank for {existing.getTarget()}")
             try:

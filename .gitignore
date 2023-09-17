@@ -7,6 +7,6 @@ cache/
 config.json
 error.log*
 *.lwp
-redirect.json
+redirects.json
 src/
 throttle.ctrl
