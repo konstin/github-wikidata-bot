@@ -4,6 +4,7 @@ import logging.config
 import random
 import re
 from pathlib import Path
+import sys
 from typing import List, Dict
 
 import pywikibot
@@ -100,9 +101,13 @@ class Settings:
     @classmethod
     def init_github(cls, github_oauth_token: str) -> None:
         if not github_oauth_token:
-            github_oauth_token = json.loads(Path("config.json").read_text())[
-                "github-oauth-token"
-            ]
+            try:
+                github_oauth_token = json.loads(Path("config.json").read_text())[
+                    "github-oauth-token"
+                ]
+            except FileNotFoundError:
+                print("Please create a config.json", file=sys.stderr)
+                sys.exit(1)
         cls.cached_session.headers.update(
             {"Authorization": "token " + github_oauth_token}
         )
