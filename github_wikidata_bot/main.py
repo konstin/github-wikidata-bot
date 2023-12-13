@@ -243,6 +243,7 @@ def update_wikidata(project: Project):
     else:
         logger.info(f"There are {len(stable_releases)} stable releases")
 
+    avoid_changing_preferred = False
     for release in stable_releases:
         existing = Properties.software_version.get_claim(item, release.version)
         if (
@@ -265,6 +266,8 @@ def update_wikidata(project: Project):
                     logger.error(
                         f"Edit conflict for setting the normal rank on {q_value}"
                     )
+                    # Try avoiding https://www.wikidata.org/wiki/User_talk:Konstin#Software_version
+                    avoid_changing_preferred = True
                     continue
                 else:
                     raise
@@ -281,7 +284,7 @@ def update_wikidata(project: Project):
                 date=release.date,
             )
         )
-        if latest_version and release.version == latest_version:
+        if latest_version and release.version == latest_version and not avoid_changing_preferred:
             logger.info(f"Setting preferred rank for {claim.getTarget()}")
             claim.setRank("preferred")
         Settings.bot.user_add_claim_unless_exists(
