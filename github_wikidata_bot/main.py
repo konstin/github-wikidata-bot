@@ -284,7 +284,11 @@ def update_wikidata(project: Project):
                 date=release.date,
             )
         )
-        if latest_version and release.version == latest_version and not avoid_changing_preferred:
+        if (
+            latest_version
+            and release.version == latest_version
+            and not avoid_changing_preferred
+        ):
             logger.info(f"Setting preferred rank for {claim.getTarget()}")
             claim.setRank("preferred")
         Settings.bot.user_add_claim_unless_exists(
