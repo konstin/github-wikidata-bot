@@ -72,7 +72,7 @@ class Settings:
                     "class": "logging.handlers.RotatingFileHandler",
                     "filename": "all.log",
                     "formatter": "extended",
-                    "maxBytes": 8 * 1024 * 1024,
+                    "maxBytes": 32 * 1024 * 1024,
                     "backupCount": 2,
                 },
                 "error": {
@@ -80,7 +80,7 @@ class Settings:
                     "filename": "error.log",
                     "formatter": "extended",
                     "level": "WARN",
-                    "maxBytes": 8 * 1024 * 1024,
+                    "maxBytes": 32 * 1024 * 1024,
                     "backupCount": 2,
                 },
             },
