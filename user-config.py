@@ -5,12 +5,16 @@ family = "wikidata"
 mylang = "wikidata"  # Needed for editing of userpages
 config_json = Path("config.json")
 if config_json.is_file():
-    username = json.loads(config_json.read_text())["username"]
+    config_json = json.loads(config_json.read_text())
+    username = config_json["username"]
+    test_username = config_json.get("test-username")
 else:
     # Mainly used for pytest
     username = "unknown"
+    test_username = None
 # noinspection PyUnresolvedReferences
 usernames["wikidata"]["wikidata"] = username  # noqa: F821
+usernames["wikidata"]["test"] = test_username  # noqa: F821
 # noinspection PyUnresolvedReferences
 usernames["wikipedia"]["en"] = username  # noqa: F821
 
@@ -22,6 +26,7 @@ minthrottle = 1
 del config_json
 del json
 del username
+del test_username
 
 # See https://github.com/konstin/github-wikidata-bot/issues/115#issuecomment-644403350
 # Maxlag. Higher values are more aggressive in seeking access to the wiki.
