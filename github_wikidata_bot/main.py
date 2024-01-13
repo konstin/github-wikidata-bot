@@ -140,7 +140,8 @@ def normalize_repo_url(
         logger.info(f"Multiple source code repositories for {q_value} not supported")
         return
 
-    if urls[0].getTarget() != url_raw:
+    url_claim = urls[0]
+    if url_claim.getTarget() != url_raw:
         logger.error(
             f"The url on the object ({urls[0].getTarget()}) doesn't match "
             f"the url from the sparql query ({url_raw}) for {q_value}"
@@ -149,16 +150,13 @@ def normalize_repo_url(
 
     # See https://www.wikidata.org/wiki/User_talk:Konstin#Github-wiki-bot_is_replacing_source_code_repository_qualifiers_with_obsolete_qualifier
     # Add git as vcs and github as web ui
-    git = ItemPage(Settings.bot.repo, "Q186055")
-    github = ItemPage(Settings.bot.repo, "Q364")
-    # Editing is in this case actually remove the old value and adding the new one
-    claim = Properties.source_code_repository.new_claim(url_normalized)
-    claim.addQualifier(Properties.vcs.new_claim(git))
-    claim.addQualifier(Properties.web_interface_software.new_claim(github))
-    claim.setSnakType("value")
-    item.addClaim(claim, summary=Settings.edit_summary)
-
-    item.removeClaims(urls[0], summary=Settings.edit_summary)
+    url_claim.changeTarget(url_normalized)
+    if Properties.vcs.value not in url_claim.qualifiers:
+        git = ItemPage(Settings.bot.repo, "Q186055")
+        url_claim.addQualifier(Properties.vcs.new_claim(git))
+    if Properties.web_interface_software.value not in url_claim.qualifiers:
+        github = ItemPage(Settings.bot.repo, "Q364")
+        url_claim.addQualifier(Properties.web_interface_software.new_claim(github))
 
 
 def set_website(project: Project) -> Optional[Claim]:
@@ -187,10 +185,12 @@ def update_wikidata(project: Project):
     item = ItemPage(Settings.bot.repo, title=q_value)
     item.get()
 
-    url_raw = project.repo
-    url_normalized = str(normalize_url(url_raw))
-    if Settings.normalize_repo_url:
-        normalize_repo_url(item, url_normalized, url_raw, q_value)
+    urls = item.claims[Properties.source_code_repository.value]
+    if len(urls) == 1:
+        url_raw = urls[0].target
+        url_normalized = str(normalize_url(url_raw))
+        if Settings.normalize_repo_url:
+            normalize_repo_url(item, url_normalized, url_raw, q_value)
 
     for claim in (set_website(project), set_license(project)):
         if not claim:
