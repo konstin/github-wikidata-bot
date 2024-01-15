@@ -191,6 +191,9 @@ def update_wikidata(project: Project):
         url_normalized = str(normalize_url(url_raw))
         if Settings.normalize_repo_url:
             normalize_repo_url(item, url_normalized, url_raw, q_value)
+    else:
+        url_raw = project.repo
+        url_normalized = str(normalize_url(url_raw))
 
     for claim in (set_website(project), set_license(project)):
         if not claim:
