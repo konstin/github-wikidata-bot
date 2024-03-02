@@ -287,20 +287,29 @@ def update_wikidata(project: Project):
                 date=release.date,
             )
         )
-        if (
+
+        set_preferred_rank = (
             latest_version
             and release.version == latest_version
             and not avoid_changing_preferred
-        ):
-            logger.info(f"Setting preferred rank for {claim.getTarget()}")
+        )
+
+        if set_preferred_rank:
+            if existing.rank != "preferred":
+                logger.info(f"Setting preferred rank for {claim.getTarget()}")
             claim.setRank("preferred")
-        Settings.bot.user_add_claim_unless_exists(
+        added = Settings.bot.user_add_claim_unless_exists(
             item,
             claim,
             # add when claim with same property, but not same target exists
             exists_arg="p",
             summary=Settings.edit_summary,
         )
+        if not added and set_preferred_rank and existing.rank != "preferred":
+            logger.info(
+                f"Claim exists, changing to preferred rank for {claim.getTarget()}"
+            )
+            existing.changeRank("preferred", summary=Settings.edit_summary)
 
 
 def main():
