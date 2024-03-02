@@ -63,6 +63,9 @@ class Settings:
         else:
             handlers = ["console", "all", "error"]
 
+        log_dir = Path("log")
+        log_dir.mkdir(exist_ok=True)
+
         conf = {
             "version": 1,
             "formatters": {"extended": {"format": "%(levelname)-8s %(message)s"}},
@@ -70,14 +73,14 @@ class Settings:
                 "console": {"class": "logging.StreamHandler"},
                 "all": {
                     "class": "logging.handlers.RotatingFileHandler",
-                    "filename": "all.log",
+                    "filename": str(log_dir.joinpath("all.log")),
                     "formatter": "extended",
                     "maxBytes": 32 * 1024 * 1024,
                     "backupCount": 2,
                 },
                 "error": {
                     "class": "logging.handlers.RotatingFileHandler",
-                    "filename": "error.log",
+                    "filename": str(log_dir.joinpath("error.log")),
                     "formatter": "extended",
                     "level": "WARN",
                     "maxBytes": 32 * 1024 * 1024,

@@ -74,7 +74,7 @@ def query_projects(
 ) -> List[Dict[str, str]]:
     """
     Queries for all software projects and returns them as an array of simplified dicts
-    :return: the data splitted into projects with and without github
+    :return: the data split into projects with and without github
     """
     wikidata_sparql = sparql.SparqlQuery()
     response = wikidata_sparql.select(Settings.sparql_file.read_text())

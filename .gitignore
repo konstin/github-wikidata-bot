@@ -1,12 +1,11 @@
+*.lwp
 .venv*
 __pycache__/
-all.log*
 apicache-py3
 apicache/
 cache/
 config.json
-error.log*
-*.lwp
+log/
 redirects.json
 src/
 throttle.ctrl
