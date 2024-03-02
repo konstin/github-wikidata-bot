@@ -3,7 +3,7 @@ import enum
 import logging.config
 import re
 from distutils.version import LooseVersion
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pywikibot
 import requests
@@ -40,24 +40,24 @@ class Properties(enum.Enum):
         claim.setTarget(value)
         return claim
 
-    def get_claim(self, item: ItemPage, target: Any) -> Optional[Claim]:
+    def get_claim(self, item: ItemPage, target: Any) -> Claim | None:
         """Returns an existing claim for this property and the given target value."""
         if self.value not in item.claims:
             return None
-        all_claims: List[Claim] = item.claims.get(self.value, [])
+        all_claims: list[Claim] = item.claims.get(self.value, [])
         return next((c for c in all_claims if c.target_equals(target)), None)
 
 
 def create_sources(
     url: str,
     retrieved: WbTime,
-    title: Optional[str] = None,
-    date: Optional[WbTime] = None,
-) -> List[Claim]:
+    title: str | None = None,
+    date: WbTime | None = None,
+) -> list[Claim]:
     """
     Gets or creates a `source` under the property `claim` to `url`
     """
-    sources: List[Claim] = [
+    sources: list[Claim] = [
         Properties.reference_url.new_claim(url),
         Properties.retrieved.new_claim(retrieved),
     ]
@@ -70,8 +70,8 @@ def create_sources(
 
 
 def query_projects(
-    project_filter: Optional[str] = None, ignore_blacklist: bool = False
-) -> List[Dict[str, str]]:
+    project_filter: str | None = None, ignore_blacklist: bool = False
+) -> list[dict[str, str]]:
     """
     Queries for all software projects and returns them as an array of simplified dicts
     :return: the data split into projects with and without github
@@ -159,7 +159,7 @@ def normalize_repo_url(
         url_claim.addQualifier(Properties.web_interface_software.new_claim(github))
 
 
-def set_website(project: Project) -> Optional[Claim]:
+def set_website(project: Project) -> Claim | None:
     """Add the website if does not already exist"""
     if not project.website or not project.website.startswith("http"):
         return
@@ -168,7 +168,7 @@ def set_website(project: Project) -> Optional[Claim]:
     return Properties.official_website.new_claim(url)
 
 
-def set_license(project: Project) -> Optional[Claim]:
+def set_license(project: Project) -> Claim | None:
     """Add the license if it does not already exist"""
     if not project.license or project.license not in Settings.licenses:
         return
@@ -225,7 +225,7 @@ def update_wikidata(project: Project):
         logger.warning(f"There are duplicate releases in {q_value}: {duplicates}")
         return
 
-    latest_version: Optional[str] = stable_releases[-1].version
+    latest_version: str | None = stable_releases[-1].version
 
     existing_versions = item.claims.get(Properties.software_version, [])
     github_version_names = [i.version for i in stable_releases]

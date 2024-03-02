@@ -3,13 +3,12 @@ Extracted from main to avoid importing pywikibot for the tests
 """
 
 import re
-from typing import List
 
 from pywikibot.exceptions import APIError
 from yarl import URL
 
 
-def parse_filter_list(text: str) -> List[str]:
+def parse_filter_list(text: str) -> list[str]:
     r = re.compile(r"(Q\d+)\s*(#.*)?")
     filterlist = []
     for line in text.split():

@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Dict, Final, Optional
+from typing import Final
 
 import requests
 from requests import RequestException
@@ -10,10 +10,10 @@ class RedirectDict:
     """Caches HTTP redirects on disk."""
 
     _redirects_json: Final[Path] = Path("redirects.json")
-    _redirects: Dict[str, str] = {}
+    _redirects: dict[str, str] = {}
 
     @classmethod
-    def get_or_add(cls, start_url: str) -> Optional[str]:
+    def get_or_add(cls, start_url: str) -> str | None:
         if not cls._redirects:
             cls._load()
         if url := cls._redirects.get(start_url):

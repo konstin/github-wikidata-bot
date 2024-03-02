@@ -5,7 +5,6 @@ import random
 import re
 from pathlib import Path
 import sys
-from typing import List, Dict
 
 import pywikibot
 import requests
@@ -27,12 +26,12 @@ class Settings:
 
     blacklist_page = "User:Github-wiki-bot/Exceptions"
     whitelist_page = "User:Github-wiki-bot/Whitelist"
-    blacklist: List[str] = []
-    whitelist: List[str] = []
+    blacklist: list[str] = []
+    whitelist: list[str] = []
     sparql_file = Path("free_software_items.rq")
 
     license_sparql_file = Path("free_licenses.rq")
-    licenses: Dict[str, str] = {}
+    licenses: dict[str, str] = {}
 
     # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
     edit_group_hash = f"{random.randrange(0, 2**48):x}"
@@ -126,7 +125,7 @@ class Settings:
         cls.whitelist = cls.__get_filter_list(cls.whitelist_page)
 
     @staticmethod
-    def __get_filter_list(page_title: str) -> List[str]:
+    def __get_filter_list(page_title: str) -> list[str]:
         site = pywikibot.Site()
         page = pywikibot.Page(site, page_title)
         return parse_filter_list(page.text)

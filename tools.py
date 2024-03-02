@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from random import sample
-from typing import Dict, Sequence
+from collections.abc import Sequence
 
 from github_wikidata_bot.github import get_json_cached, get_all_pages, analyse_release
 from github_wikidata_bot.main import logger, query_projects
@@ -9,7 +9,7 @@ from github_wikidata_bot.settings import Settings
 from github_wikidata_bot.utils import github_repo_to_api, github_repo_to_api_releases
 
 
-def safe_sample(population: Sequence[Dict[str, str]], size: int):
+def safe_sample(population: Sequence[dict[str, str]], size: int):
     try:
         return sample(population, size)
     except ValueError:

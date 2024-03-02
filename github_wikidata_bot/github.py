@@ -3,7 +3,6 @@ import re
 from dataclasses import dataclass
 from distutils.version import LooseVersion
 from json import JSONDecodeError
-from typing import List, Optional, Dict
 from urllib.parse import quote_plus
 
 import pywikibot
@@ -41,9 +40,9 @@ class ReleaseTag:
 @dataclass
 class Project:
     project: str
-    stable_release: List[Release]
-    website: Optional[str]
-    license: Optional[str]
+    stable_release: list[Release]
+    website: str | None
+    license: str | None
     repo: str
     retrieved: WbTime
 
@@ -73,10 +72,10 @@ def get_json_cached(url: str) -> dict:
         return {}
 
 
-def get_all_pages(url: str) -> List[dict]:
+def get_all_pages(url: str) -> list[dict]:
     """Gets all pages of the release/tag information"""
     page_number = 1
-    results: List[dict] = []
+    results: list[dict] = []
     while True:
         page = get_json_cached(url + "?page=" + str(page_number))
         if not page:
@@ -86,7 +85,7 @@ def get_all_pages(url: str) -> List[dict]:
     return results
 
 
-def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
+def analyse_release(release: dict, project_info: dict) -> Release | None:
     """
     Heuristics to find the version number and according meta-data for a release
     marked with github's release-feature
@@ -134,8 +133,8 @@ def analyse_release(release: dict, project_info: dict) -> Optional[Release]:
 
 
 def analyse_tag(
-    release: dict, project_info: dict, invalid_version_strings: List[str]
-) -> Optional[ReleaseTag]:
+    release: dict, project_info: dict, invalid_version_strings: list[str]
+) -> ReleaseTag | None:
     """
     Heuristics to find the version number and according meta-data for a release
     not marked with github's release-feature but tagged with git.
@@ -165,7 +164,7 @@ def analyse_tag(
     )
 
 
-def get_date_from_tag_url(release: ReleaseTag) -> Optional[Release]:
+def get_date_from_tag_url(release: ReleaseTag) -> Release | None:
     tag_details = get_json_cached(release.tag_url)
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
@@ -189,7 +188,7 @@ def get_date_from_tag_url(release: ReleaseTag) -> Optional[Release]:
     )
 
 
-def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
+def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
     """
     Retrieve the following data from github:
      - website / homepage
@@ -225,7 +224,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
     releases = get_all_pages(api_url)
 
     invalid_releases = []
-    extracted: List[Optional[Release]] = []
+    extracted: list[Release | None] = []
     for release in releases:
         result = analyse_release(release, project_info)
         if result:
@@ -250,7 +249,7 @@ def get_data_from_github(url: str, properties: Dict[str, str]) -> Project:
             else:
                 raise
 
-        invalid_version_strings: List[str] = []
+        invalid_version_strings: list[str] = []
         extracted_tags = [
             analyse_tag(release, project_info, invalid_version_strings)
             for release in tags
