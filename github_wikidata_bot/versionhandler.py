@@ -9,9 +9,7 @@ def number_of_unique_values(values: list[str]) -> int:
     return len(set(map(lambda s: s.lower(), values)))
 
 
-def extract_version(
-    string: str, name: str | None = None
-) -> tuple[str, str] | None:
+def extract_version(string: str, name: str | None = None) -> tuple[str, str] | None:
     """Heuristic to extract a version-number from a string.
 
     See test file for supported formats. Returns None if no unambiguously
