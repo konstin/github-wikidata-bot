@@ -295,7 +295,7 @@ def update_wikidata(project: Project):
         )
 
         if set_preferred_rank:
-            if existing.rank != "preferred":
+            if existing and existing.rank != "preferred":
                 logger.info(f"Setting preferred rank for {claim.getTarget()}")
             claim.setRank("preferred")
         added = Settings.bot.user_add_claim_unless_exists(
