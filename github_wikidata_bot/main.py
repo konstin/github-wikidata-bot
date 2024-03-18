@@ -227,11 +227,18 @@ def update_wikidata(project: Project):
 
     latest_version: str | None = stable_releases[-1].version
 
-    existing_versions = item.claims.get(Properties.software_version, [])
+    existing_versions = item.claims.get(Properties.software_version.value, [])
     github_version_names = [i.version for i in stable_releases]
+    existing_preferred_ranks = [
+        i for i in existing_versions if i.getRank() == "preferred"
+    ]
+    logger.info(
+        f"Latest version github {latest_version}, "
+        f"existing preferred ranks: {' '.join(i.getTarget() for i in existing_preferred_ranks)}"
+    )
 
-    for i in existing_versions:
-        if i.getRank() == "preferred" and i.getTarget() not in github_version_names:
+    for i in existing_preferred_ranks:
+        if i.getTarget() not in github_version_names:
             logger.warning(
                 f"There's a preferred rank for {q_value} for a version "
                 f"which is not in the github page: {i.getTarget()}"
