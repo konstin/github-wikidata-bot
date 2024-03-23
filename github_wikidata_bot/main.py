@@ -218,11 +218,13 @@ def update_wikidata(project: Project):
     versions = [i.version for i in stable_releases]
     if len(versions) != len(set(versions)):
         duplicates = [
-            release
+            f"{release.version} ({release.page})"
             for release in stable_releases
             if versions.count(release.version) > 1
         ]
-        logger.warning(f"There are duplicate releases in {q_value}: {duplicates}")
+        logger.info(
+            f"There are duplicate releases in {q_value}: {', '.join(duplicates)}"
+        )
         return
 
     latest_version: str | None = stable_releases[-1].version
@@ -246,7 +248,7 @@ def update_wikidata(project: Project):
             latest_version = None
 
     if len(stable_releases) > 100:
-        logger.warning(
+        logger.info(
             f"Limiting {q_value} to 100 of {len(stable_releases)} stable releases"
         )
         stable_releases = stable_releases[-100:]

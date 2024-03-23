@@ -1,8 +1,10 @@
 import logging
 import re
+import textwrap
 from dataclasses import dataclass
 from distutils.version import LooseVersion
 from json import JSONDecodeError
+from typing import Any
 from urllib.parse import quote_plus
 
 import pywikibot
@@ -85,7 +87,9 @@ def get_all_pages(url: str) -> list[dict]:
     return results
 
 
-def analyse_release(release: dict, project_info: dict) -> Release | None:
+def analyse_release(
+    release: dict[str, Any], project_info: dict[str, Any]
+) -> Release | None:
     """
     Heuristics to find the version number and according meta-data for a release
     marked with github's release-feature
@@ -98,7 +102,7 @@ def analyse_release(release: dict, project_info: dict) -> Release | None:
         and match_name is not None
         and match_tag_name != match_name
     ):
-        logger.warning(
+        logger.info(
             "Conflicting versions {} and {} for {} and {} in {}".format(
                 match_tag_name,
                 match_name,
@@ -169,12 +173,12 @@ def get_date_from_tag_url(release: ReleaseTag) -> Release | None:
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
         if not tag_details["tagger"]["date"]:
-            logger.warning(f"No tag date for {release.tag_url}")
+            logger.info(f"No tag date for {release.tag_url}")
             return None
         date = string_to_wddate(tag_details["tagger"]["date"])
     elif release.tag_type == "commit":
         if not tag_details["committer"]["date"]:
-            logger.warning(f"No tag date for {release.tag_url}")
+            logger.info(f"No tag date for {release.tag_url}")
             return None
         date = string_to_wddate(tag_details["committer"]["date"])
     else:
@@ -233,9 +237,9 @@ def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
             invalid_releases.append((release["tag_name"], release["name"]))
 
     if invalid_releases:
-        logger.warning(
-            f"{len(invalid_releases)} invalid releases: {invalid_releases[:10]}"
-        )
+        message = ", ".join(str(i) for i in invalid_releases)
+        message = textwrap.shorten(message, width=200, placeholder="...")
+        logger.info(f"{len(invalid_releases)} invalid releases: {message}")
 
     if Settings.read_tags and (len(extracted) == 0 or q_value in Settings.whitelist):
         logger.info("Falling back to tags")
@@ -257,17 +261,16 @@ def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
         filtered = [v for v in extracted_tags if v is not None]
         filtered.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
         if len(filtered) > 300:
-            logger.warning(
+            logger.info(
                 f"Limiting {q_value} to 300 of {len(filtered)} tags "
                 f"for performance reasons."
             )
             filtered = filtered[-300:]
         extracted = list(map(get_date_from_tag_url, filtered))
         if invalid_version_strings:
-            logger.warning(
-                f"Invalid version strings in tags of {q_value}: "
-                f"{invalid_version_strings}"
-            )
+            message = ", ".join(invalid_version_strings)
+            message = textwrap.shorten(message, width=200, placeholder="...")
+            logger.info(f"Invalid version strings in tags of {q_value}: {message}")
 
     stable_release = []
     for extract in extracted:
