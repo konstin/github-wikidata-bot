@@ -12,8 +12,17 @@ from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import ExpiresAfter
 from pywikibot.data import sparql
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 from .utils import parse_filter_list
+
+# https://stackoverflow.com/a/35504626/3549270
+_session = requests.Session()
+_session.mount("https://", HTTPAdapter(max_retries=Retry(total=3, backoff_factor=0.5)))
+_cached_session = CacheControl(
+    _session, cache=FileCache("cache"), heuristic=ExpiresAfter(days=30)
+)
 
 
 class Settings:
@@ -47,9 +56,7 @@ class Settings:
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
 
-    cached_session: requests.Session = CacheControl(
-        requests.Session(), cache=FileCache("cache"), heuristic=ExpiresAfter(days=30)
-    )
+    cached_session: requests.Session = _cached_session
 
     @staticmethod
     def init_logging(quiet: bool, http_debug: bool) -> None:
