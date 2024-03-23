@@ -78,7 +78,7 @@ class Settings:
                 "extended": {"format": "%(asctime)s %(levelname)-8s %(message)s"}
             },
             "handlers": {
-                "console": {"class": "logging.StreamHandler"},
+                "console": {"class": "logging.StreamHandler", "formatter": "extended"},
                 "all": {
                     "class": "logging.handlers.RotatingFileHandler",
                     "filename": str(log_dir.joinpath("all.log")),
