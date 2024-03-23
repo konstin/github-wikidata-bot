@@ -82,7 +82,7 @@ class Settings:
                     "filename": str(log_dir.joinpath("all.log")),
                     "formatter": "extended",
                     "maxBytes": 32 * 1024 * 1024,
-                    "backupCount": 2,
+                    "backupCount": 10,
                 },
                 "error": {
                     "class": "logging.handlers.RotatingFileHandler",
@@ -90,7 +90,7 @@ class Settings:
                     "formatter": "extended",
                     "level": "WARN",
                     "maxBytes": 32 * 1024 * 1024,
-                    "backupCount": 2,
+                    "backupCount": 10,
                 },
             },
             "loggers": {"github_wikidata_bot": {"handlers": handlers, "level": "INFO"}},
