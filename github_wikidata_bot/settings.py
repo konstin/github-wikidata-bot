@@ -74,7 +74,9 @@ class Settings:
 
         conf = {
             "version": 1,
-            "formatters": {"extended": {"format": "%(levelname)-8s %(message)s"}},
+            "formatters": {
+                "extended": {"format": "%(asctime)s %(levelname)-8s %(message)s"}
+            },
             "handlers": {
                 "console": {"class": "logging.StreamHandler"},
                 "all": {
