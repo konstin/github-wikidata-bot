@@ -256,6 +256,20 @@ def update_wikidata(project: Project):
         logger.info(f"There are {len(stable_releases)} stable releases")
 
     avoid_changing_preferred = False
+    # https://www.wikidata.org/w/index.php?title=Topic%3AY3yzaiuczuywkbgr&topic_showPostId=y3z03mkycwf3s6b4
+    if len(stable_releases) == 1:
+        if (
+            len(existing_versions) == 1
+            and existing_versions[0].getTarget() == stable_releases[0].version
+        ):
+            logger.info("Only a single version, avoiding setting preferred rank")
+            avoid_changing_preferred = True
+        if len(existing_versions) == 0:
+            logger.info(
+                "Creating only a single version, avoiding setting preferred rank"
+            )
+            avoid_changing_preferred = True
+
     for release in stable_releases:
         existing = Properties.software_version.get_claim(item, release.version)
         if (
