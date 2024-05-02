@@ -126,6 +126,7 @@ class Settings:
     @classmethod
     def init_licenses(cls) -> None:
         response = sparql.SparqlQuery().select(cls.license_sparql_file.read_text())
+        assert response is not None
         cls.licenses = {row["spdx"]: row["license"][31:] for row in response}
 
     @classmethod

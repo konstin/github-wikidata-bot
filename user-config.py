@@ -5,24 +5,26 @@ family = "wikidata"
 mylang = "wikidata"  # Needed for editing of userpages
 config_json = Path("config.json")
 if config_json.is_file():
-    config_json = json.loads(config_json.read_text())
-    username = config_json["username"]
-    test_username = config_json.get("test-username")
+    config = json.loads(config_json.read_text())
+    username = config["username"]
+    test_username = config.get("test-username")
 else:
     # Mainly used for pytest
     username = "unknown"
     test_username = None
+    config = None
 # noinspection PyUnresolvedReferences
-usernames["wikidata"]["wikidata"] = username  # noqa: F821
-usernames["wikidata"]["test"] = test_username  # noqa: F821
+usernames["wikidata"]["wikidata"] = username  # type: ignore # noqa: F821
+usernames["wikidata"]["test"] = test_username  # type: ignore # noqa: F821
 # noinspection PyUnresolvedReferences
-usernames["wikipedia"]["en"] = username  # noqa: F821
+usernames["wikipedia"]["en"] = username  # type: ignore # noqa: F821
 
 console_encoding = "utf-8"
 put_throttle = 1
 minthrottle = 1
 
 # adapt to pywikibot's horrible configuration system
+del config
 del config_json
 del json
 del username

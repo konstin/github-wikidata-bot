@@ -81,6 +81,7 @@ def query_projects(
     """
     wikidata_sparql = sparql.SparqlQuery()
     response = wikidata_sparql.select(Settings.sparql_file.read_text())
+    assert response is not None
 
     projects = []
     logger.info(f"{len(response)} projects were found by the sparql query")
@@ -165,7 +166,7 @@ def normalize_repo_url(
 def set_website(project: Project) -> Claim | None:
     """Add the website if does not already exist"""
     if not project.website or not project.website.startswith("http"):
-        return
+        return None
 
     url = RedirectDict.get_or_add(project.website) or project.website
     return Properties.official_website.new_claim(url)
@@ -174,7 +175,7 @@ def set_website(project: Project) -> Claim | None:
 def set_license(project: Project) -> Claim | None:
     """Add the license if it does not already exist"""
     if not project.license or project.license not in Settings.licenses:
-        return
+        return None
 
     project_license = Settings.licenses[project.license]
     page = pywikibot.ItemPage(Settings.bot.repo, project_license)
@@ -335,7 +336,12 @@ def update_wikidata(project: Project):
             exists_arg="p",
             summary=Settings.edit_summary,
         )
-        if not added and set_preferred_rank and existing.rank != "preferred":
+        if (
+            not added
+            and set_preferred_rank
+            and existing
+            and existing.rank != "preferred"
+        ):
             logger.info(
                 f"Claim exists, changing to preferred rank for {claim.getTarget()}"
             )

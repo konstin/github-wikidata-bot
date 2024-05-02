@@ -4,7 +4,6 @@ Extracted from main to avoid importing pywikibot for the tests
 
 import functools
 import re
-from typing import Self
 
 from pywikibot.exceptions import APIError
 from yarl import URL
@@ -20,10 +19,14 @@ class SimpleSortableVersion:
         version = re.sub(r"[^0-9.]", "", version)
         self.version = [int(x) for x in version.split(".")]
 
-    def __lt__(self, other: Self) -> bool:
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, SimpleSortableVersion):
+            return NotImplemented
         return self.version < other.version
 
-    def __eq__(self, other: Self) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SimpleSortableVersion):
+            return NotImplemented
         return self.version == other.version
 
 
@@ -37,30 +40,27 @@ def parse_filter_list(text: str) -> list[str]:
     return filterlist
 
 
-def github_repo_to_api(url: str) -> str:
+def github_repo_to_api(raw_url: str) -> str:
     """Converts a GitHub repository url to the api entry with the general information"""
-    url = normalize_url(url)
-    url = url.with_host("api.github.com").with_path("/repos" + url.path)
+    normalized_url = normalize_url(raw_url)
+    path = "/repos" + normalized_url.path
+    url = normalized_url.with_host("api.github.com").with_path(path)
     return str(url)
 
 
 def github_repo_to_api_releases(url: str) -> str:
     """Converts a GitHub repository url to the api entry with the releases"""
-    url = github_repo_to_api(url)
-    url += "/releases"
-    return url
+    return github_repo_to_api(url) + "/releases"
 
 
 def github_repo_to_api_tags(url: str) -> str:
     """Converts a GitHub repository url to the api entry with the tags"""
-    url = github_repo_to_api(url)
-    url += "/git/refs/tags"
-    return url
+    return github_repo_to_api(url) + "/git/refs/tags"
 
 
-def normalize_url(url: str) -> URL:
+def normalize_url(raw_url: str) -> URL:
     """Canonical urls be like: https, no slash, no file extension"""
-    url = URL(url).with_scheme("https").with_fragment(None)
+    url = URL(raw_url).with_scheme("https").with_fragment(None)
     if url.path.endswith(".git"):
         url = url.with_path(url.path[:-4])
     # remove a trailing slash
