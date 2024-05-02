@@ -1,8 +1,6 @@
 import argparse
 import enum
 import logging.config
-import re
-from distutils.version import LooseVersion
 from typing import Any
 
 import pywikibot
@@ -14,7 +12,12 @@ from pywikibot.exceptions import APIError
 from .github import Project, get_data_from_github
 from .redirects import RedirectDict
 from .settings import Settings
-from .utils import github_repo_to_api, normalize_url, is_edit_conflict
+from .utils import (
+    github_repo_to_api,
+    normalize_url,
+    is_edit_conflict,
+    SimpleSortableVersion,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +212,7 @@ def update_wikidata(project: Project):
 
     # Add all stable releases
     stable_releases = project.stable_release
-    stable_releases.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
+    stable_releases.sort(key=lambda x: SimpleSortableVersion(x.version))
 
     if len(stable_releases) == 0:
         logger.info("No stable releases")

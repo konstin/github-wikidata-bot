@@ -1,8 +1,6 @@
 import logging
-import re
 import textwrap
 from dataclasses import dataclass
-from distutils.version import LooseVersion
 from json import JSONDecodeError
 from typing import Any
 from urllib.parse import quote_plus
@@ -16,6 +14,7 @@ from .utils import (
     github_repo_to_api,
     github_repo_to_api_releases,
     github_repo_to_api_tags,
+    SimpleSortableVersion,
 )
 from .versionhandler import extract_version
 
@@ -259,7 +258,7 @@ def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
             for release in tags
         ]
         filtered = [v for v in extracted_tags if v is not None]
-        filtered.sort(key=lambda x: LooseVersion(re.sub(r"[^0-9.]", "", x.version)))
+        filtered.sort(key=lambda x: SimpleSortableVersion(x.version))
         if len(filtered) > 300:
             logger.info(
                 f"Limiting {q_value} to 300 of {len(filtered)} tags "

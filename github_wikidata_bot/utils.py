@@ -2,10 +2,29 @@
 Extracted from main to avoid importing pywikibot for the tests
 """
 
+import functools
 import re
+from typing import Self
 
 from pywikibot.exceptions import APIError
 from yarl import URL
+
+
+@functools.total_ordering
+class SimpleSortableVersion:
+    """Sort a version by only the release part, ignoring everything else."""
+
+    version: list[int]
+
+    def __init__(self, version: str):
+        version = re.sub(r"[^0-9.]", "", version)
+        self.version = [int(x) for x in version.split(".")]
+
+    def __lt__(self, other: Self) -> bool:
+        return self.version < other.version
+
+    def __eq__(self, other: Self) -> bool:
+        return self.version == other.version
 
 
 def parse_filter_list(text: str) -> list[str]:
