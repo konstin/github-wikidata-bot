@@ -1,3 +1,4 @@
+import datetime
 import logging
 import textwrap
 from dataclasses import dataclass
@@ -210,15 +211,15 @@ def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
     """
     # "retrieved" does only accept dates without time, so create a timestamp with no
     # date
-    iso_timestamp = pywikibot.Timestamp.utcnow().isoformat()
+    iso_timestamp = pywikibot.Timestamp.now(datetime.UTC).isoformat()
     retrieved = string_to_wddate(iso_timestamp)
 
     # General project information
     project_info = get_json_cached(github_repo_to_api(url))
 
     website = project_info.get("homepage")
-    if license := project_info.get("license"):
-        spdx_id = license["spdx_id"]
+    if project_license := project_info.get("license"):
+        spdx_id = project_license["spdx_id"]
     else:
         spdx_id = None
 

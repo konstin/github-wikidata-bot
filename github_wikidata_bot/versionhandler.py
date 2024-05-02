@@ -22,14 +22,14 @@ def extract_version(string: str, name: str | None = None) -> tuple[str, str] | N
              - version number
     """
     string = string.strip()
-    VALID_TYPES = ["stable", "beta", "alpha", "rc", "unstable"]
-    versiontype = None
+    valid_types = ["stable", "beta", "alpha", "rc", "unstable"]
+    version_type = None
     extracted_version = None
 
     # Remove a prefix of the name of the program if existent
     if name:
-        namere = re.compile(r"^" + re.escape(name) + r"[ _/-]?", re.IGNORECASE)
-        string = re.sub(namere, "", string)
+        name_re = re.compile(r"^" + re.escape(name) + r"[ _/-]?", re.IGNORECASE)
+        string = re.sub(name_re, "", string)
 
     # Remove common prefixes/postfixes
     string = re.sub(
@@ -53,11 +53,11 @@ def extract_version(string: str, name: str | None = None) -> tuple[str, str] | N
     words = ["stable", "beta", "alpha", "rc", "pre", "preview", r"b\d", "dev"]
     res = re.findall(r"(" + "|".join(words) + r")", string, re.IGNORECASE)
     if number_of_unique_values(res) == 1:
-        versiontype = res[0].lower()
-        if versiontype[0] == "b":
-            versiontype = "beta"
-        if versiontype not in VALID_TYPES:
-            versiontype = "unstable"
+        version_type = res[0].lower()
+        if version_type[0] == "b":
+            version_type = "beta"
+        if version_type not in valid_types:
+            version_type = "unstable"
     elif number_of_unique_values(res) > 1:
         return None
 
@@ -82,8 +82,8 @@ def extract_version(string: str, name: str | None = None) -> tuple[str, str] | N
     if extracted_version is not None:
         # if we don't find any indication about the state of the version,
         # we assume it's a stable version
-        if versiontype is None:
-            versiontype = "stable"
-        return versiontype, extracted_version
+        if version_type is None:
+            version_type = "stable"
+        return version_type, extracted_version
 
     return None
