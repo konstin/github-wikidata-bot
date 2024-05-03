@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pywikibot
 import requests
+import sentry_sdk
 from cachecontrol import CacheControl
 from cachecontrol.caches import FileCache
 from cachecontrol.heuristics import ExpiresAfter
@@ -110,18 +111,22 @@ class Settings:
             requests_log.propagate = True
 
     @classmethod
-    def init_github(cls, github_oauth_token: str) -> None:
+    def init_config(cls, github_oauth_token: str) -> None:
+        config_json = Path("config.json")
+        if config_json.exists():
+            config = json.loads(config_json.read_text())
+        else:
+            config = {}
+        github_oauth_token = github_oauth_token or config.get("github-oauth-token")
         if not github_oauth_token:
-            try:
-                github_oauth_token = json.loads(Path("config.json").read_text())[
-                    "github-oauth-token"
-                ]
-            except FileNotFoundError:
-                print("Please create a config.json", file=sys.stderr)
-                sys.exit(1)
+            print("Please add github-oauth-token to config.json", file=sys.stderr)
+            sys.exit(1)
         cls.cached_session.headers.update(
             {"Authorization": "token " + github_oauth_token}
         )
+
+        if dsn := config.get("sentry-dsn"):
+            sentry_sdk.init(dsn=dsn, traces_sample_rate=1.0, profiles_sample_rate=1.0)
 
     @classmethod
     def init_licenses(cls) -> None:

@@ -360,7 +360,7 @@ def main():
     args = parser.parse_args()
 
     Settings.init_logging(args.quiet, args.debug_http)
-    Settings.init_github(args.github_oauth_token)
+    Settings.init_config(args.github_oauth_token)
     Settings.init_licenses()
     Settings.init_filter_lists()
 

@@ -50,5 +50,5 @@ if __name__ == "__main__":
     parser.add_argument("--github-oauth-token")
     args = parser.parse_args()
 
-    Settings.init_github(args.github_oauth_token)
+    Settings.init_config(args.github_oauth_token)
     debug_version_handling(args.threshold, args.maxsize, args.no_sampling)
