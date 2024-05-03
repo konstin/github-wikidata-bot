@@ -5,6 +5,7 @@ from typing import Any
 
 import pywikibot
 import requests
+import sentry_sdk
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.data import sparql
 from pywikibot.exceptions import APIError
@@ -72,6 +73,7 @@ def create_sources(
     return sources
 
 
+@sentry_sdk.trace
 def query_projects(
     project_filter: str | None = None, ignore_blacklist: bool = False
 ) -> list[dict[str, str]]:
@@ -182,12 +184,14 @@ def set_license(project: Project) -> Claim | None:
     return Properties.license.new_claim(page)
 
 
+@sentry_sdk.trace
 def update_wikidata(project: Project):
     """Update wikidata entry with data from GitHub"""
     # Wikidata boilerplate
     q_value = project.project.replace("http://www.wikidata.org/entity/", "")
-    item = ItemPage(Settings.bot.repo, title=q_value)
-    item.get()
+    with sentry_sdk.start_span(description="Get item page"):
+        item = ItemPage(Settings.bot.repo, title=q_value)
+        item.get()
 
     urls = item.claims[Properties.source_code_repository.value]
     if len(urls) == 1:
@@ -199,7 +203,10 @@ def update_wikidata(project: Project):
         url_raw = project.repo
         url_normalized = str(normalize_url(url_raw))
 
-    for claim in (set_website(project), set_license(project)):
+    for claim, claim_kind in [
+        (set_website(project), "website"),
+        (set_license(project), "license"),
+    ]:
         if not claim:
             continue
         claim.addSources(
@@ -207,9 +214,10 @@ def update_wikidata(project: Project):
                 url=github_repo_to_api(url_normalized), retrieved=project.retrieved
             )
         )
-        Settings.bot.user_add_claim_unless_exists(
-            item, claim, exists_arg="", summary=Settings.edit_summary
-        )
+        with sentry_sdk.start_span(description=f"Set {claim_kind}"):
+            Settings.bot.user_add_claim_unless_exists(
+                item, claim, exists_arg="", summary=Settings.edit_summary
+            )
 
     # Add all stable releases
     stable_releases = project.stable_release
@@ -290,7 +298,8 @@ def update_wikidata(project: Project):
         ):
             logger.info(f"Setting normal rank for {existing.getTarget()}")
             try:
-                existing.changeRank("normal", summary=Settings.edit_summary)
+                with sentry_sdk.start_span(description="Change rank to normal"):
+                    existing.changeRank("normal", summary=Settings.edit_summary)
             except APIError as e:
                 if is_edit_conflict(e):
                     logger.error(
@@ -329,13 +338,14 @@ def update_wikidata(project: Project):
             logger.info(
                 f"Creating {release.version} (rank: {'preferred' if set_preferred_rank else 'default'})"
             )
-        added = Settings.bot.user_add_claim_unless_exists(
-            item,
-            claim,
-            # add when claim with same property, but not same target exists
-            exists_arg="p",
-            summary=Settings.edit_summary,
-        )
+        with sentry_sdk.start_span(description="Create version"):
+            added = Settings.bot.user_add_claim_unless_exists(
+                item,
+                claim,
+                # add when claim with same property, but not same target exists
+                exists_arg="p",
+                summary=Settings.edit_summary,
+            )
         if (
             not added
             and set_preferred_rank
@@ -345,7 +355,38 @@ def update_wikidata(project: Project):
             logger.info(
                 f"Claim exists, changing to preferred rank for {claim.getTarget()}"
             )
-            existing.changeRank("preferred", summary=Settings.edit_summary)
+            with sentry_sdk.start_span(description="Change rank to preferred"):
+                existing.changeRank("preferred", summary=Settings.edit_summary)
+
+
+@sentry_sdk.trace
+def update_project(project: dict[str, str]):
+    logger.info(f"## {project['projectLabel']}: {project['project']}")
+    try:
+        properties = get_data_from_github(project["repo"], project)
+    except requests.exceptions.HTTPError as e:
+        logger.error(
+            "HTTP request for {} failed: {}".format(project["projectLabel"], e)
+        )
+        return
+
+    if Settings.do_update_wikidata:
+        try:
+            update_wikidata(properties)
+        except Exception as e:
+            logger.error(f"Failed to update {properties.project}: {e}")
+            raise
+
+
+def run(project_filter: str | None, ignore_blacklist: bool):
+    logger.info("# Querying Projects")
+    projects = query_projects(project_filter, ignore_blacklist)
+    logger.info(f"{len(projects)} projects were found")
+    logger.info("# Processing projects")
+    for project in projects:
+        with sentry_sdk.start_transaction(name="Update project"):
+            update_project(project)
+    logger.info("# Finished successfully")
 
 
 def main():
@@ -364,27 +405,4 @@ def main():
     Settings.init_licenses()
     Settings.init_filter_lists()
 
-    logger.info("# Querying Projects")
-    projects = query_projects(args.filter, args.ignore_blacklist)
-    logger.info(f"{len(projects)} projects were found")
-
-    logger.info("# Processing projects")
-    for project in projects:
-        logger.info(f"## {project['projectLabel']}: {project['project']}")
-
-        try:
-            properties = get_data_from_github(project["repo"], project)
-        except requests.exceptions.HTTPError as e:
-            logger.error(
-                "HTTP request for {} failed: {}".format(project["projectLabel"], e)
-            )
-            continue
-
-        if Settings.do_update_wikidata:
-            try:
-                update_wikidata(properties)
-            except Exception as e:
-                logger.error(f"Failed to update {properties.project}: {e}")
-                raise
-
-    logger.info("# Finished successfully")
+    run(args.filter, args.ignore_blacklist)

@@ -3,6 +3,7 @@ import logging
 import logging.config
 import random
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -111,7 +112,7 @@ class Settings:
             requests_log.propagate = True
 
     @classmethod
-    def init_config(cls, github_oauth_token: str) -> None:
+    def init_config(cls, github_oauth_token: str | None) -> None:
         config_json = Path("config.json")
         if config_json.exists():
             config = json.loads(config_json.read_text())
@@ -126,7 +127,28 @@ class Settings:
         )
 
         if dsn := config.get("sentry-dsn"):
-            sentry_sdk.init(dsn=dsn, traces_sample_rate=1.0, profiles_sample_rate=1.0)
+            cls.init_sentry(dsn)
+
+    @classmethod
+    def init_sentry(cls, dsn: str):
+        try:
+            version = (
+                subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+                )
+                .strip()
+                .decode()
+            )
+        except subprocess.CalledProcessError:
+            version = "unknown"
+        release = "github-wikidata-bot@" + version
+        sentry_sdk.init(
+            dsn=dsn,
+            release=release,
+            ignore_errors=[KeyboardInterrupt],
+            traces_sample_rate=1.0,
+            profiles_sample_rate=1.0,
+        )
 
     @classmethod
     def init_licenses(cls) -> None:

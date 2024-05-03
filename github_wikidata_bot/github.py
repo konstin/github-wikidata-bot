@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import quote_plus
 
 import pywikibot
+import sentry_sdk
 from pywikibot import WbTime
 from requests import HTTPError
 
@@ -61,6 +62,7 @@ def string_to_wddate(iso_timestamp: str) -> WbTime:
     return date
 
 
+@sentry_sdk.trace
 def get_json_cached(url: str) -> dict:
     """
     Get JSON from an API and cache the result
@@ -74,6 +76,7 @@ def get_json_cached(url: str) -> dict:
         return {}
 
 
+@sentry_sdk.trace
 def get_all_pages(url: str) -> list[dict]:
     """Gets all pages of the release/tag information"""
     page_number = 1
@@ -192,6 +195,7 @@ def get_date_from_tag_url(release: ReleaseTag) -> Release | None:
     )
 
 
+@sentry_sdk.trace
 def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
     """
     Retrieve the following data from github:
