@@ -16,8 +16,8 @@ class SimpleSortableVersion:
     version: list[int]
 
     def __init__(self, version: str):
-        version = re.sub(r"[^0-9.]", "", version)
-        self.version = [int(x) for x in version.split(".")]
+        loose_version = re.sub(r"[^0-9.]", "", version)
+        self.version = [int(x) for x in loose_version.split(".") if x]
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, SimpleSortableVersion):
