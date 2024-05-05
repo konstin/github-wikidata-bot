@@ -20,8 +20,10 @@ sentry-sdk = "^2.0.1"
 pydantic = "^2.7.1"
 
 [tool.poetry.group.dev.dependencies]
+httpx = "^0.27.0"
 pytest = "^8.0.0"
 ruff = "^0.4.2"
+tqdm = "^4.66.4"
 types-requests = "^2.31.0.20240406"
 
 [tool.ruff.lint]
