@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 import argparse
 from random import sample
-from collections.abc import Sequence
 
 from github_wikidata_bot.github import get_json_cached, get_all_pages, analyse_release
-from github_wikidata_bot.main import logger, query_projects
+from github_wikidata_bot.main import logger
 from github_wikidata_bot.settings import Settings
+from github_wikidata_bot.sparql import query_projects
 from github_wikidata_bot.utils import github_repo_to_api, github_repo_to_api_releases
 
 
-def safe_sample(population: Sequence[dict[str, str]], size: int):
+def safe_sample[T](population: list[T], size: int) -> list[T]:
     try:
         return sample(population, size)
     except ValueError:
@@ -24,8 +24,8 @@ def debug_version_handling(
     if not no_sampling:
         projects = safe_sample(projects, threshold)
     for project in projects:
-        project_info = get_json_cached(github_repo_to_api(project["repo"]))
-        apiurl = github_repo_to_api_releases(project["repo"])
+        project_info = get_json_cached(github_repo_to_api(project.repo))
+        apiurl = github_repo_to_api_releases(project.repo)
         github_releases = get_all_pages(apiurl)
         if not no_sampling:
             github_releases = safe_sample(github_releases, size)
@@ -36,7 +36,7 @@ def debug_version_handling(
                     release.version if release else "---",
                     release.release_type if release else "---",
                     github_release["tag_name"],
-                    repr(project["projectLabel"]),
+                    repr(project.projectLabel),
                     github_release["name"],
                 )
             )

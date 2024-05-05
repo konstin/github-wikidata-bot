@@ -7,12 +7,12 @@ import pywikibot
 import requests
 import sentry_sdk
 from pywikibot import Claim, ItemPage, WbTime
-from pywikibot.data import sparql
 from pywikibot.exceptions import APIError
 
 from .github import Project, get_data_from_github
 from .redirects import RedirectDict
 from .settings import Settings
+from .sparql import query_projects, WikidataProject
 from .utils import (
     github_repo_to_api,
     normalize_url,
@@ -71,47 +71,6 @@ def create_sources(
     if date:
         sources.append(Properties.publication_date.new_claim(date))
     return sources
-
-
-@sentry_sdk.trace
-def query_projects(
-    project_filter: str | None = None, ignore_blacklist: bool = False
-) -> list[dict[str, str]]:
-    """
-    Queries for all software projects and returns them as an array of simplified dicts
-    :return: the data split into projects with and without github
-    """
-    wikidata_sparql = sparql.SparqlQuery()
-    response = wikidata_sparql.select(Settings.sparql_file.read_text())
-    assert response is not None
-
-    projects = []
-    logger.info(f"{len(response)} projects were found by the sparql query")
-    for project in response:
-        if (
-            project_filter
-            and project_filter.lower() not in project["project"].lower()
-            and project_filter.lower() not in project["projectLabel"].lower()
-        ):
-            continue
-        if project["project"][31:] in Settings.blacklist and not ignore_blacklist:
-            logger.info(
-                f"{project['projectLabel']} ({project['project'][31:]}) is blacklisted"
-            )
-            continue
-
-        if not Settings.repo_regex.match(project["repo"]):
-            logger.info(
-                f" - Removing {project['projectLabel']}: "
-                f"{project['project']} {project['repo']}"
-            )
-            continue
-
-        projects.append(project)
-
-    logger.info(f"{len(projects)} projects remained after filtering")
-
-    return projects
 
 
 def normalize_repo_url(
@@ -360,13 +319,13 @@ def update_wikidata(project: Project):
 
 
 @sentry_sdk.trace
-def update_project(project: dict[str, str]):
-    logger.info(f"## {project['projectLabel']}: {project['project']}")
+def update_project(project: WikidataProject):
+    logger.info(f"## {project.projectLabel}: {project.project}")
     try:
-        properties = get_data_from_github(project["repo"], project)
+        properties = get_data_from_github(project.repo, project)
     except requests.exceptions.HTTPError as e:
         logger.error(
-            "HTTP request for {} failed: {}".format(project["projectLabel"], e)
+            f"Github API request for {project.projectLabel} ({project.wikidata_id}) failed: {e}"
         )
         return
 

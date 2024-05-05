@@ -11,6 +11,7 @@ import sentry_sdk
 from pywikibot import WbTime
 from requests import HTTPError
 
+from .sparql import WikidataProject
 from .settings import Settings
 from .utils import (
     github_repo_to_api,
@@ -196,7 +197,7 @@ def get_date_from_tag_url(release: ReleaseTag) -> Release | None:
 
 
 @sentry_sdk.trace
-def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
+def get_data_from_github(url: str, properties: WikidataProject) -> Project:
     """
     Retrieve the following data from github:
      - website / homepage
@@ -228,7 +229,6 @@ def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
         spdx_id = None
 
     api_url = github_repo_to_api_releases(url)
-    q_value = properties["project"].replace("http://www.wikidata.org/entity/", "")
     releases = get_all_pages(api_url)
 
     invalid_releases = []
@@ -245,7 +245,9 @@ def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
         message = textwrap.shorten(message, width=200, placeholder="...")
         logger.info(f"{len(invalid_releases)} invalid releases: {message}")
 
-    if Settings.read_tags and (len(extracted) == 0 or q_value in Settings.whitelist):
+    if Settings.read_tags and (
+        len(extracted) == 0 or properties.wikidata_id in Settings.whitelist
+    ):
         logger.info("Falling back to tags")
         api_url = github_repo_to_api_tags(url)
         try:
@@ -266,7 +268,7 @@ def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
         filtered.sort(key=lambda x: SimpleSortableVersion(x.version))
         if len(filtered) > 300:
             logger.info(
-                f"Limiting {q_value} to 300 of {len(filtered)} tags "
+                f"Limiting {properties.wikidata_id} to 300 of {len(filtered)} tags "
                 f"for performance reasons."
             )
             filtered = filtered[-300:]
@@ -274,7 +276,9 @@ def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
         if invalid_version_strings:
             message = ", ".join(invalid_version_strings)
             message = textwrap.shorten(message, width=200, placeholder="...")
-            logger.info(f"Invalid version strings in tags of {q_value}: {message}")
+            logger.info(
+                f"Invalid version strings in tags of {properties.wikidata_id}: {message}"
+            )
 
     stable_release = []
     for extract in extracted:
@@ -286,6 +290,6 @@ def get_data_from_github(url: str, properties: dict[str, str]) -> Project:
         website=website,
         license=spdx_id,
         retrieved=retrieved,
-        repo=properties["repo"],
-        project=properties["project"],
+        repo=properties.repo,
+        project=properties.project,
     )
