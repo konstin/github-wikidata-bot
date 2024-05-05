@@ -262,7 +262,8 @@ def update_wikidata(project: Project):
             except APIError as e:
                 if is_edit_conflict(e):
                     logger.error(
-                        f"Edit conflict for setting the normal rank on {q_value}"
+                        f"Edit conflict for setting the normal rank on {q_value}",
+                        exc_info=True,
                     )
                     # Try avoiding https://www.wikidata.org/wiki/User_talk:Konstin#Software_version
                     avoid_changing_preferred = True
@@ -325,7 +326,8 @@ def update_project(project: WikidataProject):
         properties = get_data_from_github(project.repo, project)
     except requests.exceptions.HTTPError as e:
         logger.error(
-            f"Github API request for {project.projectLabel} ({project.wikidata_id}) failed: {e}"
+            f"Github API request for {project.projectLabel} ({project.wikidata_id}) failed: {e}",
+            exc_info=True,
         )
         return
 
@@ -333,7 +335,7 @@ def update_project(project: WikidataProject):
         try:
             update_wikidata(properties)
         except Exception as e:
-            logger.error(f"Failed to update {properties.project}: {e}")
+            logger.error(f"Failed to update {properties.project}: {e}", exc_info=True)
             raise
 
 

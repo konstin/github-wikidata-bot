@@ -27,6 +27,16 @@ _cached_session = CacheControl(
 )
 
 
+class NoTracebackFormatter(logging.Formatter):
+    """https://stackoverflow.com/a/73695412/3549270"""
+
+    def formatException(self, ei):
+        return ""
+
+    def formatStack(self, stack_info):
+        return ""
+
+
 class Settings:
     do_update_wikidata = True
 
@@ -77,7 +87,10 @@ class Settings:
         conf = {
             "version": 1,
             "formatters": {
-                "extended": {"format": "%(asctime)s %(levelname)-8s %(message)s"}
+                "extended": {
+                    "format": "%(asctime)s %(levelname)-8s %(message)s",
+                    "class": "github_wikidata_bot.settings.NoTracebackFormatter",
+                }
             },
             "handlers": {
                 "console": {"class": "logging.StreamHandler", "formatter": "extended"},

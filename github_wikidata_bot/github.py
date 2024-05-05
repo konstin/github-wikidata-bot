@@ -73,7 +73,7 @@ def get_json_cached(url: str) -> dict:
     try:
         return response.json()
     except JSONDecodeError as e:
-        logger.error(f"JSONDecodeError for {url}: {e}")
+        logger.error(f"JSONDecodeError for {url}: {e}", exc_info=True)
         return {}
 
 
