@@ -4,6 +4,9 @@ SELECT ?project ?projectLabel ?repo WHERE {
   # Items with a repo on github
   ?project wdt:P1324 ?repo.
 
+  # Exclude defunct projects
+  FILTER NOT EXISTS { ?project wdt:P576 ?defunct }.
+
   # Exclude projects not hosted on github
   FILTER(contains(STR(?repo), "://github.com/")).
 
