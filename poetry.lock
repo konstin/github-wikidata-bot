@@ -625,35 +625,35 @@ dev = ["argcomplete", "attrs (>=19.2)", "hypothesis (>=3.56)", "mock", "pygments
 
 [[package]]
 name = "pywikibot"
-version = "8.6.0"
+version = "9.1.2"
 description = "Python MediaWiki Bot Framework"
 optional = false
-python-versions = ">=3.6.1"
+python-versions = ">=3.7.0"
 files = [
-    {file = "pywikibot-8.6.0-py3-none-any.whl", hash = "sha256:5c273a0affbaaeb8608e69544739447146b7a95ed19a4f2425d8a5f3f8578694"},
-    {file = "pywikibot-8.6.0.tar.gz", hash = "sha256:380454e6b6e53a74f4925d1afaed9b485325fa62f8d475eb3931a5b83a1e0015"},
+    {file = "pywikibot-9.1.2-py3-none-any.whl", hash = "sha256:d200d581f9dbeb7902f0fb35c22034c5ea26f294f13870d24ed7293b717f78ac"},
+    {file = "pywikibot-9.1.2.tar.gz", hash = "sha256:802eb5da597f17398b23816438578dee918cd31e10e4141d6d1067ad3b950b5d"},
 ]
 
 [package.dependencies]
 mwparserfromhell = ">=0.5.2"
-requests = {version = ">=2.21.0", markers = "python_version >= \"3.7\""}
-setuptools = {version = ">=48.0.0", markers = "python_version >= \"3.10\""}
+packaging = "*"
+requests = ">=2.21.0"
 
 [package.extras]
 create-isbn-edition-py = ["isbnlib", "unidecode"]
 eventstreams = ["sseclient (>=0.0.18,<0.0.23)"]
-flake8 = ["darglint", "flake8 (>=5.0.4)", "flake8-bugbear (!=23.1.14)", "flake8-coding", "flake8-comprehensions", "flake8-docstrings (>=1.4.0)", "flake8-mock-x2", "flake8-no-u-prefixed-strings (>=0.2)", "flake8-print (>=4.0.1)", "flake8-quotes (>=3.3.2)", "flake8-string-format", "flake8-tuple (>=0.4.1)", "pep8-naming (>=0.12.1,<0.13.0)", "pep8-naming (>=0.13.3)", "pydocstyle (>=6.2.3)"]
+flake8 = ["darglint2", "flake8 (>=5.0.4)", "flake8-bugbear (!=24.1.17)", "flake8-comprehensions (>=3.13.0)", "flake8-docstrings (>=1.4.0)", "flake8-future-annotations", "flake8-mock-x2", "flake8-no-u-prefixed-strings (>=0.2)", "flake8-print (>=5.0.0)", "flake8-quotes (>=3.3.2)", "flake8-raise", "flake8-string-format", "flake8-tuple (>=0.4.1)", "pep8-naming (>=0.13.3)", "pydocstyle (>=6.3.0)"]
 google = ["google (>=1.7)"]
 graphviz = ["pydot (>=1.4.1)"]
-hacking = ["hacking"]
+hacking = ["hacking", "importlib-metadata (<5.0.0)"]
 html = ["beautifulsoup4 (>=4.7.1)"]
-http = ["fake-useragent (<0.1.14)", "fake-useragent (>1.2.1)"]
-isbn = ["python-stdnum (>=1.18)"]
+http = ["fake-useragent (>=1.4.0)"]
+isbn = ["python-stdnum (>=1.19)"]
 memento = ["memento-client (==0.6.1)"]
 mwoauth = ["mwoauth (>=0.2.4,!=0.3.1)"]
-mysql = ["PyMySQL (>=0.9.3)"]
+mysql = ["PyMySQL (>=1.0.0)"]
 scripts = ["isbnlib", "memento-client (==0.6.1)", "unidecode"]
-tkinter = ["Pillow (>=8.1.2)", "Pillow (>=8.1.2,<10.0.0)"]
+tkinter = ["Pillow (>=8.1.2,!=10.0,!=10.1)"]
 weblinkchecker-py = ["memento-client (==0.6.1)"]
 wikitextparser = ["wikitextparser (>=0.47.0)"]
 
@@ -706,13 +706,13 @@ files = [
 
 [[package]]
 name = "sentry-sdk"
-version = "2.0.1"
+version = "2.1.1"
 description = "Python client for Sentry (https://sentry.io)"
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "sentry_sdk-2.0.1-py2.py3-none-any.whl", hash = "sha256:b54c54a2160f509cf2757260d0cf3885b608c6192c2555a3857e3a4d0f84bdb3"},
-    {file = "sentry_sdk-2.0.1.tar.gz", hash = "sha256:c278e0f523f6f0ee69dc43ad26dcdb1202dffe5ac326ae31472e012d941bee21"},
+    {file = "sentry_sdk-2.1.1-py2.py3-none-any.whl", hash = "sha256:99aeb78fb76771513bd3b2829d12613130152620768d00cd3e45ac00cb17950f"},
+    {file = "sentry_sdk-2.1.1.tar.gz", hash = "sha256:95d8c0bb41c8b0bc37ab202c2c4a295bb84398ee05f4cdce55051cd75b926ec1"},
 ]
 
 [package.dependencies]
@@ -721,6 +721,7 @@ urllib3 = ">=1.26.11"
 
 [package.extras]
 aiohttp = ["aiohttp (>=3.5)"]
+anthropic = ["anthropic (>=0.16)"]
 arq = ["arq (>=0.23)"]
 asyncpg = ["asyncpg (>=0.23)"]
 beam = ["apache-beam (>=2.12)"]
@@ -736,6 +737,8 @@ flask = ["blinker (>=1.1)", "flask (>=0.11)", "markupsafe"]
 grpcio = ["grpcio (>=1.21.1)"]
 httpx = ["httpx (>=0.16.0)"]
 huey = ["huey (>=2)"]
+huggingface-hub = ["huggingface-hub (>=0.22)"]
+langchain = ["langchain (>=0.0.210)"]
 loguru = ["loguru (>=0.5)"]
 openai = ["openai (>=1.0.0)", "tiktoken (>=0.3.0)"]
 opentelemetry = ["opentelemetry-distro (>=0.35b0)"]
@@ -750,22 +753,6 @@ sqlalchemy = ["sqlalchemy (>=1.2)"]
 starlette = ["starlette (>=0.19.1)"]
 starlite = ["starlite (>=1.48)"]
 tornado = ["tornado (>=5)"]
-
-[[package]]
-name = "setuptools"
-version = "69.5.1"
-description = "Easily download, build, install, upgrade, and uninstall Python packages"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "setuptools-69.5.1-py3-none-any.whl", hash = "sha256:c636ac361bc47580504644275c9ad802c50415c7522212252c033bd15f301f32"},
-    {file = "setuptools-69.5.1.tar.gz", hash = "sha256:6c1fccdac05a97e598fb0ae3bbed5904ccb317337a51139dcd51453611bbb987"},
-]
-
-[package.extras]
-docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "pygments-github-lexers (==0.0.5)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-favicon", "sphinx-inline-tabs", "sphinx-lint", "sphinx-notfound-page (>=1,<2)", "sphinx-reredirects", "sphinxcontrib-towncrier"]
-testing = ["build[virtualenv]", "filelock (>=3.4.0)", "importlib-metadata", "ini2toml[lite] (>=0.9)", "jaraco.develop (>=7.21)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "mypy (==1.9)", "packaging (>=23.2)", "pip (>=19.1)", "pytest (>=6,!=8.1.1)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-home (>=0.5)", "pytest-mypy", "pytest-perf", "pytest-ruff (>=0.2.1)", "pytest-timeout", "pytest-xdist (>=3)", "tomli", "tomli-w (>=1.0.0)", "virtualenv (>=13.0.0)", "wheel"]
-testing-integration = ["build[virtualenv] (>=1.0.3)", "filelock (>=3.4.0)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "packaging (>=23.2)", "pytest", "pytest-enabler", "pytest-xdist", "tomli", "virtualenv (>=13.0.0)", "wheel"]
 
 [[package]]
 name = "sniffio"
@@ -946,4 +933,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "3ffe370a9a5eb323edceab3e56a5ed38b6df99135cbed17ee2c8fa9f5b57a61c"
+content-hash = "fb81a0bf21faa9409ef13c4b88ca8e00bac9405238df8d52d07e9e4a496d6928"

@@ -1,7 +1,7 @@
 [project]
 name = "github-wikidata-bot"
 version = "0.4.0"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = { text = "BSD-2-Clause-Patent" }
 
 [tool.poetry]
@@ -12,7 +12,7 @@ authors = ["konstin <konstin@mailbox.org>", "Michael Schönitzer <michael@schoen
 
 [tool.poetry.dependencies]
 python = "^3.12"
-pywikibot = "^8.0.1"
+pywikibot = "^9.1.2"
 mwparserfromhell = "^0.6.4"
 CacheControl = { version = "^0.14.0", extras = ["filecache"] }
 yarl = "^1.3"
