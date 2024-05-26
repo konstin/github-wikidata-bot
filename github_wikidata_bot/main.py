@@ -19,6 +19,7 @@ from .utils import (
     is_edit_conflict,
     SimpleSortableVersion,
 )
+from .website import is_website_other_property
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,10 @@ def normalize_repo_url(
 def set_website(project: Project) -> Claim | None:
     """Add the website if does not already exist"""
     if not project.website or not project.website.startswith("http"):
+        return None
+
+    if is_website_other_property(project.website):
+        logger.info(f"Website is different property: {project.website}")
         return None
 
     url = RedirectDict.get_or_add(project.website) or project.website
