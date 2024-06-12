@@ -16,7 +16,7 @@ It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki
 
 ## Setup and usage
 
-First install python >=3.10 and [poetry][poetry], then run `poetry install`.
+First install python 3.12 and [poetry][poetry], then run `poetry install`.
 
 [Generate a personal access token on GitHub][github-token]. Create a `config.json` file with that token and your Wikidata username:
 
@@ -29,7 +29,7 @@ First install python >=3.10 and [poetry][poetry], then run `poetry install`.
 
 Then run `main.py` in a terminal and enter the password for your bot account.
 
-Run `pytest`, `ruff format .` and `ruff check .` after making code changes.
+Run `pytest`, `ruff format` and `ruff check` after making code changes.
 
 ## Implementation notes
 
@@ -44,7 +44,6 @@ For each entry, the GitHub api link is added as reference.
 
 * Does the entity already have a VCS repository set? Use [this query][no-repo-query]
   to determine entities without a repository.
-* You can check the [logs][logs].
 
 ## Statistics
 
