@@ -28,7 +28,6 @@ types-requests = "^2.31.0.20240406"
 
 [tool.ruff.lint]
 extend-select = ["B", "PT", "PTH", "TRY", "UP"]
-ignore = ["TRY400"]
 
 [tool.mypy]
 ignore_missing_imports = true

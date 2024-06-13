@@ -338,6 +338,18 @@ def update_project(project: WikidataProject):
 
     if Settings.do_update_wikidata:
         try:
+            # There are many spurious errors, mostly because pywikibot lacks http retrying,
+            # so we just retry any pywikibot once.
+            try:
+                update_wikidata(properties)
+            except pywikibot.exceptions.Error as e:
+                logger.error(
+                    f"Failed to update {properties.project}, retrying: {e}",
+                    exc_info=True,
+                )
+                pass
+            else:
+                return
             update_wikidata(properties)
         except Exception as e:
             logger.error(f"Failed to update {properties.project}: {e}", exc_info=True)
