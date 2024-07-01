@@ -12,19 +12,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Install poetry
-        run: |
-          pipx install poetry==1.8.2
-          poetry config virtualenvs.in-project true
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'poetry'
       - name: Install dependencies
-        run: poetry install
+        run: uv sync
       - name: Check formatting
-        run: .venv/bin/ruff format . --check
+        run: uv run ruff format . --check
       - name: Run ruff
-        run: .venv/bin/ruff check .
+        run: uv run ruff check .
       - name: Run pytest
-        run: .venv/bin/pytest
+        run: uv run pytest
