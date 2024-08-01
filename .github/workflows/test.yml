@@ -1,6 +1,6 @@
 name: Tests
 
-on: [ push, pull_request ]
+on: [push, pull_request]
 
 jobs:
   test:
@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         # As of this writing, multidict isn't 3.13 compatible yet
-        python-version: [ "3.12" ]
+        python-version: ["3.12"]
 
     steps:
       - uses: actions/checkout@v4

@@ -8,9 +8,9 @@ For free software projects with a GitHub repository listed in Wikidata,
 this script will perform the following steps,
 using metadata collected from the GitHub API:
 
-* Import all stable releases and the release dates, including release data, source, and a source title
-* Update the project website
-* Normalize the GitHub link
+- Import all stable releases and the release dates, including release data, source, and a source title
+- Update the project website
+- Normalize the GitHub link
 
 It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki-bot/Exceptions) from being edited by the bot, and also to [allow using tags](https://www.wikidata.org/w/index.php?title=User:Github-wiki-bot/Whitelist) for projects without GitHub releases.
 
@@ -33,16 +33,11 @@ Run `pytest`, `ruff format` and `ruff check` after making code changes.
 
 ## Implementation notes
 
-First, a SPARQL query gathers all the free software projects in Wikidata
-which have a GitHub repository specified in the [source code repository][repo-property] property.
-For each entry, a cached request to the GitHub API is made,
-which is authenticated by the OAuth key.
-The wikidata entries are then inserted using a "exists or insert" logic.
-For each entry, the GitHub api link is added as reference.
+First, a SPARQL query gathers all the free software projects in Wikidata which have a GitHub repository specified in the [source code repository][repo-property] property. For each entry, a cached request to the GitHub API is made, which is authenticated by the OAuth key. The wikidata entries are then inserted using a "exists or insert" logic. For each entry, the GitHub api link is added as reference.
 
 ## Why does the bot not work for item Q…?
 
-* Does the entity already have a VCS repository set? Use [this query][no-repo-query]
+- Does the entity already have a VCS repository set? Use [this query][no-repo-query]
   to determine entities without a repository.
 
 ## Statistics
