@@ -5,6 +5,7 @@ apicache-py3
 apicache/
 cache/
 config.json
+dist/
 log/
 redirects.json
 throttle.ctrl
