@@ -1,6 +1,6 @@
 version = 1
 requires-python = ">=3.12"
-environment-markers = [
+resolution-markers = [
     "python_full_version < '3.13'",
     "python_full_version >= '3.13'",
 ]
