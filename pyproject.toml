@@ -9,7 +9,7 @@ authors = [
     { name = "Michael Schönitzer", email = "michael@schoenitzer.de" },
 ]
 dependencies = [
-    "CacheControl[filecache]>=0.14,<0.15",
+    "CacheControl[filecache] >=0.14,<0.15",
     "mwparserfromhell >=0.6.4,<0.7",
     "pydantic >=2.7.1",
     "pywikibot >=9.1.2,<10",

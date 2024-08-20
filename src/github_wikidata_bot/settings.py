@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from subprocess import CalledProcessError
 
 import pywikibot
 import requests
@@ -49,9 +50,9 @@ class Settings:
     whitelist_page = "User:Github-wiki-bot/Whitelist"
     blacklist: list[str] = []
     whitelist: list[str] = []
-    sparql_file = Path("free_software_items.rq")
+    sparql_file = Path("src/free_software_items.rq")
 
-    license_sparql_file = Path("free_licenses.rq")
+    license_sparql_file = Path("src/free_licenses.rq")
     licenses: dict[str, str] = {}
 
     # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
@@ -152,7 +153,7 @@ class Settings:
                 .strip()
                 .decode()
             )
-        except subprocess.CalledProcessError:
+        except (CalledProcessError, FileNotFoundError):
             version = "unknown"
         release = "github-wikidata-bot@" + version
         sentry_sdk.init(

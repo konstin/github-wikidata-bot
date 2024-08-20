@@ -7,5 +7,4 @@ cache/
 config.json
 log/
 redirects.json
-src/
 throttle.ctrl
