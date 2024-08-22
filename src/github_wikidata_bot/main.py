@@ -329,7 +329,7 @@ def update_project(project: WikidataProject):
     logger.info(f"## {project.projectLabel}: {project.project}")
     try:
         properties = get_data_from_github(project.repo, project)
-    except requests.exceptions.HTTPError as e:
+    except requests.exceptions.RequestException as e:
         logger.error(
             f"Github API request for {project.projectLabel} ({project.wikidata_id}) failed: {e}",
             exc_info=True,
