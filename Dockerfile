@@ -1,12 +1,18 @@
 FROM ubuntu AS builder
 
-COPY --from=ghcr.io/astral-sh/uv /uv /bin/uv
 RUN mkdir /app
 WORKDIR /app
+ENV UV_PYTHON_INSTALL_DIR=/app/python
+
+COPY --from=ghcr.io/astral-sh/uv:0.4 /uv /bin/uv
+
+# Install the dependencies
 ADD pyproject.toml uv.lock /app/
-RUN mkdir -p src/github_wikidata_bot \
-    && touch src/github_wikidata_bot/__init__.py \
-    && UV_PYTHON_INSTALL_DIR=/app/python uv sync --no-dev
+RUN uv sync --no-dev --no-install-project --locked
+
+# Install the project itself
+ADD src /app/src
+RUN uv sync --no-dev --locked
 
 FROM ubuntu
 
