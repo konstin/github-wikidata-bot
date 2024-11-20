@@ -21,8 +21,8 @@ dependencies = [
 dev-dependencies = [
     "httpx >=0.27.0,<0.28",
     "pytest >=8.0.0,<9",
-    "ruff >=0.6.0,<0.7",
-    "tqdm >=4.66.4,<4.67",
+    "ruff >=0.7.0,<0.8",
+    "tqdm >=4.66.4,<5",
     "types-requests >=2.31.0.20240406,<3",
 ]
 
