@@ -157,7 +157,7 @@ def update_wikidata(project: Project):
         item = ItemPage(Settings.bot.repo, title=q_value)
         item.get()
 
-    urls = item.claims[Properties.source_code_repository.value]
+    urls = item.claims.get(Properties.source_code_repository.value, [])
     if len(urls) == 1:
         url_raw = urls[0].target
         url_normalized = str(normalize_url(url_raw))
