@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Install dependencies
-        run: uv sync -p ${{ matrix.python-version }}
+        run: uv sync -p ${{ matrix.python-version }} --locked
       - name: Check formatting
         run: uv run ruff format --check
       - name: Run ruff
