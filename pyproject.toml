@@ -17,8 +17,8 @@ dependencies = [
     "yarl >=1.9,<2",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "httpx >=0.28.0,<0.29",
     "pytest >=8.0.0,<9",
     "ruff >=0.8.1,<0.9",
