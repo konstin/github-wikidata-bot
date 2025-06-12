@@ -56,7 +56,7 @@ class Settings:
     licenses: dict[str, str] = {}
 
     # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
-    edit_group_hash = f"{random.randrange(0, 2 ** 48):x}"
+    edit_group_hash = f"{random.randrange(0, 2**48):x}"
     """https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots"""
     edit_summary = (
         f"Update with GitHub data "

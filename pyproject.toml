@@ -11,8 +11,8 @@ authors = [
 dependencies = [
     "CacheControl[filecache] >=0.14,<0.15",
     "mwparserfromhell >=0.6.4,<0.7",
-    "pydantic >=2.7.1",
-    "pywikibot >=9.1.2,<10",
+    "pydantic >=2.7.1,<3",
+    "pywikibot >=10.1.0,<11",
     "sentry-sdk >=2.0.1,<3",
     "yarl >=1.9,<2",
 ]
@@ -21,7 +21,7 @@ dependencies = [
 dev = [
     "httpx >=0.28.0,<0.29",
     "pytest >=8.0.0,<9",
-    "ruff >=0.8.1,<0.9",
+    "ruff >=0.11,<0.12",
     "tqdm >=4.66.4,<5",
     "types-requests >=2.31.0.20240406,<3",
 ]
