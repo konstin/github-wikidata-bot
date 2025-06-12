@@ -16,7 +16,7 @@ It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki
 
 ## Setup and usage
 
-First install python 3.12 and [poetry][poetry], then run `poetry install`.
+First install python 3.12 and [uv][uv], then run `uv sync`.
 
 [Generate a personal access token on GitHub][github-token]. Create a `config.json` file with that token and your Wikidata username:
 
@@ -44,7 +44,7 @@ First, a SPARQL query gathers all the free software projects in Wikidata which h
 
 You can find detailed statistics on [wmflabs][wmflabs].
 
-[poetry]: https://github.com/sdispater/poetry
+[uv]: https://docs.astral.sh/uv/
 [github-token]: https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
 [repo-property]: https://www.wikidata.org/wiki/Property:P1324
 [no-repo-query]: https://github.com/konstin/github-wikidata-bot/blob/main/src/free_software_without_repository.rq

@@ -107,13 +107,8 @@ def analyse_release(
         and match_tag_name != match_name
     ):
         logger.info(
-            "Conflicting versions {} and {} for {} and {} in {}".format(
-                match_tag_name,
-                match_name,
-                release["tag_name"],
-                release["name"],
-                project_name,
-            )
+            f"Conflicting versions {match_tag_name} and {match_name}"
+            f"for {release['tag_name']} and {release['name']} in {project_name}"
         )
         return None
     elif match_tag_name is not None:
@@ -266,12 +261,12 @@ def get_data_from_github(url: str, properties: WikidataProject) -> Project:
         ]
         filtered = [v for v in extracted_tags if v is not None]
         filtered.sort(key=lambda x: SimpleSortableVersion(x.version))
-        if len(filtered) > 300:
+        if len(filtered) > Settings.max_tags:
             logger.info(
-                f"Limiting {properties.wikidata_id} to 300 of {len(filtered)} tags "
+                f"Limiting {properties.wikidata_id} to {Settings.max_tags} of {len(filtered)} tags "
                 f"for performance reasons."
             )
-            filtered = filtered[-300:]
+            filtered = filtered[-Settings.max_tags :]
         extracted = list(map(get_date_from_tag_url, filtered))
         if invalid_version_strings:
             message = ", ".join(invalid_version_strings)

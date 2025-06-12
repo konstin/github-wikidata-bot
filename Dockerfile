@@ -1,26 +1,23 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 WORKDIR /app
 
 # Install the dependencies
-ADD pyproject.toml uv.lock /app/
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project
-
-ADD pyproject.toml uv.lock /app/
-RUN uv sync --no-dev --no-install-project --locked
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-install-project --no-dev
 
 # Install the project itself
-ADD src /app/src
-ADD pyproject.toml uv.lock /app/
-RUN uv sync --no-dev --locked
+COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-RUN mkdir /app
 WORKDIR /app
-COPY --from=builder /app/.venv /app/.venv
-ADD user-config.py /app/
-ADD src /app/src
-ENTRYPOINT ["/app/.venv/bin/python"]
-CMD ["-m", "github_wikidata_bot"]
+
+RUN groupadd -g 1000 app && useradd -u 1000 -g app app
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY user-config.py src ./
+USER app
+ENV PATH="/app/.venv/bin:$PATH"
+ENTRYPOINT ["python", "-m", "github_wikidata_bot"]

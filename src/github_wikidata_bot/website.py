@@ -60,7 +60,7 @@ _other_property_matchers = [
 ]
 
 
-def is_website_other_property(url: str) -> False:
+def is_website_other_property(url: str) -> bool:
     """Check if the github website url should be represented by a different property than official website (P856), see
     <https://www.wikidata.org/wiki/Property_talk:P856>."""
     for pattern in _other_property_matchers:

@@ -48,6 +48,8 @@ class Settings:
 
     blacklist_page = "User:Github-wiki-bot/Exceptions"
     whitelist_page = "User:Github-wiki-bot/Whitelist"
+    max_releases = 100
+    max_tags = 300
     blacklist: list[str] = []
     whitelist: list[str] = []
     sparql_file = Path("src/free_software_items.rq")

@@ -223,11 +223,11 @@ def update_wikidata(project: Project):
             )
             latest_version = None
 
-    if len(stable_releases) > 100:
+    if len(stable_releases) > Settings.max_releases:
         logger.info(
-            f"Limiting {q_value} to 100 of {len(stable_releases)} stable releases"
+            f"Limiting {q_value} to {Settings.max_releases} of {len(stable_releases)} stable releases"
         )
-        stable_releases = stable_releases[-100:]
+        stable_releases = stable_releases[-Settings.max_releases :]
     else:
         logger.info(f"There are {len(stable_releases)} stable releases")
 
@@ -347,7 +347,6 @@ def update_project(project: WikidataProject):
                     f"Failed to update {properties.project}, retrying: {e}",
                     exc_info=True,
                 )
-                pass
             else:
                 return
             update_wikidata(properties)
