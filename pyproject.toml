@@ -21,7 +21,7 @@ dependencies = [
 dev = [
     "httpx >=0.28.0,<0.29",
     "pytest >=8.0.0,<9",
-    "ruff >=0.12,<0.13",
+    "ruff >=0.14,<0.15",
     "tqdm >=4.66.4,<5",
     "types-requests >=2.31.0.20240406,<3",
 ]
@@ -33,5 +33,5 @@ extend-select = ["B", "PT", "PTH", "TRY", "UP"]
 ignore_missing_imports = true
 
 [build-system]
-requires = ["uv_build >=0.7.22,<0.8"]
+requires = ["uv_build >=0.9,<0.10"]
 build-backend = "uv_build"

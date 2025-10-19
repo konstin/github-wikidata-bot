@@ -37,6 +37,10 @@ def query_projects(
     projects = []
     logger.info(f"{len(response)} projects were found by the sparql query")
     for project in project_list:
+        # https://phabricator.wikimedia.org/T407702
+        if project.wikidata_id == "Q124831300":
+            continue
+
         if (
             project_filter
             and project_filter.lower() not in project.project.lower()
