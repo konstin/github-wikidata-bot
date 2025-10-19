@@ -24,7 +24,7 @@ from .utils import parse_filter_list
 _session = requests.Session()
 _session.mount("https://", HTTPAdapter(max_retries=Retry(total=3, backoff_factor=0.5)))
 _cached_session = CacheControl(
-    _session, cache=FileCache("cache"), heuristic=ExpiresAfter(days=30)
+    _session, cache=FileCache("cache"), heuristic=ExpiresAfter(days=1)
 )
 
 
