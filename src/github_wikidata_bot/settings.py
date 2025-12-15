@@ -134,16 +134,20 @@ class Settings:
             config = json.loads(config_json.read_text())
         else:
             config = {}
-        github_oauth_token = github_oauth_token or config.get("github-oauth-token")
-        if not github_oauth_token:
+
+        if github_oauth_token is None:
+            github_oauth_token: str | None = config.get("github-oauth-token")
+
+        if github_oauth_token is None:
             print("Please add github-oauth-token to config.json", file=sys.stderr)
             sys.exit(1)
-        cls.cached_session.headers.update(
-            {"Authorization": "token " + github_oauth_token}
-        )
+        else:
+            cls.cached_session.headers.update(
+                {"Authorization": "token " + github_oauth_token}
+            )
 
-        if dsn := config.get("sentry-dsn"):
-            cls.init_sentry(dsn)
+            if dsn := config.get("sentry-dsn"):
+                cls.init_sentry(dsn)
 
     @classmethod
     def init_sentry(cls, dsn: str):
@@ -181,4 +185,4 @@ class Settings:
     def __get_filter_list(page_title: str) -> list[str]:
         site = pywikibot.Site()
         page = pywikibot.Page(site, page_title)
-        return parse_filter_list(page.text)
+        return parse_filter_list(page.text)  # ty: ignore[invalid-argument-type]
