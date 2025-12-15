@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import enum
 import logging.config
 from typing import Any
@@ -325,7 +326,7 @@ def update_wikidata(project: Project):
 
 
 @sentry_sdk.trace
-def update_project(project: WikidataProject):
+async def update_project(project: WikidataProject):
     logger.info(f"## {project.projectLabel}: {project.project}")
     try:
         properties = get_data_from_github(project.repo, project)
@@ -361,8 +362,14 @@ def run(project_filter: str | None, ignore_blacklist: bool):
     logger.info(f"{len(projects)} projects were found")
     logger.info("# Processing projects")
     for project in projects:
-        with sentry_sdk.start_transaction(name="Update project"):
-            update_project(project)
+        with sentry_sdk.start_transaction(name="Update project") as transaction:
+            transaction.set_data("project", project.project)
+            transaction.set_data("project-label", project.projectLabel)
+            try:
+                asyncio.run(asyncio.wait_for(update_project(project), timeout=60))
+            except TimeoutError:
+                logger.warning(f"Timeout processing {project.projectLabel}")
+
     logger.info("# Finished successfully")
 
 
