@@ -68,6 +68,7 @@ def get_json_cached(url: str) -> dict:
     """
     Get JSON from an API and cache the result
     """
+    print(url)
     response = Settings.cached_session.get(url)
     response.raise_for_status()
     try:
@@ -83,11 +84,14 @@ def get_all_pages(url: str) -> list[dict]:
     page_number = 1
     results: list[dict] = []
     while True:
-        page = get_json_cached(url + "?page=" + str(page_number))
+        page = get_json_cached(f"{url}?page={page_number}&per_page=100")
         if not page:
             break
         page_number += 1
         results += page
+        # Assumption: github returns 100 entries per page when we request it.
+        if len(page) < 100:
+            break
     return results
 
 
