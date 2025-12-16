@@ -106,9 +106,9 @@ def analyse_release(
         and match_name is not None
         and match_tag_name != match_name
     ):
-        logger.info(
-            f"Conflicting versions {match_tag_name} and {match_name}"
-            f"for {release['tag_name']} and {release['name']} in {project_name}"
+        logger.debug(
+            f"Conflicting versions {match_tag_name} and {match_name} "
+            f"for tag {release['tag_name']} and name {release['name']} in {project_name}"
         )
         return None
     elif match_tag_name is not None:
@@ -122,7 +122,7 @@ def analyse_release(
 
     # Often prereleases aren't marked as such, so we need manually catch those cases
     if not release["prerelease"] and release_type != "stable":
-        logger.info(f"Diverting release type: {original_version}")
+        logger.debug(f"Diverting release type: {original_version}")
         release["prerelease"] = True
     elif release["prerelease"] and release_type == "stable":
         release_type = "unstable"
@@ -208,10 +208,6 @@ async def get_data_from_github(
 
     All data is preprocessed, i.e. the version numbers are extracted and
     unmarked prereleases are discovered
-
-    :param url: The url of the github repository
-    :param properties: The already gathered information
-    :return: dict of dicts
     """
     # "retrieved" does only accept dates without time, so create a timestamp with no
     # date

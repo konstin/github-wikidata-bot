@@ -39,7 +39,8 @@ class Settings:
     max_tags = 300
     blacklist: list[str] = []
     whitelist: list[str] = []
-    sparql_file = Path("src/free_software_items.rq")
+    query_projects = Path("src/free_software_items.rq")
+    query_versions = Path("src/free_software_versions.rq")
 
     license_sparql_file = Path("src/free_licenses.rq")
     licenses: dict[str, str] = {}

@@ -2,23 +2,33 @@ import argparse
 import asyncio
 import enum
 import logging.config
+import textwrap
+import time
 from typing import Any
 
 import pywikibot
 import sentry_sdk
 from hishel import AsyncSqliteStorage
 from hishel.httpx import AsyncCacheClient
-from httpx import AsyncClient, HTTPError
+from httpx import AsyncClient, HTTPError, HTTPStatusError
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.exceptions import APIError
 
-from .github import Project, get_data_from_github
+from .github import (
+    Project,
+    analyse_release,
+    analyse_tag,
+    get_data_from_github,
+    get_json_cached,
+)
 from .redirects import RedirectDict
 from .settings import Settings
-from .sparql import WikidataProject, query_projects
+from .sparql import WikidataProject, query_best_versions, query_projects
 from .utils import (
     SimpleSortableVersion,
     github_repo_to_api,
+    github_repo_to_api_releases,
+    github_repo_to_api_tags,
     is_edit_conflict,
     normalize_url,
 )
@@ -201,9 +211,8 @@ async def update_wikidata(project: Project, client: AsyncClient):
             for release in stable_releases
             if versions.count(release.version) > 1
         ]
-        logger.info(
-            f"There are duplicate releases in {q_value}: {', '.join(duplicates)}"
-        )
+        message = textwrap.shorten(", ".join(duplicates), width=200, placeholder="...")
+        logger.info(f"There are duplicate releases in {q_value}: {message}")
         return
 
     latest_version: str | None = stable_releases[-1].version
@@ -327,17 +336,96 @@ async def update_wikidata(project: Project, client: AsyncClient):
                 existing.changeRank("preferred", summary=Settings.edit_summary)
 
 
-@sentry_sdk.trace
-async def update_project(project: WikidataProject, client: AsyncClient):
-    logger.info(f"## {project.projectLabel}: {project.project}")
+async def check_fast_path(
+    project: WikidataProject, best_versions: dict[str, list[str]], client: AsyncClient
+) -> bool:
+    """Check whether the latest github release matches the latest version on wikidata, and if so,
+    skip the expensive processing."""
+    if not project.projectLabel:
+        logger.info(f"No fast path, no project label: {project.projectLabel}")
+        return False
+
+    if len(best_versions.get(project.project, [])) == 1:
+        project_version = best_versions[project.project][0]
+    else:
+        project_version = None
+
+    api_url = github_repo_to_api_releases(project.repo)
     try:
-        properties = await get_data_from_github(project.repo, project, client)
+        releases = await get_json_cached(api_url + "?per_page=1", client)
+    except HTTPError as e:
+        logger.info(f"No fast path, fetch releases errored: {e}")
+        return False
+    if len(releases) == 1:
+        result = analyse_release(releases[0], {"name": project.projectLabel})
+        if result:
+            if result.version == project_version:
+                logger.info(f"Fresh using releases fast path: {project_version}")
+                return True
+            else:
+                logger.info(
+                    f"No fast path, wikidata: {best_versions.get(project.project, [])}, releases: {result.version}"
+                )
+                return False
+        else:
+            logger.info("No fast path, release failed to analyse")
+            return False
+    else:
+        api_url = github_repo_to_api_tags(project.repo)
+        try:
+            tags = await get_json_cached(api_url, client)
+        except HTTPStatusError as e:
+            # GitHub raises a 404 if there are no tags
+            if e.response.status_code == 404:
+                if not best_versions.get(project.project):
+                    logger.info("Fresh, no releases or tags")
+                    return True
+                else:
+                    logger.info(
+                        f"No fast path, no releases or tags but a wikidata version {project_version}"
+                    )
+                    return False
+            else:
+                logger.info(f"No fast path, fetch tags errored: {e}")
+                return False
+        else:
+            project_info = await get_json_cached(
+                github_repo_to_api(project.repo), client
+            )
+            extracted_tags = [
+                analyse_tag(release, project_info, []) for release in tags
+            ]
+            filtered = [v for v in extracted_tags if v is not None]
+            filtered.sort(key=lambda x: SimpleSortableVersion(x.version))
+            if len(filtered) > 0:
+                if filtered[-1].version == project_version:
+                    logger.info(f"Fresh using tags fast path: {project_version}")
+                    return True
+                else:
+                    logger.info(
+                        f"No fast path, wikidata: {best_versions.get(project.project, [])}, tags: {filtered[-1].version}"
+                    )
+                    return False
+            else:
+                logger.info("No fast path, tag failed to analyse")
+                return False
+
+
+@sentry_sdk.trace
+async def update_project(
+    project: WikidataProject, best_versions: dict[str, list[str]], client: AsyncClient
+):
+    if await check_fast_path(project, best_versions, client):
+        return True
+
+    try:
+        properties: Project = await get_data_from_github(project.repo, project, client)
     except HTTPError as e:
         logger.error(
             f"Github API request for {project.projectLabel} ({project.wikidata_id}) failed: {e}",
             exc_info=True,
         )
-        return
+        return False
 
     if Settings.do_update_wikidata:
         try:
@@ -351,11 +439,13 @@ async def update_project(project: WikidataProject, client: AsyncClient):
                     exc_info=True,
                 )
             else:
-                return
+                return False
             await update_wikidata(properties, client)
         except Exception as e:
             logger.error(f"Failed to update {properties.project}: {e}", exc_info=True)
             raise
+
+    return False
 
 
 async def run(project_filter: str | None, ignore_blacklist: bool):
@@ -368,15 +458,26 @@ async def run(project_filter: str | None, ignore_blacklist: bool):
         projects = query_projects(project_filter, ignore_blacklist)
         logger.info(f"{len(projects)} projects were found")
         logger.info("# Processing projects")
-        for project in projects:
+        best_versions = query_best_versions()
+
+        for idx, project in enumerate(projects):
             with sentry_sdk.start_transaction(name="Update project") as transaction:
                 transaction.set_data("project", project.project)
                 transaction.set_data("project-label", project.projectLabel)
+                logger.info(
+                    f"## [{idx}/{len(projects)}] {project.projectLabel}: {project.project}"
+                )
+
+                start = time.time()
                 try:
-                    await asyncio.wait_for(update_project(project, client), timeout=60)
+                    await asyncio.wait_for(
+                        update_project(project, best_versions, client), timeout=60
+                    )
                 except TimeoutError:
                     logger.warning(f"Timeout processing {project.projectLabel}")
 
+                duration = time.time() - start
+                logger.info(f"{project.projectLabel} took {duration:.3f}s")
         logger.info("# Finished successfully")
 
 

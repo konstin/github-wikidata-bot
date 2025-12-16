@@ -1,6 +1,7 @@
+# Find the best version(s) for projects
 PREFIX schema: <http://schema.org/>
 
-SELECT ?project ?projectLabel ?repo WHERE {
+SELECT ?project ?version WHERE {
   # Items with a repo on github
   ?project wdt:P1324 ?repo.
 
@@ -10,6 +11,6 @@ SELECT ?project ?projectLabel ?repo WHERE {
   # Exclude projects not hosted on github
   FILTER(contains(STR(?repo), "://github.com/")).
 
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "mul,en" . }
+  # Find versions with the best rank, to check if it matches the latest github release
+  ?project wdt:P348 ?version.
 }
-ORDER BY LCASE(?projectLabel)
