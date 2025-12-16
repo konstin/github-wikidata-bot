@@ -1,7 +1,5 @@
 # GitHub to Wikidata bot
 
-![Tests](https://github.com/konstin/github-wikidata-bot/workflows/Tests/badge.svg)
-
 Update Wikidata entries using metadata from GitHub.
 
 For free software projects with a GitHub repository listed in Wikidata,
@@ -16,7 +14,11 @@ It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki
 
 ## Setup and usage
 
-First install python 3.12 and [uv][uv], then run `uv sync`.
+Install [uv][uv] and install the dependencies:
+
+```console
+uv sync
+```
 
 [Generate a personal access token on GitHub][github-token]. Create a `config.json` file with that token and your Wikidata username:
 
@@ -27,9 +29,13 @@ First install python 3.12 and [uv][uv], then run `uv sync`.
 }
 ```
 
-Then run `main.py` in a terminal and enter the password for your bot account.
+Run the bot in a terminal and enter the password for your bot account:
 
-Run `pytest`, `ruff format` and `ruff check` after making code changes.
+```console
+uv run main.py
+```
+
+Run `pytest`, `ruff format`, `ruff check` and `ty check` after making code changes.
 
 ## Implementation notes
 
