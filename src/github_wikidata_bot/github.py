@@ -95,7 +95,7 @@ def get_all_pages(url: str) -> list[dict]:
 
 
 def analyse_release(
-        release: dict[str, Any], project_info: dict[str, Any]
+    release: dict[str, Any], project_info: dict[str, Any]
 ) -> Release | None:
     """
     Heuristics to find the version number and according meta-data for a release
@@ -105,9 +105,9 @@ def analyse_release(
     match_tag_name = extract_version(release.get("tag_name") or "", project_name)
     match_name = extract_version(release.get("name") or "", project_name)
     if (
-            match_tag_name is not None
-            and match_name is not None
-            and match_tag_name != match_name
+        match_tag_name is not None
+        and match_name is not None
+        and match_tag_name != match_name
     ):
         logger.info(
             f"Conflicting versions {match_tag_name} and {match_name}"
@@ -139,7 +139,7 @@ def analyse_release(
 
 
 def analyse_tag(
-        release: dict, project_info: dict, invalid_version_strings: list[str]
+    release: dict, project_info: dict, invalid_version_strings: list[str]
 ) -> ReleaseTag | None:
     """
     Heuristics to find the version number and according meta-data for a release
@@ -244,7 +244,7 @@ def get_data_from_github(url: str, properties: WikidataProject) -> Project:
         logger.info(f"{len(invalid_releases)} invalid releases: {message}")
 
     if Settings.read_tags and (
-            len(extracted) == 0 or properties.wikidata_id in Settings.whitelist
+        len(extracted) == 0 or properties.wikidata_id in Settings.whitelist
     ):
         logger.info("Falling back to tags")
         api_url = github_repo_to_api_tags(url)
@@ -269,7 +269,7 @@ def get_data_from_github(url: str, properties: WikidataProject) -> Project:
                 f"Limiting {properties.wikidata_id} to {Settings.max_tags} of {len(filtered)} tags "
                 f"for performance reasons."
             )
-            filtered = filtered[-Settings.max_tags:]
+            filtered = filtered[-Settings.max_tags :]
         extracted = list(map(get_date_from_tag_url, filtered))
         if invalid_version_strings:
             message = ", ".join(invalid_version_strings)
