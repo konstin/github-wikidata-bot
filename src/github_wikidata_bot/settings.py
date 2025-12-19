@@ -1,5 +1,4 @@
 import json
-import logging
 import logging.config
 import random
 import re
@@ -60,60 +59,6 @@ class Settings:
     calendar_model = bot.repo.calendarmodel()
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
-
-    @staticmethod
-    def init_logging(quiet: bool, http_debug: bool) -> None:
-        """
-        In cron jobs you do not want logging to stdout / stderr,
-        therefore the quiet option allows disabling that.
-        """
-        if quiet:
-            handlers = ["all", "error"]
-        else:
-            handlers = ["console", "all", "error"]
-
-        log_dir = Path("log")
-        log_dir.mkdir(exist_ok=True)
-
-        conf = {
-            "version": 1,
-            "formatters": {
-                "extended": {
-                    "format": "%(asctime)s %(levelname)-8s %(message)s",
-                    "class": "github_wikidata_bot.settings.NoTracebackFormatter",
-                }
-            },
-            "handlers": {
-                "console": {"class": "logging.StreamHandler", "formatter": "extended"},
-                "all": {
-                    "class": "logging.handlers.RotatingFileHandler",
-                    "filename": str(log_dir.joinpath("all.log")),
-                    "formatter": "extended",
-                    "maxBytes": 32 * 1024 * 1024,
-                    "backupCount": 10,
-                },
-                "error": {
-                    "class": "logging.handlers.RotatingFileHandler",
-                    "filename": str(log_dir.joinpath("error.log")),
-                    "formatter": "extended",
-                    "level": "WARN",
-                    "maxBytes": 32 * 1024 * 1024,
-                    "backupCount": 10,
-                },
-            },
-            "loggers": {"github_wikidata_bot": {"handlers": handlers, "level": "INFO"}},
-        }
-
-        logging.config.dictConfig(conf)
-
-        if http_debug:
-            from http.client import HTTPConnection
-
-            HTTPConnection.debuglevel = 1
-
-            requests_log = logging.getLogger("urllib3")
-            requests_log.setLevel(logging.DEBUG)
-            requests_log.propagate = True
 
     @classmethod
     def init_config(cls, github_oauth_token: str | None) -> None:
