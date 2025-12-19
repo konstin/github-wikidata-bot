@@ -4,6 +4,7 @@ import random
 import re
 import subprocess
 import sys
+from asyncio import Semaphore
 from pathlib import Path
 from subprocess import CalledProcessError
 
@@ -53,6 +54,7 @@ class Settings:
     )
 
     github_auth_headers: dict[str, str] = {}
+    github_api_limit = Semaphore(20)
 
     bot = pywikibot.WikidataBot(always=True)
     # pywikibot doesn't cache the calendar model, so let's do this manually

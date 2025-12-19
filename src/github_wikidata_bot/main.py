@@ -434,7 +434,9 @@ async def update_project(
         return True
 
     try:
-        properties: Project = await get_data_from_github(project.repo, project, client)
+        properties: Project = await get_data_from_github(
+            project.repo, project, client, settings
+        )
     except HTTPError as e:
         logger.error(
             f"Github API request for {project.projectLabel} ({project.wikidata_id}) failed: {e}",

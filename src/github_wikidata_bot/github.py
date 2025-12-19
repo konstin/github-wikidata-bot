@@ -3,7 +3,6 @@ import datetime
 import logging
 import textwrap
 import time
-from asyncio import Semaphore
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote_plus
@@ -209,7 +208,7 @@ async def get_date_from_tag_url(
 
 @sentry_sdk.trace
 async def get_data_from_github(
-    url: str, properties: WikidataProject, client: AsyncClient
+    url: str, properties: WikidataProject, client: AsyncClient, settings: Settings
 ) -> Project:
     """
     Retrieve the following data from github:
@@ -284,10 +283,8 @@ async def get_data_from_github(
 
         # Fetch tags in parallel
         # TODO: Don't use the API, use the git interface instead?
-        semaphore = Semaphore(20)
-
         async def tag_with_limit(tag: ReleaseTag) -> Release | None:
-            async with semaphore:
+            async with settings.github_api_limit:
                 return await get_date_from_tag_url(tag, client)
 
         extracted = list(
