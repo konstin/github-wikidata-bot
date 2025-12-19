@@ -1,3 +1,5 @@
+import asyncio
+from asyncio import Semaphore
 import datetime
 import logging
 import textwrap
@@ -269,7 +271,18 @@ async def get_data_from_github(
                 f"for performance reasons."
             )
             filtered = filtered[-Settings.max_tags :]
-        extracted = [(await get_date_from_tag_url(tag, client)) for tag in filtered]
+
+        # Fetch tags in parallel
+        # TODO: Don't use the API, use the git interface instead?
+        semaphore = Semaphore(20)
+
+        async def tag_with_limit(tag: ReleaseTag) -> Release | None:
+            async with semaphore:
+                return await get_date_from_tag_url(tag, client)
+
+        extracted = list(
+            await asyncio.gather(*[tag_with_limit(tag) for tag in filtered])
+        )
         if invalid_version_strings:
             message = ", ".join(invalid_version_strings)
             message = textwrap.shorten(message, width=200, placeholder="...")
