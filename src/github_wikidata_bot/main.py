@@ -53,9 +53,9 @@ class Properties(enum.Enum):
     license = "P275"
     version_type = "P548"
 
-    def new_claim(self, value: Any) -> Claim:
+    def new_claim(self, value: Any, settings: Settings) -> Claim:
         """Builds a new claim for this property and the given target value."""
-        claim = Claim(Settings.bot.repo, self.value)
+        claim = Claim(settings.bot.repo, self.value)
         claim.setTarget(value)
         return claim
 
@@ -70,6 +70,7 @@ class Properties(enum.Enum):
 def create_sources(
     url: str,
     retrieved: WbTime,
+    settings: Settings,
     title: str | None = None,
     date: WbTime | None = None,
 ) -> list[Claim]:
@@ -77,14 +78,14 @@ def create_sources(
     Gets or creates a `source` under the property `claim` to `url`
     """
     sources: list[Claim] = [
-        Properties.reference_url.new_claim(url),
-        Properties.retrieved.new_claim(retrieved),
+        Properties.reference_url.new_claim(url, settings),
+        Properties.retrieved.new_claim(retrieved, settings),
     ]
     if title:
         text = pywikibot.WbMonolingualText(title, "en")
-        sources.append(Properties.title.new_claim(text))
+        sources.append(Properties.title.new_claim(text, settings))
     if date:
-        sources.append(Properties.publication_date.new_claim(date))
+        sources.append(Properties.publication_date.new_claim(date, settings))
     return sources
 
 
@@ -93,6 +94,7 @@ def normalize_repo_url(
     url_normalized: str,
     url_raw: str,
     q_value: str,
+    settings: Settings,
 ):
     """Canonicalize the github url
     This use the format https://github.com/[owner]/[repo]
@@ -109,11 +111,11 @@ def normalize_repo_url(
     if source_p in item.claims and len(urls) == 2:
         if urls[0].getTarget() == url_normalized and urls[1].getTarget() == url_raw:
             logger.info("The old and the new url are already set, removing the old")
-            item.removeClaims(urls[1], summary=Settings.edit_summary)
+            item.removeClaims(urls[1], summary=settings.edit_summary)
             return
         if urls[0].getTarget() == url_raw and urls[1].getTarget() == url_normalized:
             logger.info("The old and the new url are already set, removing the old")
-            item.removeClaims(urls[0], summary=Settings.edit_summary)
+            item.removeClaims(urls[0], summary=settings.edit_summary)
             return
 
     if source_p in item.claims and len(urls) > 1:
@@ -132,14 +134,18 @@ def normalize_repo_url(
     # Add git as vcs and github as web ui
     url_claim.changeTarget(url_normalized)
     if Properties.vcs.value not in url_claim.qualifiers:
-        git = ItemPage(Settings.bot.repo, "Q186055")
-        url_claim.addQualifier(Properties.vcs.new_claim(git))
+        git = ItemPage(settings.bot.repo, "Q186055")
+        url_claim.addQualifier(Properties.vcs.new_claim(git, settings))
     if Properties.web_interface_software.value not in url_claim.qualifiers:
-        github = ItemPage(Settings.bot.repo, "Q364")
-        url_claim.addQualifier(Properties.web_interface_software.new_claim(github))
+        github = ItemPage(settings.bot.repo, "Q364")
+        url_claim.addQualifier(
+            Properties.web_interface_software.new_claim(github, settings)
+        )
 
 
-async def set_website(project: Project, client: AsyncClient) -> Claim | None:
+async def set_website(
+    project: Project, client: AsyncClient, settings: Settings
+) -> Claim | None:
     """Add the website if does not already exist"""
     if not project.website or not project.website.startswith("http"):
         return None
@@ -149,52 +155,54 @@ async def set_website(project: Project, client: AsyncClient) -> Claim | None:
         return None
 
     url = (await RedirectDict.get_or_add(project.website, client)) or project.website
-    return Properties.official_website.new_claim(url)
+    return Properties.official_website.new_claim(url, settings)
 
 
-def set_license(project: Project) -> Claim | None:
+def set_license(project: Project, settings: Settings) -> Claim | None:
     """Add the license if it does not already exist"""
-    if not project.license or project.license not in Settings.licenses:
+    if not project.license or project.license not in settings.licenses:
         return None
 
-    project_license = Settings.licenses[project.license]
-    page = pywikibot.ItemPage(Settings.bot.repo, project_license)
-    return Properties.license.new_claim(page)
+    project_license = settings.licenses[project.license]
+    page = pywikibot.ItemPage(settings.bot.repo, project_license)
+    return Properties.license.new_claim(page, settings)
 
 
 @sentry_sdk.trace
-async def update_wikidata(project: Project, client: AsyncClient):
+async def update_wikidata(project: Project, client: AsyncClient, settings: Settings):
     """Update wikidata entry with data from GitHub"""
     # Wikidata boilerplate
     q_value = project.project.replace("http://www.wikidata.org/entity/", "")
     with sentry_sdk.start_span(description="Get item page"):
-        item = ItemPage(Settings.bot.repo, title=q_value)
+        item = ItemPage(settings.bot.repo, title=q_value)
         item.get()
 
     urls = item.claims.get(Properties.source_code_repository.value, [])
     if len(urls) == 1:
         url_raw = urls[0].target
         url_normalized = str(normalize_url(url_raw))
-        if Settings.normalize_repo_url:
-            normalize_repo_url(item, url_normalized, url_raw, q_value)
+        if settings.normalize_repo_url:
+            normalize_repo_url(item, url_normalized, url_raw, q_value, settings)
     else:
         url_raw = project.repo
         url_normalized = str(normalize_url(url_raw))
 
     for claim, claim_kind in [
-        (await set_website(project, client), "website"),
-        (set_license(project), "license"),
+        (await set_website(project, client, settings), "website"),
+        (set_license(project, settings), "license"),
     ]:
         if not claim:
             continue
         claim.addSources(
             create_sources(
-                url=github_repo_to_api(url_normalized), retrieved=project.retrieved
+                url=github_repo_to_api(url_normalized),
+                retrieved=project.retrieved,
+                settings=settings,
             )
         )
         with sentry_sdk.start_span(description=f"Set {claim_kind}"):
-            Settings.bot.user_add_claim_unless_exists(
-                item, claim, exists_arg="", summary=Settings.edit_summary
+            settings.bot.user_add_claim_unless_exists(
+                item, claim, exists_arg="", summary=settings.edit_summary
             )
 
     # Add all stable releases
@@ -236,11 +244,11 @@ async def update_wikidata(project: Project, client: AsyncClient):
             )
             latest_version = None
 
-    if len(stable_releases) > Settings.max_releases:
+    if len(stable_releases) > settings.max_releases:
         logger.info(
-            f"Limiting {q_value} to {Settings.max_releases} of {len(stable_releases)} stable releases"
+            f"Limiting {q_value} to {settings.max_releases} of {len(stable_releases)} stable releases"
         )
-        stable_releases = stable_releases[-Settings.max_releases :]
+        stable_releases = stable_releases[-settings.max_releases :]
     else:
         logger.info(f"There are {len(stable_releases)} stable releases")
 
@@ -276,7 +284,7 @@ async def update_wikidata(project: Project, client: AsyncClient):
             logger.info(f"Setting normal rank for {existing.getTarget()}")
             try:
                 with sentry_sdk.start_span(description="Change rank to normal"):
-                    existing.changeRank("normal", summary=Settings.edit_summary)
+                    existing.changeRank("normal", summary=settings.edit_summary)
             except APIError as e:
                 if is_edit_conflict(e):
                     logger.error(
@@ -289,16 +297,19 @@ async def update_wikidata(project: Project, client: AsyncClient):
                 else:
                     raise
 
-        claim = Properties.software_version.new_claim(release.version)
-        claim.addQualifier(Properties.publication_date.new_claim(release.date))
-        stable_release = ItemPage(Settings.bot.repo, "Q2804309")
-        claim.addQualifier(Properties.version_type.new_claim(stable_release))
+        claim = Properties.software_version.new_claim(release.version, settings)
+        claim.addQualifier(
+            Properties.publication_date.new_claim(release.date, settings)
+        )
+        stable_release = ItemPage(settings.bot.repo, "Q2804309")
+        claim.addQualifier(Properties.version_type.new_claim(stable_release, settings))
         claim.addSources(
             create_sources(
                 url=release.page,
                 retrieved=project.retrieved,
                 title=f"Release {release.version}",
                 date=release.date,
+                settings=settings,
             )
         )
 
@@ -317,12 +328,12 @@ async def update_wikidata(project: Project, client: AsyncClient):
                 f"Creating {release.version} (rank: {'preferred' if set_preferred_rank else 'default'})"
             )
         with sentry_sdk.start_span(description="Create version"):
-            added = Settings.bot.user_add_claim_unless_exists(
+            added = settings.bot.user_add_claim_unless_exists(
                 item,
                 claim,
                 # add when claim with same property, but not same target exists
                 exists_arg="p",
-                summary=Settings.edit_summary,
+                summary=settings.edit_summary,
             )
         if (
             not added
@@ -334,7 +345,7 @@ async def update_wikidata(project: Project, client: AsyncClient):
                 f"Claim exists, changing to preferred rank for {claim.getTarget()}"
             )
             with sentry_sdk.start_span(description="Change rank to preferred"):
-                existing.changeRank("preferred", summary=Settings.edit_summary)
+                existing.changeRank("preferred", summary=settings.edit_summary)
 
 
 async def check_fast_path(
@@ -414,7 +425,10 @@ async def check_fast_path(
 
 @sentry_sdk.trace
 async def update_project(
-    project: WikidataProject, best_versions: dict[str, list[str]], client: AsyncClient
+    project: WikidataProject,
+    best_versions: dict[str, list[str]],
+    client: AsyncClient,
+    settings: Settings,
 ):
     if await check_fast_path(project, best_versions, client):
         return True
@@ -428,12 +442,12 @@ async def update_project(
         )
         return False
 
-    if Settings.do_update_wikidata:
+    if settings.do_update_wikidata:
         try:
             # There are many spurious errors, mostly because pywikibot lacks http retrying,
             # so we just retry any pywikibot once.
             try:
-                await update_wikidata(properties, client)
+                await update_wikidata(properties, client, settings)
             except pywikibot.exceptions.Error as e:
                 logger.error(
                     f"Failed to update {properties.project}, retrying: {e}",
@@ -441,7 +455,7 @@ async def update_project(
                 )
             else:
                 return False
-            await update_wikidata(properties, client)
+            await update_wikidata(properties, client, settings)
         except Exception as e:
             logger.error(f"Failed to update {properties.project}: {e}", exc_info=True)
             raise
@@ -503,7 +517,7 @@ def init_logging(quiet: bool, http_debug: bool) -> None:
         requests_log.propagate = True
 
 
-async def run(project_filter: str | None, ignore_blacklist: bool):
+async def run(project_filter: str | None, ignore_blacklist: bool, settings: Settings):
     storage = AsyncSqliteStorage(
         database_path="cache-http.db",
         default_ttl=60 * 60 * 24,  # 1 day
@@ -526,7 +540,8 @@ async def run(project_filter: str | None, ignore_blacklist: bool):
                 start = time.time()
                 try:
                     await asyncio.wait_for(
-                        update_project(project, best_versions, client), timeout=60
+                        update_project(project, best_versions, client, settings),
+                        timeout=60,
                     )
                 except TimeoutError:
                     logger.warning(f"Timeout processing {project.projectLabel}")
@@ -548,8 +563,6 @@ def main():
     args = parser.parse_args()
 
     init_logging(args.quiet, args.debug_http)
-    Settings.init_config(args.github_oauth_token)
-    Settings.init_licenses()
-    Settings.init_filter_lists()
+    settings = Settings(args.github_oauth_token)
 
-    asyncio.run(run(args.filter, args.ignore_blacklist))
+    asyncio.run(run(args.filter, args.ignore_blacklist, settings))

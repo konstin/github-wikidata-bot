@@ -60,8 +60,7 @@ class Settings:
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
 
-    @classmethod
-    def init_config(cls, github_oauth_token: str | None) -> None:
+    def __init__(self, github_oauth_token: str | None) -> None:
         config_json = Path("config.json")
         if config_json.exists():
             config = json.loads(config_json.read_text())
@@ -75,13 +74,16 @@ class Settings:
             print("Please add github-oauth-token to config.json", file=sys.stderr)
             sys.exit(1)
         else:
-            cls.github_auth_headers = {"Authorization": "token " + github_oauth_token}
+            self.github_auth_headers = {"Authorization": "token " + github_oauth_token}
+
+        self.init_licenses()
+        self.init_filter_lists()
 
         if dsn := config.get("sentry-dsn"):
-            cls.init_sentry(dsn)
+            self.init_sentry(dsn)
 
-    @classmethod
-    def init_sentry(cls, dsn: str):
+    @staticmethod
+    def init_sentry(dsn: str):
         try:
             version = (
                 subprocess.check_output(
@@ -101,19 +103,17 @@ class Settings:
             profiles_sample_rate=1.0,
         )
 
-    @classmethod
-    def init_licenses(cls) -> None:
-        response = sparql.SparqlQuery().select(cls.license_sparql_file.read_text())
+    def init_licenses(self) -> None:
+        response = sparql.SparqlQuery().select(self.license_sparql_file.read_text())
         assert response is not None
-        cls.licenses = {row["spdx"]: row["license"][31:] for row in response}
+        self.licenses = {row["spdx"]: row["license"][31:] for row in response}
 
-    @classmethod
-    def init_filter_lists(cls) -> None:
-        cls.blacklist = cls.__get_filter_list(cls.blacklist_page)
-        cls.whitelist = cls.__get_filter_list(cls.whitelist_page)
+    def init_filter_lists(self) -> None:
+        self.blacklist = self._get_filter_list(self.blacklist_page)
+        self.whitelist = self._get_filter_list(self.whitelist_page)
 
     @staticmethod
-    def __get_filter_list(page_title: str) -> list[str]:
+    def _get_filter_list(page_title: str) -> list[str]:
         site = pywikibot.Site()
         page = pywikibot.Page(site, page_title)
         return parse_filter_list(page.text)  # ty: ignore[invalid-argument-type]

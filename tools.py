@@ -27,7 +27,7 @@ async def debug_version_handling(
         if not no_sampling:
             projects = safe_sample(projects, threshold)
         for project in projects:
-            project_info = get_json_cached(github_repo_to_api(project.repo))
+            project_info = await get_json_cached(github_repo_to_api(project.repo))
             apiurl = github_repo_to_api_releases(project.repo)
             github_releases = await get_all_pages(apiurl, client)
             if not no_sampling:
@@ -53,5 +53,5 @@ if __name__ == "__main__":
     parser.add_argument("--github-oauth-token")
     args = parser.parse_args()
 
-    Settings.init_config(args.github_oauth_token)
+    settings = Settings(args.github_oauth_token)
     asyncio.run(debug_version_handling(args.threshold, args.maxsize, args.no_sampling))
