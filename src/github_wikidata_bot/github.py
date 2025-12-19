@@ -75,12 +75,17 @@ async def get_json_cached(url: str, client: AsyncClient):
         and response.headers.get("x-ratelimit-remaining") == "0"
     ):
         reset = response.headers["x-ratelimit-reset"]
-        seconds_to_reset = time.time() - int(reset)
+        seconds_to_reset = int(reset) - time.time()
         logger.info(
-            f"github rate limit exceed, sleeping until reset in {seconds_to_reset}s"
+            f"github rate limit exceed, sleeping until reset in {int(seconds_to_reset)}s"
         )
         # Sleep a second longer as buffer
         await asyncio.sleep(seconds_to_reset + 1)
+        response = await client.get(url, headers=Settings.github_auth_headers)
+
+    if response.status_code == 429:
+        logger.info("github rate limit exceed, sleeping for 60s")
+        await asyncio.sleep(60)
         response = await client.get(url, headers=Settings.github_auth_headers)
 
     response.raise_for_status()
