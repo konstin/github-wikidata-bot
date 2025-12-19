@@ -4,8 +4,8 @@ import logging
 from asyncio import Semaphore
 from pathlib import Path
 
-from httpx import AsyncClient
 import tqdm
+from httpx import AsyncClient
 
 from github_wikidata_bot.sparql import query_projects
 from github_wikidata_bot.utils import github_repo_to_api

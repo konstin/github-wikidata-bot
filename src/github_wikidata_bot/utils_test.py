@@ -1,10 +1,10 @@
 from pywikibot.exceptions import APIError
 
 from .utils import (
-    parse_filter_list,
     github_repo_to_api_releases,
-    normalize_url,
     is_edit_conflict,
+    normalize_url,
+    parse_filter_list,
 )
 
 exceptions_page = """

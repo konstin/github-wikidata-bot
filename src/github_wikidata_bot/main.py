@@ -5,20 +5,22 @@ import logging.config
 from typing import Any
 
 import pywikibot
-import requests
 import sentry_sdk
+from hishel import AsyncSqliteStorage
+from hishel.httpx import AsyncCacheClient
+from httpx import AsyncClient, HTTPError
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.exceptions import APIError
 
 from .github import Project, get_data_from_github
 from .redirects import RedirectDict
 from .settings import Settings
-from .sparql import query_projects, WikidataProject
+from .sparql import WikidataProject, query_projects
 from .utils import (
-    github_repo_to_api,
-    normalize_url,
-    is_edit_conflict,
     SimpleSortableVersion,
+    github_repo_to_api,
+    is_edit_conflict,
+    normalize_url,
 )
 from .website import is_website_other_property
 
@@ -126,7 +128,7 @@ def normalize_repo_url(
         url_claim.addQualifier(Properties.web_interface_software.new_claim(github))
 
 
-def set_website(project: Project) -> Claim | None:
+async def set_website(project: Project, client: AsyncClient) -> Claim | None:
     """Add the website if does not already exist"""
     if not project.website or not project.website.startswith("http"):
         return None
@@ -135,7 +137,7 @@ def set_website(project: Project) -> Claim | None:
         logger.info(f"Website is different property: {project.website}")
         return None
 
-    url = RedirectDict.get_or_add(project.website) or project.website
+    url = (await RedirectDict.get_or_add(project.website, client)) or project.website
     return Properties.official_website.new_claim(url)
 
 
@@ -150,7 +152,7 @@ def set_license(project: Project) -> Claim | None:
 
 
 @sentry_sdk.trace
-def update_wikidata(project: Project):
+async def update_wikidata(project: Project, client: AsyncClient):
     """Update wikidata entry with data from GitHub"""
     # Wikidata boilerplate
     q_value = project.project.replace("http://www.wikidata.org/entity/", "")
@@ -169,7 +171,7 @@ def update_wikidata(project: Project):
         url_normalized = str(normalize_url(url_raw))
 
     for claim, claim_kind in [
-        (set_website(project), "website"),
+        (await set_website(project, client), "website"),
         (set_license(project), "license"),
     ]:
         if not claim:
@@ -326,11 +328,11 @@ def update_wikidata(project: Project):
 
 
 @sentry_sdk.trace
-async def update_project(project: WikidataProject):
+async def update_project(project: WikidataProject, client: AsyncClient):
     logger.info(f"## {project.projectLabel}: {project.project}")
     try:
-        properties = get_data_from_github(project.repo, project)
-    except requests.exceptions.RequestException as e:
+        properties = await get_data_from_github(project.repo, project, client)
+    except HTTPError as e:
         logger.error(
             f"Github API request for {project.projectLabel} ({project.wikidata_id}) failed: {e}",
             exc_info=True,
@@ -342,7 +344,7 @@ async def update_project(project: WikidataProject):
             # There are many spurious errors, mostly because pywikibot lacks http retrying,
             # so we just retry any pywikibot once.
             try:
-                update_wikidata(properties)
+                await update_wikidata(properties, client)
             except pywikibot.exceptions.Error as e:
                 logger.error(
                     f"Failed to update {properties.project}, retrying: {e}",
@@ -350,27 +352,32 @@ async def update_project(project: WikidataProject):
                 )
             else:
                 return
-            update_wikidata(properties)
+            await update_wikidata(properties, client)
         except Exception as e:
             logger.error(f"Failed to update {properties.project}: {e}", exc_info=True)
             raise
 
 
-def run(project_filter: str | None, ignore_blacklist: bool):
-    logger.info("# Querying Projects")
-    projects = query_projects(project_filter, ignore_blacklist)
-    logger.info(f"{len(projects)} projects were found")
-    logger.info("# Processing projects")
-    for project in projects:
-        with sentry_sdk.start_transaction(name="Update project") as transaction:
-            transaction.set_data("project", project.project)
-            transaction.set_data("project-label", project.projectLabel)
-            try:
-                asyncio.run(asyncio.wait_for(update_project(project), timeout=60))
-            except TimeoutError:
-                logger.warning(f"Timeout processing {project.projectLabel}")
+async def run(project_filter: str | None, ignore_blacklist: bool):
+    storage = AsyncSqliteStorage(
+        database_path="cache-http.db",
+        default_ttl=60 * 60 * 24,  # 1 day
+    )
+    async with AsyncCacheClient(storage=storage) as client:
+        logger.info("# Querying Projects")
+        projects = query_projects(project_filter, ignore_blacklist)
+        logger.info(f"{len(projects)} projects were found")
+        logger.info("# Processing projects")
+        for project in projects:
+            with sentry_sdk.start_transaction(name="Update project") as transaction:
+                transaction.set_data("project", project.project)
+                transaction.set_data("project-label", project.projectLabel)
+                try:
+                    await asyncio.wait_for(update_project(project, client), timeout=60)
+                except TimeoutError:
+                    logger.warning(f"Timeout processing {project.projectLabel}")
 
-    logger.info("# Finished successfully")
+        logger.info("# Finished successfully")
 
 
 def main():
@@ -389,4 +396,4 @@ def main():
     Settings.init_licenses()
     Settings.init_filter_lists()
 
-    run(args.filter, args.ignore_blacklist)
+    asyncio.run(run(args.filter, args.ignore_blacklist))

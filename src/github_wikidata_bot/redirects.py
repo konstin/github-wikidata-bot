@@ -2,8 +2,7 @@ import json
 from pathlib import Path
 from typing import Final
 
-import requests
-from requests import RequestException
+from httpx import AsyncClient, HTTPError
 
 
 class RedirectDict:
@@ -13,7 +12,7 @@ class RedirectDict:
     _redirects: dict[str, str] = {}
 
     @classmethod
-    def get_or_add(cls, start_url: str) -> str | None:
+    async def get_or_add(cls, start_url: str, client: AsyncClient) -> str | None:
         if not cls._redirects:
             cls._load()
         if url := cls._redirects.get(start_url):
@@ -21,10 +20,10 @@ class RedirectDict:
             return url
 
         try:
-            response = requests.head(start_url, allow_redirects=True, timeout=6.1)
-        except RequestException:
+            response = await client.head(start_url, follow_redirects=True, timeout=6.1)
+        except HTTPError:
             return None
-        end_url = response.url
+        end_url = str(response.url)
         cls._redirects[start_url] = end_url
         cls._save()
         return end_url

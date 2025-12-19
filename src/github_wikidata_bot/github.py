@@ -2,22 +2,21 @@ import datetime
 import logging
 import textwrap
 from dataclasses import dataclass
-from json import JSONDecodeError
 from typing import Any
 from urllib.parse import quote_plus
 
 import pywikibot
 import sentry_sdk
+from httpx import AsyncClient, HTTPStatusError
 from pywikibot import WbTime
-from requests import HTTPError
 
-from .sparql import WikidataProject
 from .settings import Settings
+from .sparql import WikidataProject
 from .utils import (
+    SimpleSortableVersion,
     github_repo_to_api,
     github_repo_to_api_releases,
     github_repo_to_api_tags,
-    SimpleSortableVersion,
 )
 from .versionhandler import extract_version
 
@@ -64,26 +63,22 @@ def string_to_wddate(iso_timestamp: str) -> WbTime:
 
 
 @sentry_sdk.trace
-def get_json_cached(url: str) -> dict:
+async def get_json_cached(url: str, client: AsyncClient):
     """
     Get JSON from an API and cache the result
     """
-    response = Settings.cached_session.get(url)
+    response = await client.get(url, headers=Settings.github_auth_headers)
     response.raise_for_status()
-    try:
-        return response.json()
-    except JSONDecodeError as e:
-        logger.error(f"JSONDecodeError for {url}: {e}", exc_info=True)
-        return {}
+    return response.json()
 
 
 @sentry_sdk.trace
-def get_all_pages(url: str) -> list[dict]:
+async def get_all_pages(url: str, client: AsyncClient) -> list[dict[str, Any]]:
     """Gets all pages of the release/tag information"""
     page_number = 1
-    results: list[dict] = []
+    results: list[dict[str, Any]] = []
     while True:
-        page = get_json_cached(f"{url}?page={page_number}&per_page=100")
+        page = await get_json_cached(f"{url}?page={page_number}&per_page=100", client)
         if not page:
             break
         page_number += 1
@@ -170,8 +165,10 @@ def analyse_tag(
     )
 
 
-def get_date_from_tag_url(release: ReleaseTag) -> Release | None:
-    tag_details = get_json_cached(release.tag_url)
+async def get_date_from_tag_url(
+    release: ReleaseTag, client: AsyncClient
+) -> Release | None:
+    tag_details = await get_json_cached(release.tag_url, client)
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
         if not tag_details["tagger"]["date"]:
@@ -195,7 +192,9 @@ def get_date_from_tag_url(release: ReleaseTag) -> Release | None:
 
 
 @sentry_sdk.trace
-def get_data_from_github(url: str, properties: WikidataProject) -> Project:
+async def get_data_from_github(
+    url: str, properties: WikidataProject, client: AsyncClient
+) -> Project:
     """
     Retrieve the following data from github:
      - website / homepage
@@ -218,7 +217,7 @@ def get_data_from_github(url: str, properties: WikidataProject) -> Project:
     retrieved = string_to_wddate(iso_timestamp)
 
     # General project information
-    project_info = get_json_cached(github_repo_to_api(url))
+    project_info = await get_json_cached(github_repo_to_api(url), client)
 
     website = project_info.get("homepage")
     if project_license := project_info.get("license"):
@@ -227,7 +226,7 @@ def get_data_from_github(url: str, properties: WikidataProject) -> Project:
         spdx_id = None
 
     api_url = github_repo_to_api_releases(url)
-    releases = get_all_pages(api_url)
+    releases = await get_all_pages(api_url, client)
 
     invalid_releases = []
     extracted: list[Release | None] = []
@@ -249,8 +248,8 @@ def get_data_from_github(url: str, properties: WikidataProject) -> Project:
         logger.info("Falling back to tags")
         api_url = github_repo_to_api_tags(url)
         try:
-            tags = get_json_cached(api_url)
-        except HTTPError as e:
+            tags = await get_json_cached(api_url, client)
+        except HTTPStatusError as e:
             # Github raises a 404 if there are no tags
             if e.response.status_code == 404:
                 tags = {}
@@ -270,7 +269,7 @@ def get_data_from_github(url: str, properties: WikidataProject) -> Project:
                 f"for performance reasons."
             )
             filtered = filtered[-Settings.max_tags :]
-        extracted = list(map(get_date_from_tag_url, filtered))
+        extracted = [(await get_date_from_tag_url(tag, client)) for tag in filtered]
         if invalid_version_strings:
             message = ", ".join(invalid_version_strings)
             message = textwrap.shorten(message, width=200, placeholder="...")

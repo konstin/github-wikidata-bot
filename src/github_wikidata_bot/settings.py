@@ -9,23 +9,10 @@ from pathlib import Path
 from subprocess import CalledProcessError
 
 import pywikibot
-import requests
 import sentry_sdk
-from cachecontrol import CacheControl
-from cachecontrol.caches import FileCache
-from cachecontrol.heuristics import ExpiresAfter
 from pywikibot.data import sparql
-from requests.adapters import HTTPAdapter
-from urllib3 import Retry
 
 from .utils import parse_filter_list
-
-# https://stackoverflow.com/a/35504626/3549270
-_session = requests.Session()
-_session.mount("https://", HTTPAdapter(max_retries=Retry(total=3, backoff_factor=0.5)))
-_cached_session = CacheControl(
-    _session, cache=FileCache("cache"), heuristic=ExpiresAfter(days=1)
-)
 
 
 class NoTracebackFormatter(logging.Formatter):
@@ -65,13 +52,13 @@ class Settings:
         f"([[:toollabs:editgroups/b/CB/{edit_group_hash}|details]])"
     )
 
+    github_auth_headers: dict[str, str] = {}
+
     bot = pywikibot.WikidataBot(always=True)
     # pywikibot doesn't cache the calendar model, so let's do this manually
     calendar_model = bot.repo.calendarmodel()
 
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
-
-    cached_session: requests.Session = _cached_session
 
     @staticmethod
     def init_logging(quiet: bool, http_debug: bool) -> None:
@@ -142,12 +129,10 @@ class Settings:
             print("Please add github-oauth-token to config.json", file=sys.stderr)
             sys.exit(1)
         else:
-            cls.cached_session.headers.update(
-                {"Authorization": "token " + github_oauth_token}
-            )
+            cls.github_auth_headers = {"Authorization": "token " + github_oauth_token}
 
-            if dsn := config.get("sentry-dsn"):
-                cls.init_sentry(dsn)
+        if dsn := config.get("sentry-dsn"):
+            cls.init_sentry(dsn)
 
     @classmethod
     def init_sentry(cls, dsn: str):

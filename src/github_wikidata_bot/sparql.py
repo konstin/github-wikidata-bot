@@ -1,7 +1,7 @@
 import logging
 
 import sentry_sdk
-from pydantic import TypeAdapter, BaseModel
+from pydantic import BaseModel, TypeAdapter
 from pywikibot.data import sparql
 
 from github_wikidata_bot.settings import Settings
