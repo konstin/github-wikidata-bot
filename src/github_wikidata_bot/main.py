@@ -21,6 +21,7 @@ from .github import (
     analyse_tag,
     get_data_from_github,
     get_json_cached,
+    RateLimitError,
 )
 from .redirects import RedirectDict
 from .settings import Settings
@@ -532,24 +533,34 @@ async def run(project_filter: str | None, ignore_blacklist: bool, settings: Sett
         best_versions = query_best_versions()
 
         for idx, project in enumerate(projects):
-            with sentry_sdk.start_transaction(name="Update project") as transaction:
-                transaction.set_data("project", project.project)
-                transaction.set_data("project-label", project.projectLabel)
-                logger.info(
-                    f"## [{idx}/{len(projects)}] {project.projectLabel}: {project.project}"
-                )
-
-                start = time.time()
-                try:
-                    await asyncio.wait_for(
-                        update_project(project, best_versions, client, settings),
-                        timeout=60,
+            while True:
+                with sentry_sdk.start_transaction(name="Update project") as transaction:
+                    transaction.set_data("project", project.project)
+                    transaction.set_data("project-label", project.projectLabel)
+                    logger.info(
+                        f"## [{idx}/{len(projects)}] {project.projectLabel}: {project.project}"
                     )
-                except TimeoutError:
-                    logger.warning(f"Timeout processing {project.projectLabel}")
+                    try:
+                        start = time.time()
+                        try:
+                            await asyncio.wait_for(
+                                update_project(
+                                    project, best_versions, client, settings
+                                ),
+                                timeout=60,
+                            )
+                        except TimeoutError:
+                            logger.warning(f"Timeout processing {project.projectLabel}")
 
-                duration = time.time() - start
-                logger.info(f"{project.projectLabel} took {duration:.3f}s")
+                        duration = time.time() - start
+                        logger.info(f"{project.projectLabel} took {duration:.3f}s")
+                    except RateLimitError as e:
+                        logger.info(
+                            f"github rate limit exceed, sleeping until reset in {int(e.sleep)}s"
+                        )
+                        await asyncio.sleep(e.sleep)
+                        continue
+                break
         logger.info("# Finished successfully")
 
 

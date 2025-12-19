@@ -52,6 +52,13 @@ class Project:
     retrieved: WbTime
 
 
+class RateLimitError(Exception):
+    sleep: float
+
+    def __init__(self, sleep: float):
+        self.sleep = sleep
+
+
 def string_to_wddate(iso_timestamp: str) -> WbTime:
     """
     Create a wikidata compatible wikibase date from an ISO 8601 timestamp
@@ -76,18 +83,11 @@ async def get_json_cached(url: str, client: AsyncClient):
     ):
         reset = response.headers["x-ratelimit-reset"]
         seconds_to_reset = int(reset) - time.time()
-        logger.info(
-            f"github rate limit exceed, sleeping until reset in {int(seconds_to_reset)}s"
-        )
         # Sleep a second longer as buffer
-        await asyncio.sleep(seconds_to_reset + 1)
-        response = await client.get(url, headers=Settings.github_auth_headers)
+        raise RateLimitError(seconds_to_reset + 1)
 
     if response.status_code == 429:
-        logger.info("github rate limit exceed, sleeping for 60s")
-        await asyncio.sleep(60)
-        response = await client.get(url, headers=Settings.github_auth_headers)
-
+        raise RateLimitError(60)
     response.raise_for_status()
     return response.json()
 
