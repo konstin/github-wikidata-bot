@@ -1,8 +1,9 @@
 import asyncio
-from asyncio import Semaphore
 import datetime
 import logging
 import textwrap
+import time
+from asyncio import Semaphore
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote_plus
@@ -70,6 +71,19 @@ async def get_json_cached(url: str, client: AsyncClient):
     Get JSON from an API and cache the result
     """
     response = await client.get(url, headers=Settings.github_auth_headers)
+    if (
+        response.status_code == 403
+        and response.headers.get("x-ratelimit-remaining") == "0"
+    ):
+        reset = response.headers["x-ratelimit-reset"]
+        seconds_to_reset = time.time() - int(reset)
+        logger.info(
+            f"github rate limit exceed, sleeping until reset in {seconds_to_reset}s"
+        )
+        # Sleep a second longer as buffer
+        await asyncio.sleep(seconds_to_reset + 1)
+        response = await client.get(url, headers=Settings.github_auth_headers)
+
     response.raise_for_status()
     return response.json()
 
