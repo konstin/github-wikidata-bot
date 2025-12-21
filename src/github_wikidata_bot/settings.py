@@ -76,7 +76,9 @@ class Settings:
         """https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots"""
         self.edit_summary = f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{self.edit_group_hash}|details]])"
 
-        response = sparql.SparqlQuery().select((self.sparql_dir / "free_licenses.rq").read_text())
+        response = sparql.SparqlQuery().select(
+            (self.sparql_dir / "free_licenses.rq").read_text()
+        )
         assert response is not None
         self.licenses = {row["spdx"]: row["license"][31:] for row in response}
 

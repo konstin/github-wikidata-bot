@@ -33,7 +33,7 @@ async def debug_version_handling(
             if not no_sampling:
                 github_releases = safe_sample(github_releases, size)
             for github_release in github_releases:
-                release = analyse_release(github_release, project_info)
+                release = analyse_release(github_release, project_info, settings)
                 print(
                     "{:15} | {:10} | {:20} | {:25} | {}".format(
                         release.version if release else "---",
