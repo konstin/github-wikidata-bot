@@ -1,6 +1,5 @@
 import logging
 from collections import defaultdict
-from pathlib import Path
 
 import sentry_sdk
 from pydantic import BaseModel, TypeAdapter
@@ -34,7 +33,9 @@ def query_projects(
 
     logger.info("Querying wikidata for projects")
     wikidata_sparql = sparql.SparqlQuery()
-    response = wikidata_sparql.select(Path("src/free_software_items.rq").read_text())
+    response = wikidata_sparql.select(
+        settings.sparql_dir.joinpath("free_software_items.rq").read_text()
+    )
     assert response is not None  # Type cast
 
     project_list_ta = TypeAdapter(list[WikidataProject])
@@ -97,11 +98,13 @@ def query_projects(
 
 
 @sentry_sdk.trace
-def query_best_versions() -> dict[str, list[str]]:
+def query_best_versions(settings: Settings) -> dict[str, list[str]]:
     """Query for all software projects and their best version(s) on wikidata."""
     logger.info("Querying wikidata for versions")
     wikidata_sparql = sparql.SparqlQuery()
-    response = wikidata_sparql.select(Path("src/free_software_versions.rq").read_text())
+    response = wikidata_sparql.select(
+        settings.sparql_dir.joinpath("free_software_versions.rq").read_text()
+    )
     assert response is not None  # Type cast
 
     best_versions = defaultdict(list)

@@ -149,7 +149,7 @@ def analyse_release(
     # Often prereleases aren't marked as such, so we need manually catch those cases
     if not release["prerelease"] and release_type != "stable":
         logger.debug(f"Diverting release type: {original_version}")
-        release["prerelease"] = True
+        release_type = "unstable"
     elif release["prerelease"] and release_type == "stable":
         release_type = "unstable"
 
@@ -276,7 +276,7 @@ async def get_data_from_github(
         except HTTPStatusError as e:
             # Github raises a 404 if there are no tags
             if e.response.status_code == 404:
-                tags = {}
+                tags = []
             else:
                 raise
 

@@ -531,7 +531,7 @@ async def run(project_filter: str | None, ignore_blacklist: bool, settings: Sett
         projects = query_projects(settings, project_filter, ignore_blacklist)
         logger.info(f"{len(projects)} projects were found")
         logger.info("# Processing projects")
-        best_versions = query_best_versions()
+        best_versions = query_best_versions(settings)
 
         for idx, project in enumerate(projects):
             while True:
@@ -544,6 +544,7 @@ async def run(project_filter: str | None, ignore_blacklist: bool, settings: Sett
                     try:
                         start = time.time()
                         try:
+                            # If a project takes over 1min, skip it for performance.
                             await asyncio.wait_for(
                                 update_project(
                                     project, best_versions, client, settings
