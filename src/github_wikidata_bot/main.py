@@ -373,7 +373,7 @@ async def check_fast_path(
         logger.info(f"No fast path, fetch releases errored: {e}")
         return False
     if len(releases) == 1:
-        result = analyse_release(releases[0], {"name": project.projectLabel})
+        result = analyse_release(releases[0], {"name": project.projectLabel}, settings)
         if result:
             if result.version == project_version:
                 logger.info(f"Fresh using releases fast path: {project_version}")

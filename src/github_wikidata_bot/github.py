@@ -59,11 +59,11 @@ class RateLimitError(Exception):
         self.sleep = sleep
 
 
-def string_to_wddate(iso_timestamp: str) -> WbTime:
+def string_to_wddate(iso_timestamp: str, settings: Settings) -> WbTime:
     """
     Create a wikidata compatible wikibase date from an ISO 8601 timestamp
     """
-    date = WbTime.fromTimestr(iso_timestamp, calendarmodel=Settings.calendar_model)
+    date = WbTime.fromTimestr(iso_timestamp, calendarmodel=settings.calendar_model)
     date.hour = 0
     date.minute = 0
     date.second = 0
@@ -117,7 +117,7 @@ async def get_all_pages(
 
 
 def analyse_release(
-    release: dict[str, Any], project_info: dict[str, Any]
+    release: dict[str, Any], project_info: dict[str, Any], settings: Settings
 ) -> Release | None:
     """
     Heuristics to find the version number and according meta-data for a release
@@ -153,7 +153,7 @@ def analyse_release(
         release_type = "unstable"
 
     # Convert github's timestamps to wikidata dates
-    date = string_to_wddate(release["published_at"])
+    date = string_to_wddate(release["published_at"], settings)
 
     return Release(
         version=version, date=date, page=release["html_url"], release_type=release_type
@@ -201,12 +201,12 @@ async def get_date_from_tag_url(
         if not tag_details["tagger"]["date"]:
             logger.info(f"No tag date for {release.tag_url}")
             return None
-        date = string_to_wddate(tag_details["tagger"]["date"])
+        date = string_to_wddate(tag_details["tagger"]["date"], settings)
     elif release.tag_type == "commit":
         if not tag_details["committer"]["date"]:
             logger.info(f"No tag date for {release.tag_url}")
             return None
-        date = string_to_wddate(tag_details["committer"]["date"])
+        date = string_to_wddate(tag_details["committer"]["date"], settings)
     else:
         raise NotImplementedError(f"Unknown type of tag: {release.tag_type}")
 
@@ -237,7 +237,7 @@ async def get_data_from_github(
     # "retrieved" does only accept dates without time, so create a timestamp with no
     # date
     iso_timestamp = pywikibot.Timestamp.now(datetime.UTC).isoformat()
-    retrieved = string_to_wddate(iso_timestamp)
+    retrieved = string_to_wddate(iso_timestamp, settings)
 
     # General project information
     project_info = await get_json_cached(github_repo_to_api(url), client, settings)
@@ -254,7 +254,7 @@ async def get_data_from_github(
     invalid_releases = []
     extracted: list[Release | None] = []
     for release in releases:
-        result = analyse_release(release, project_info)
+        result = analyse_release(release, project_info, settings)
         if result:
             extracted.append(result)
         else:
