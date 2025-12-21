@@ -90,7 +90,8 @@ async def get_json_cached(url: str, client: AsyncClient, settings: Settings):
         raise RateLimitError(seconds_to_reset + 1)
 
     if response.status_code == 429:
-        raise RateLimitError(60)
+        # We've hit github's abuse limits, wait 5min and try again
+        raise RateLimitError(5 * 60)
     response.raise_for_status()
     return response.json()
 
