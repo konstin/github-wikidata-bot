@@ -5,6 +5,7 @@ from asyncio import Semaphore
 from pathlib import Path
 
 import tqdm
+from github_wikidata_bot.settings import Settings
 from httpx import AsyncClient
 
 from github_wikidata_bot.sparql import query_projects
@@ -28,7 +29,7 @@ async def query(
 
 async def main():
     logger.info("# Querying Projects")
-    projects = query_projects(None, False)
+    projects = query_projects(Settings(None), None, False)
     logger.info(f"{len(projects)} projects were found")
     semaphore = Semaphore(50)
     async with AsyncClient() as client:

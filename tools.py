@@ -19,17 +19,17 @@ def safe_sample[T](population: list[T], size: int) -> list[T]:
 
 
 async def debug_version_handling(
-    threshold: int = 50, size: int = 20, no_sampling: bool = False
+    settings: Settings, threshold: int = 50, size: int = 20, no_sampling: bool = False
 ):
     logger.setLevel(40)
     async with AsyncClient() as client:
-        projects = query_projects()
+        projects = query_projects(settings)
         if not no_sampling:
             projects = safe_sample(projects, threshold)
         for project in projects:
             project_info = await get_json_cached(github_repo_to_api(project.repo))
             apiurl = github_repo_to_api_releases(project.repo)
-            github_releases = await get_all_pages(apiurl, client)
+            github_releases = await get_all_pages(apiurl, client, settings)
             if not no_sampling:
                 github_releases = safe_sample(github_releases, size)
             for github_release in github_releases:
@@ -45,7 +45,7 @@ async def debug_version_handling(
                 )
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--threshold", default=50, type=int)
     parser.add_argument("--maxsize", default=20, type=int)
@@ -54,4 +54,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     settings = Settings(args.github_oauth_token)
-    asyncio.run(debug_version_handling(args.threshold, args.maxsize, args.no_sampling))
+    asyncio.run(
+        debug_version_handling(settings, args.threshold, args.maxsize, args.no_sampling)
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -72,11 +72,11 @@ def string_to_wddate(iso_timestamp: str) -> WbTime:
 
 
 @sentry_sdk.trace
-async def get_json_cached(url: str, client: AsyncClient):
+async def get_json_cached(url: str, client: AsyncClient, settings: Settings):
     """
     Get JSON from an API and cache the result
     """
-    response = await client.get(url, headers=Settings.github_auth_headers)
+    response = await client.get(url, headers=settings.github_auth_headers)
     if (
         response.status_code == 403
         and response.headers.get("x-ratelimit-remaining") == "0"
@@ -84,6 +84,9 @@ async def get_json_cached(url: str, client: AsyncClient):
         reset = response.headers["x-ratelimit-reset"]
         seconds_to_reset = int(reset) - time.time()
         # Sleep a second longer as buffer
+        for key, value in response.headers.items():
+            if key.startswith("x-ratelimit"):
+                logger.info(f"header {key}: {value}")
         raise RateLimitError(seconds_to_reset + 1)
 
     if response.status_code == 429:
@@ -93,12 +96,16 @@ async def get_json_cached(url: str, client: AsyncClient):
 
 
 @sentry_sdk.trace
-async def get_all_pages(url: str, client: AsyncClient) -> list[dict[str, Any]]:
+async def get_all_pages(
+    url: str, client: AsyncClient, settings: Settings
+) -> list[dict[str, Any]]:
     """Gets all pages of the release/tag information"""
     page_number = 1
     results: list[dict[str, Any]] = []
     while True:
-        page = await get_json_cached(f"{url}?page={page_number}&per_page=100", client)
+        page = await get_json_cached(
+            f"{url}?page={page_number}&per_page=100", client, settings
+        )
         if not page:
             break
         page_number += 1
@@ -186,9 +193,9 @@ def analyse_tag(
 
 
 async def get_date_from_tag_url(
-    release: ReleaseTag, client: AsyncClient
+    release: ReleaseTag, client: AsyncClient, settings: Settings
 ) -> Release | None:
-    tag_details = await get_json_cached(release.tag_url, client)
+    tag_details = await get_json_cached(release.tag_url, client, settings)
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
         if not tag_details["tagger"]["date"]:
@@ -233,7 +240,7 @@ async def get_data_from_github(
     retrieved = string_to_wddate(iso_timestamp)
 
     # General project information
-    project_info = await get_json_cached(github_repo_to_api(url), client)
+    project_info = await get_json_cached(github_repo_to_api(url), client, settings)
 
     website = project_info.get("homepage")
     if project_license := project_info.get("license"):
@@ -242,7 +249,7 @@ async def get_data_from_github(
         spdx_id = None
 
     api_url = github_repo_to_api_releases(url)
-    releases = await get_all_pages(api_url, client)
+    releases = await get_all_pages(api_url, client, settings)
 
     invalid_releases = []
     extracted: list[Release | None] = []
@@ -258,13 +265,13 @@ async def get_data_from_github(
         message = textwrap.shorten(message, width=200, placeholder="...")
         logger.info(f"{len(invalid_releases)} invalid releases: {message}")
 
-    if Settings.read_tags and (
-        len(extracted) == 0 or properties.wikidata_id in Settings.whitelist
+    if settings.read_tags and (
+        len(extracted) == 0 or properties.wikidata_id in settings.whitelist
     ):
         logger.info("Falling back to tags")
         api_url = github_repo_to_api_tags(url)
         try:
-            tags = await get_json_cached(api_url, client)
+            tags = await get_json_cached(api_url, client, settings)
         except HTTPStatusError as e:
             # Github raises a 404 if there are no tags
             if e.response.status_code == 404:
@@ -279,18 +286,18 @@ async def get_data_from_github(
         ]
         filtered = [v for v in extracted_tags if v is not None]
         filtered.sort(key=lambda x: SimpleSortableVersion(x.version))
-        if len(filtered) > Settings.max_tags:
+        if len(filtered) > settings.max_tags:
             logger.info(
-                f"Limiting {properties.wikidata_id} to {Settings.max_tags} of {len(filtered)} tags "
+                f"Limiting {properties.wikidata_id} to {settings.max_tags} of {len(filtered)} tags "
                 f"for performance reasons."
             )
-            filtered = filtered[-Settings.max_tags :]
+            filtered = filtered[-settings.max_tags :]
 
         # Fetch tags in parallel
         # TODO: Don't use the API, use the git interface instead?
         async def tag_with_limit(tag: ReleaseTag) -> Release | None:
             async with settings.github_api_limit:
-                return await get_date_from_tag_url(tag, client)
+                return await get_date_from_tag_url(tag, client, settings)
 
         extracted = list(
             await asyncio.gather(*[tag_with_limit(tag) for tag in filtered])

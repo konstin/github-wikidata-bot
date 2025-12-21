@@ -350,7 +350,10 @@ async def update_wikidata(project: Project, client: AsyncClient, settings: Setti
 
 
 async def check_fast_path(
-    project: WikidataProject, best_versions: dict[str, list[str]], client: AsyncClient
+    project: WikidataProject,
+    best_versions: dict[str, list[str]],
+    client: AsyncClient,
+    settings: Settings,
 ) -> bool:
     """Check whether the latest github release matches the latest version on wikidata, and if so,
     skip the expensive processing."""
@@ -365,7 +368,7 @@ async def check_fast_path(
 
     api_url = github_repo_to_api_releases(project.repo)
     try:
-        releases = await get_json_cached(api_url + "?per_page=1", client)
+        releases = await get_json_cached(api_url + "?per_page=1", client, settings)
     except HTTPError as e:
         logger.info(f"No fast path, fetch releases errored: {e}")
         return False
@@ -386,7 +389,7 @@ async def check_fast_path(
     else:
         api_url = github_repo_to_api_tags(project.repo)
         try:
-            tags = await get_json_cached(api_url, client)
+            tags = await get_json_cached(api_url, client, settings)
         except HTTPStatusError as e:
             # GitHub raises a 404 if there are no tags
             if e.response.status_code == 404:
@@ -403,7 +406,7 @@ async def check_fast_path(
                 return False
         else:
             project_info = await get_json_cached(
-                github_repo_to_api(project.repo), client
+                github_repo_to_api(project.repo), client, settings
             )
             extracted_tags = [
                 analyse_tag(release, project_info, []) for release in tags
@@ -431,7 +434,7 @@ async def update_project(
     client: AsyncClient,
     settings: Settings,
 ):
-    if await check_fast_path(project, best_versions, client):
+    if await check_fast_path(project, best_versions, client, settings):
         return True
 
     try:
@@ -527,7 +530,7 @@ async def run(project_filter: str | None, ignore_blacklist: bool, settings: Sett
     )
     async with AsyncCacheClient(storage=storage) as client:
         logger.info("# Querying Projects")
-        projects = query_projects(project_filter, ignore_blacklist)
+        projects = query_projects(settings, project_filter, ignore_blacklist)
         logger.info(f"{len(projects)} projects were found")
         logger.info("# Processing projects")
         best_versions = query_best_versions()

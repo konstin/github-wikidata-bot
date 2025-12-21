@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from pathlib import Path
 
 import sentry_sdk
 from pydantic import BaseModel, TypeAdapter
@@ -22,7 +23,9 @@ class WikidataProject(BaseModel):
 
 @sentry_sdk.trace
 def query_projects(
-    project_filter: str | None = None, ignore_blacklist: bool = False
+    settings: Settings,
+    project_filter: str | None = None,
+    ignore_blacklist: bool = False,
 ) -> list[WikidataProject]:
     """
     Queries for all software projects and returns them as an array of simplified dicts
@@ -31,7 +34,7 @@ def query_projects(
 
     logger.info("Querying wikidata for projects")
     wikidata_sparql = sparql.SparqlQuery()
-    response = wikidata_sparql.select(Settings.query_projects.read_text())
+    response = wikidata_sparql.select(Path("src/free_software_items.rq").read_text())
     assert response is not None  # Type cast
 
     project_list_ta = TypeAdapter(list[WikidataProject])
@@ -56,14 +59,14 @@ def query_projects(
         ):
             repo_filter += 1
             continue
-        if project.project[31:] in Settings.blacklist and not ignore_blacklist:
+        if project.project[31:] in settings.blacklist and not ignore_blacklist:
             logger.debug(
                 f"{project.projectLabel} ({project.wikidata_id}) is blacklisted"
             )
             blacklist += 1
             continue
 
-        if not Settings.repo_regex.match(project.repo):
+        if not settings.repo_regex.match(project.repo):
             logger.debug(
                 f" - Removing {project.projectLabel}: {project.project} {project.repo}"
             )
@@ -98,7 +101,7 @@ def query_best_versions() -> dict[str, list[str]]:
     """Query for all software projects and their best version(s) on wikidata."""
     logger.info("Querying wikidata for versions")
     wikidata_sparql = sparql.SparqlQuery()
-    response = wikidata_sparql.select(Settings.query_versions.read_text())
+    response = wikidata_sparql.select(Path("src/free_software_versions.rq").read_text())
     assert response is not None  # Type cast
 
     best_versions = defaultdict(list)
