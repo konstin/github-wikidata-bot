@@ -435,7 +435,7 @@ async def update_project(
     settings: Settings,
 ):
     if await check_fast_path(project, best_versions, client, settings):
-        return True
+        return
 
     try:
         properties: Project = await get_data_from_github(
@@ -446,7 +446,7 @@ async def update_project(
             f"Github API request for {project.projectLabel} ({project.wikidata_id}) failed: {e}",
             exc_info=True,
         )
-        return False
+        return
 
     if settings.do_update_wikidata:
         try:
@@ -460,13 +460,11 @@ async def update_project(
                     exc_info=True,
                 )
             else:
-                return False
+                return
             await update_wikidata(properties, client, settings)
         except Exception as e:
             logger.error(f"Failed to update {properties.project}: {e}", exc_info=True)
             raise
-
-    return False
 
 
 def init_logging(quiet: bool, http_debug: bool) -> None:
