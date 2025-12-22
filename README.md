@@ -16,7 +16,7 @@ It is possible to [exclude items](https://www.wikidata.org/wiki/User:Github-wiki
 
 Install [uv][uv] and install the dependencies:
 
-```console
+```shell
 uv sync
 ```
 
@@ -31,7 +31,7 @@ uv sync
 
 Run the bot in a terminal and enter the password for your bot account:
 
-```console
+```shell
 uv run main.py
 ```
 
