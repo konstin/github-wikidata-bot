@@ -185,7 +185,9 @@ async def update_wikidata(project: Project, client: AsyncClient, settings: Setti
                 settings=settings,
             )
         )
-        with sentry_sdk.start_span(description=f"Set {claim_kind}"):
+        with sentry_sdk.start_span(
+            op="user_add_claim_unless_exists", description=f"Set {claim_kind}"
+        ):
             settings.bot.user_add_claim_unless_exists(
                 item, claim, exists_arg="", summary=settings.edit_summary
             )
@@ -312,7 +314,9 @@ async def update_wikidata(project: Project, client: AsyncClient, settings: Setti
             logger.info(
                 f"Creating {release.version} (rank: {'preferred' if set_preferred_rank else 'default'})"
             )
-        with sentry_sdk.start_span(description="Create version"):
+        with sentry_sdk.start_span(
+            op="user_add_claim_unless_exists", description="Create version"
+        ):
             added = settings.bot.user_add_claim_unless_exists(
                 item,
                 claim,
