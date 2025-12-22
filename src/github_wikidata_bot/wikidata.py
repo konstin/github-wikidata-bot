@@ -158,7 +158,7 @@ async def update_wikidata(project: Project, client: AsyncClient, settings: Setti
     """Update wikidata entry with data from GitHub"""
     # Wikidata boilerplate
     q_value = project.project.replace("http://www.wikidata.org/entity/", "")
-    with sentry_sdk.start_span(description="Get item page"):
+    with sentry_sdk.start_span(op="item-get", description="Get item page"):
         item = ItemPage(settings.bot.repo, title=q_value)
         item.get()
 
