@@ -3,10 +3,16 @@ import argparse
 import asyncio
 from random import sample
 
-from github_wikidata_bot.github import get_json_cached, get_all_pages, analyse_release
+from pydantic import TypeAdapter
+
+from github_wikidata_bot.github import fetch_json, get_all_pages, analyse_release
 from github_wikidata_bot.main import logger
 from github_wikidata_bot.settings import Settings
-from github_wikidata_bot.sparql import query_projects
+from github_wikidata_bot.sparql import (
+    filter_projects,
+    cached_sparql_query,
+    WikidataProject,
+)
 from github_wikidata_bot.utils import github_repo_to_api, github_repo_to_api_releases
 from httpx import AsyncClient
 
@@ -23,11 +29,13 @@ async def debug_version_handling(
 ):
     logger.setLevel(40)
     async with AsyncClient() as client:
-        projects = query_projects(settings)
+        response = cached_sparql_query("free_software_items", False, settings)
+        project_list = TypeAdapter(list[WikidataProject]).validate_python(response)
+        projects = filter_projects(False, None, project_list, response, settings)
         if not no_sampling:
             projects = safe_sample(projects, threshold)
         for project in projects:
-            project_info = await get_json_cached(github_repo_to_api(project.repo))
+            project_info = await fetch_json(github_repo_to_api(project.repo))
             apiurl = github_repo_to_api_releases(project.repo)
             github_releases = await get_all_pages(apiurl, client, settings)
             if not no_sampling:

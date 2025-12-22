@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 from asyncio import Semaphore
+from functools import lru_cache
 from pathlib import Path
 from subprocess import CalledProcessError
 
@@ -13,6 +14,21 @@ import sentry_sdk
 from pywikibot.data import sparql
 
 from .utils import parse_filter_list
+
+
+@lru_cache
+def project_root() -> Path:
+    """Use the git repository root as project root."""
+    return Path(
+        subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"], text=True
+        ).strip()
+    )
+
+
+@lru_cache
+def cache_root() -> Path:
+    return project_root().joinpath(".cache")
 
 
 class NoTracebackFormatter(logging.Formatter):

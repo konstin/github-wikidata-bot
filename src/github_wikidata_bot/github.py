@@ -72,11 +72,21 @@ def string_to_wddate(iso_timestamp: str, settings: Settings) -> WbTime:
 
 
 @sentry_sdk.trace
-async def get_json_cached(url: str, client: AsyncClient, settings: Settings):
-    """
-    Get JSON from an API and cache the result
-    """
+async def fetch_json(url: str, client: AsyncClient, settings: Settings):
+    """Get JSON from an API and cache the result."""
     response = await client.get(url, headers=settings.github_auth_headers)
+
+    if response.extensions.get("hishel_from_cache"):
+        if response.extensions.get("hishel_revalidated"):
+            logger.info(f"cached, revalidated: {url}")
+        else:
+            logger.info(f"cached, stale: {url}")
+    else:
+        if response.extensions.get("hishel_revalidated"):
+            logger.info(f"revalidated: {url}")
+        else:
+            logger.info(f"uncached: {url}")
+
     if (
         response.status_code == 403
         and response.headers.get("x-ratelimit-remaining") == "0"
@@ -104,7 +114,7 @@ async def get_all_pages(
     page_number = 1
     results: list[dict[str, Any]] = []
     while True:
-        page = await get_json_cached(
+        page = await fetch_json(
             f"{url}?page={page_number}&per_page=100", client, settings
         )
         if not page:
@@ -196,7 +206,7 @@ def analyse_tag(
 async def get_date_from_tag_url(
     release: ReleaseTag, client: AsyncClient, settings: Settings
 ) -> Release | None:
-    tag_details = await get_json_cached(release.tag_url, client, settings)
+    tag_details = await fetch_json(release.tag_url, client, settings)
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
         if not tag_details["tagger"]["date"]:
@@ -241,7 +251,7 @@ async def get_data_from_github(
     retrieved = string_to_wddate(iso_timestamp, settings)
 
     # General project information
-    project_info = await get_json_cached(github_repo_to_api(url), client, settings)
+    project_info = await fetch_json(github_repo_to_api(url), client, settings)
 
     website = project_info.get("homepage")
     if project_license := project_info.get("license"):
@@ -272,7 +282,7 @@ async def get_data_from_github(
         logger.info("Falling back to tags")
         api_url = github_repo_to_api_tags(url)
         try:
-            tags = await get_json_cached(api_url, client, settings)
+            tags = await fetch_json(api_url, client, settings)
         except HTTPStatusError as e:
             # Github raises a 404 if there are no tags
             if e.response.status_code == 404:

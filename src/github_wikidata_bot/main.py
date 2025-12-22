@@ -6,20 +6,26 @@ from pathlib import Path
 
 import pywikibot
 import sentry_sdk
-from hishel import AsyncSqliteStorage
+from hishel import AsyncSqliteStorage, CacheOptions, SpecificationPolicy
 from hishel.httpx import AsyncCacheClient
 from httpx import AsyncClient, HTTPError, HTTPStatusError
+from pydantic import TypeAdapter
 
 from .github import (
     Project,
     analyse_release,
     analyse_tag,
     get_data_from_github,
-    get_json_cached,
+    fetch_json,
     RateLimitError,
 )
 from .settings import Settings
-from .sparql import WikidataProject, query_best_versions, query_projects
+from .sparql import (
+    WikidataProject,
+    query_best_versions,
+    filter_projects,
+    cached_sparql_query,
+)
 from .utils import (
     SimpleSortableVersion,
     github_repo_to_api,
@@ -50,7 +56,7 @@ async def check_fast_path(
 
     api_url = github_repo_to_api_releases(project.repo)
     try:
-        releases = await get_json_cached(api_url + "?per_page=1", client, settings)
+        releases = await fetch_json(api_url + "?per_page=1", client, settings)
     except HTTPError as e:
         logger.info(f"No fast path, fetch releases errored: {e}")
         return False
@@ -71,7 +77,7 @@ async def check_fast_path(
     else:
         api_url = github_repo_to_api_tags(project.repo)
         try:
-            tags = await get_json_cached(api_url, client, settings)
+            tags = await fetch_json(api_url, client, settings)
         except HTTPStatusError as e:
             # GitHub raises a 404 if there are no tags
             if e.response.status_code == 404:
@@ -87,7 +93,7 @@ async def check_fast_path(
                 logger.info(f"No fast path, fetch tags errored: {e}")
                 return False
         else:
-            project_info = await get_json_cached(
+            project_info = await fetch_json(
                 github_repo_to_api(project.repo), client, settings
             )
             extracted_tags = [
@@ -203,17 +209,33 @@ def init_logging(quiet: bool, http_debug: bool) -> None:
         requests_log.propagate = True
 
 
-async def run(project_filter: str | None, ignore_blacklist: bool, settings: Settings):
+async def run(
+    project_filter: str | None,
+    ignore_blacklist: bool,
+    cache_sparql: bool,
+    allow_stale: bool,
+    settings: Settings,
+):
     storage = AsyncSqliteStorage(
         database_path="cache-http.db",
-        default_ttl=60 * 60 * 24,  # 1 day
     )
-    async with AsyncCacheClient(storage=storage) as client:
-        logger.info("# Querying Projects")
-        projects = query_projects(settings, project_filter, ignore_blacklist)
+    cache_options = CacheOptions(
+        shared=False,
+        allow_stale=allow_stale,
+    )
+    async with AsyncCacheClient(
+        storage=storage, policy=SpecificationPolicy(cache_options=cache_options)
+    ) as client:
+        logger.info("Querying Projects")
+        response = cached_sparql_query("free_software_items", cache_sparql, settings)
+        project_list = TypeAdapter(list[WikidataProject]).validate_python(response)
+        projects = filter_projects(
+            ignore_blacklist, project_filter, project_list, response, settings
+        )
         logger.info(f"{len(projects)} projects were found")
-        logger.info("# Processing projects")
-        best_versions = query_best_versions(settings)
+        logger.info("Querying versions")
+        best_versions = query_best_versions(cache_sparql, settings)
+        logger.info("Processing projects")
 
         for idx, project in enumerate(projects):
             while True:
@@ -252,6 +274,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--filter", default="")
     parser.add_argument("--github-oauth-token")
+    parser.add_argument(
+        "--cache-sparql",
+        help="Use locally cached wikidata sparql queries instead of doing a fresh network request",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--allow-stale",
+        help="Allow stale cached responses from the GitHub API",
+        action="store_true",
+    )
     parser.add_argument("--debug-http", action="store_true")
     parser.add_argument("--ignore-blacklist", action="store_true")
     parser.add_argument(
@@ -262,4 +294,12 @@ def main():
     init_logging(args.quiet, args.debug_http)
     settings = Settings(args.github_oauth_token)
 
-    asyncio.run(run(args.filter, args.ignore_blacklist, settings))
+    asyncio.run(
+        run(
+            args.filter,
+            args.ignore_blacklist,
+            args.cache_sparql,
+            args.allow_stale,
+            settings,
+        )
+    )

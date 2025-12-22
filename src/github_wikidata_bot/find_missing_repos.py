@@ -5,10 +5,16 @@ from asyncio import Semaphore
 from pathlib import Path
 
 import tqdm
+from pydantic import TypeAdapter
+
 from github_wikidata_bot.settings import Settings
 from httpx import AsyncClient
 
-from github_wikidata_bot.sparql import query_projects
+from github_wikidata_bot.sparql import (
+    filter_projects,
+    cached_sparql_query,
+    WikidataProject,
+)
 from github_wikidata_bot.utils import github_repo_to_api
 
 logger = logging.getLogger(__name__)
@@ -28,8 +34,11 @@ async def query(
 
 
 async def main():
-    logger.info("# Querying Projects")
-    projects = query_projects(Settings(None), None, False)
+    logger.info("Querying Projects")
+    settings = Settings(None)
+    response = cached_sparql_query("free_software_items", False, settings)
+    project_list = TypeAdapter(list[WikidataProject]).validate_python(response)
+    projects = filter_projects(False, None, project_list, response, settings)
     logger.info(f"{len(projects)} projects were found")
     semaphore = Semaphore(50)
     async with AsyncClient() as client:

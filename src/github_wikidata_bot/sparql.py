@@ -1,11 +1,13 @@
+import json
 import logging
 from collections import defaultdict
+from typing import Any
 
 import sentry_sdk
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel
 from pywikibot.data import sparql
 
-from github_wikidata_bot.settings import Settings
+from github_wikidata_bot.settings import Settings, cache_root
 
 logger = logging.getLogger(__name__)
 
@@ -20,27 +22,33 @@ class WikidataProject(BaseModel):
         return self.project.rsplit("/", 1)[-1]
 
 
-@sentry_sdk.trace
-def query_projects(
+def cached_sparql_query(
+    query_name: str,
+    use_cache: bool,
     settings: Settings,
-    project_filter: str | None = None,
-    ignore_blacklist: bool = False,
-) -> list[WikidataProject]:
-    """
-    Queries for all software projects and returns them as an array of simplified dicts
-    :return: the data split into projects with and without github
-    """
+) -> list[dict[str, str]]:
+    """Run a SPARQL query against wikidata, reading from a local cache if requested."""
+    cache_path = cache_root().joinpath(f"{query_name}.json")
+    if use_cache and cache_path.exists():
+        return json.loads(cache_path.read_text())
+    with sentry_sdk.start_span(op="sparql", name=f"Query {query_name}"):
+        wikidata_sparql = sparql.SparqlQuery()
+        response = wikidata_sparql.select(
+            settings.sparql_dir.joinpath(f"{query_name}.rq").read_text()
+        )
+        assert response is not None  # Type cast
+    cache_root().mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(response))
+    return response
 
-    logger.info("Querying wikidata for projects")
-    wikidata_sparql = sparql.SparqlQuery()
-    response = wikidata_sparql.select(
-        settings.sparql_dir.joinpath("free_software_items.rq").read_text()
-    )
-    assert response is not None  # Type cast
 
-    project_list_ta = TypeAdapter(list[WikidataProject])
-    project_list = project_list_ta.validate_python(response)
-
+def filter_projects(
+    ignore_blacklist: bool,
+    project_filter: str | None,
+    project_list: list[WikidataProject],
+    response: list[dict[str, str]],
+    settings: Settings,
+) -> list[Any]:
     projects = []
     logger.info(f"{len(response)} projects were found by the sparql query")
     repo_filter = 0
@@ -98,14 +106,10 @@ def query_projects(
 
 
 @sentry_sdk.trace
-def query_best_versions(settings: Settings) -> dict[str, list[str]]:
+def query_best_versions(use_cache: bool, settings: Settings) -> dict[str, list[str]]:
     """Query for all software projects and their best version(s) on wikidata."""
-    logger.info("Querying wikidata for versions")
-    wikidata_sparql = sparql.SparqlQuery()
-    response = wikidata_sparql.select(
-        settings.sparql_dir.joinpath("free_software_versions.rq").read_text()
-    )
-    assert response is not None  # Type cast
+    logger.info("Querying wikidata for project versions")
+    response = cached_sparql_query("free_software_versions", use_cache, settings)
 
     best_versions = defaultdict(list)
     for entry in response:
