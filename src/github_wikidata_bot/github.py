@@ -87,7 +87,9 @@ async def fetch_json(url: str, client: AsyncClient, settings: Settings):
         else:
             logger.info(f"uncached: {url}")
 
-    if (
+    # We stop before we hit the actual rate limit cause github doesn't seem to like it
+    # if we go to zero.
+    if response.headers.get("x-ratelimit-remaining") < 10 or (
         response.status_code == 403
         and response.headers.get("x-ratelimit-remaining") == "0"
     ):
