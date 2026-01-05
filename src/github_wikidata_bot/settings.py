@@ -122,7 +122,8 @@ class Settings:
             release=release,
             ignore_errors=[KeyboardInterrupt],
             traces_sample_rate=1.0,
-            profiles_sample_rate=1.0,
+            profile_session_sample_rate=1.0,
+            profile_lifecycle="trace",
         )
 
     @staticmethod

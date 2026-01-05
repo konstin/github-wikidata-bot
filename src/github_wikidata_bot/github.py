@@ -89,8 +89,9 @@ async def fetch_json(url: str, client: AsyncClient, settings: Settings):
 
     # We stop before we hit the actual rate limit cause github doesn't seem to like it
     # if we go to zero.
+    total_limit = int(response.headers.get("x-ratelimit-limit", "0"))
     remaining_requests = int(response.headers.get("x-ratelimit-remaining", "0"))
-    if remaining_requests < 10 or (
+    if remaining_requests < total_limit * 0.1 or (
         response.status_code == 403 and remaining_requests == 0
     ):
         reset = response.headers["x-ratelimit-reset"]

@@ -39,7 +39,6 @@ async def main():
     response = cached_sparql_query("free_software_items", False, settings)
     project_list = TypeAdapter(list[WikidataProject]).validate_python(response)
     projects = filter_projects(False, None, project_list, response, settings)
-    logger.info(f"{len(projects)} projects were found")
     semaphore = Semaphore(50)
     async with AsyncClient() as client:
         tasks = [

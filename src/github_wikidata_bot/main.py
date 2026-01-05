@@ -217,7 +217,7 @@ async def run(
     settings: Settings,
 ):
     storage = AsyncSqliteStorage(
-        database_path="cache-http.db",
+        database_path="cache-http.db", default_ttl=365 * 24 * 60 * 60
     )
     cache_options = CacheOptions(
         shared=False,
