@@ -9,11 +9,10 @@ authors = [
     { name = "Michael Schönitzer", email = "michael@schoenitzer.de" },
 ]
 dependencies = [
-    "hishel[httpx] >=1.1.7,<2.0.0",
     "httpx >=0.28.1,<0.29.0",
     "mwparserfromhell >=0.7,<0.8",
     "pydantic >=2.7.1,<3",
-    "pywikibot >=10.1.0,<11",
+    "pywikibot @ git+https://github.com/wikimedia/pywikibot",
     "sentry-sdk >=2.0.1,<3",
     "yarl >=1.9,<2",
 ]
@@ -27,8 +26,12 @@ dev = [
     "ty >=0.0.4,<0.1",
 ]
 
+[tool.ruff.format]
+skip-magic-trailing-comma = true
+
 [tool.ruff.lint]
 extend-select = ["B", "PT", "PTH", "TRY", "UP"]
+extend-ignore = ["TRY003"]
 
 [tool.mypy]
 ignore_missing_imports = true
