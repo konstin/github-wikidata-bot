@@ -12,7 +12,7 @@ dependencies = [
     "httpx >=0.28.1,<0.29.0",
     "mwparserfromhell >=0.7,<0.8",
     "pydantic >=2.7.1,<3",
-    "pywikibot @ git+https://github.com/wikimedia/pywikibot",
+    "pywikibot >=11.1,<12",
     "sentry-sdk >=2.0.1,<3",
     "yarl >=1.9,<2",
 ]
@@ -21,7 +21,7 @@ dependencies = [
 dev = [
     "httpx >=0.28.0,<0.29",
     "pytest >=9.0.0,<10.0.0",
-    "ruff >=0.14,<0.15",
+    "ruff >=0.15,<0.16",
     "tqdm >=4.66.4,<5",
     "ty >=0.0.4,<0.1",
 ]
