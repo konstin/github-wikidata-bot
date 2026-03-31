@@ -12,6 +12,7 @@ from subprocess import CalledProcessError
 import pywikibot
 import sentry_sdk
 from pywikibot.data import sparql
+from pywikibot.login import BotPassword, ClientLoginManager
 
 from .utils import parse_filter_list
 
@@ -83,7 +84,15 @@ class Settings:
 
         self.github_api_limit = Semaphore(20)
 
-        self.bot = pywikibot.WikidataBot(always=True)
+        site = pywikibot.Site("wikidata", "wikidata", user=config["username"])
+        bot_password = BotPassword(config["bot-name"], config["password"])
+        login_manager = ClientLoginManager(
+            user=config["username"], password=bot_password.password, site=site
+        )
+        login_manager.login_name = bot_password.login_name(config["username"])
+        login_manager.login()
+
+        self.bot = pywikibot.WikidataBot(always=True, site=site)
         # pywikibot doesn't cache the calendar model, so let's do this manually
         self.calendar_model = self.bot.repo.calendarmodel()
 

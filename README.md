@@ -20,11 +20,13 @@ Install [uv][uv] and install the dependencies:
 uv sync
 ```
 
-[Generate a personal access token on GitHub][github-token]. Create a `config.json` file with that token and your Wikidata username:
+[Generate a personal access token on GitHub][github-token] and a [bot password](https://www.wikidata.org/wiki/Special:BotPasswords). Create a `config.json` file with the GitHub token, your usename, the bot name and the bot password:
 
 ```json
 {
   "username": "my-wikidata-username",
+  "bot-name": "my-wikidata-bot",
+  "password": "my-bot-password-32-chars-long",
   "github-oauth-token": "abcdedf1234567"
 }
 ```
