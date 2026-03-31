@@ -84,13 +84,16 @@ class Settings:
 
         self.github_api_limit = Semaphore(20)
 
+        # Login, either cached or from `config.json`.
         site = pywikibot.Site("wikidata", "wikidata", user=config["username"])
-        bot_password = BotPassword(config["bot-name"], config["password"])
-        login_manager = ClientLoginManager(
-            user=config["username"], password=bot_password.password, site=site
-        )
-        login_manager.login_name = bot_password.login_name(config["username"])
-        login_manager.login()
+        site.login(cookie_only=True)
+        if not site.logged_in():
+            bot_password = BotPassword(config["bot-name"], config["password"])
+            login_manager = ClientLoginManager(
+                user=config["username"], password=bot_password.password, site=site
+            )
+            login_manager.login_name = bot_password.login_name(config["username"])
+            login_manager.login()
 
         self.bot = pywikibot.WikidataBot(always=True, site=site)
         # pywikibot doesn't cache the calendar model, so let's do this manually
