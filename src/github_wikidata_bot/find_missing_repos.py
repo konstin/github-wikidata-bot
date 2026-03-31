@@ -1,3 +1,4 @@
+from github_wikidata_bot.github import GitHubRepo
 import asyncio
 import json
 import logging
@@ -15,7 +16,6 @@ from github_wikidata_bot.sparql import (
     cached_sparql_query,
     WikidataProject,
 )
-from github_wikidata_bot.utils import github_repo_to_api
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,10 @@ async def main():
     async with AsyncClient() as client:
         tasks = [
             query(
-                client, semaphore, github_repo_to_api(project.repo), project.wikidata_id
+                client,
+                semaphore,
+                GitHubRepo(project.repo).api_base(),
+                project.wikidata_id,
             )
             for project in projects
         ]

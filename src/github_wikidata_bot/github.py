@@ -1,25 +1,25 @@
 import asyncio
 import datetime
+import itertools
 import logging
 import textwrap
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+from collections.abc import Mapping
 from urllib.parse import quote_plus
 
 import pywikibot
 import sentry_sdk
 from httpx import AsyncClient, HTTPStatusError
+from pydantic import BaseModel
 from pywikibot import WbTime
+from yarl import URL
 
 from .settings import Settings
 from .sparql import WikidataProject
-from .utils import (
-    SimpleSortableVersion,
-    github_repo_to_api,
-    github_repo_to_api_releases,
-    github_repo_to_api_tags,
-)
+from .utils import SimpleSortableVersion
 from .versionhandler import extract_version
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,7 @@ class ReleaseTag:
     release_type: str
     tag_url: str
     tag_type: str
+    sha: str
 
 
 @dataclass
@@ -59,6 +60,44 @@ class RateLimitError(Exception):
         self.sleep = sleep
 
 
+class GitHubRepo:
+    """The URL to a github repository."""
+
+    org: str
+    project: str
+
+    def __init__(self, url: str):
+        """Parse from a github URL in the form `https://github.com/python/cpython`."""
+        parsed = URL(url).with_scheme("https").with_fragment(None)
+        if parsed.path.endswith(".git"):
+            parsed = parsed.with_path(parsed.path[:-4])
+        # remove a trailing slash
+        # ok: https://api.github.com/repos/simonmichael/hledger
+        # not found: https://api.github.com/repos/simonmichael/hledger/
+        # https://www.wikidata.org/wiki/User_talk:Konstin#How_to_run_/_how_often_is_it_run?
+        parsed = parsed.with_path(parsed.path.rstrip("/"))
+
+        if parsed.host != "github.com" or parsed.path.count("/") != 2:
+            raise ValueError(f"Invalid repo URL: {url}")
+        # Ignore the trailing slash at the beginning of the path.
+        _, self.org, self.project = parsed.path.split("/")
+
+    def __str__(self) -> str:
+        return f"https://github.com/{self.org}/{self.project}"
+
+    def api_base(self) -> str:
+        """The base github api URL for the repository."""
+        return f"https://api.github.com/repos/{self.org}/{self.project}"
+
+    def api_releases(self) -> str:
+        """The github api URL for the releases of the repository."""
+        return self.api_base() + "/releases"
+
+    def api_tags(self) -> str:
+        """The github api URL for the tags of the repository."""
+        return self.api_base() + "/git/refs/tags"
+
+
 def string_to_wddate(iso_timestamp: str, settings: Settings) -> WbTime:
     """
     Create a wikidata compatible wikibase date from an ISO 8601 timestamp
@@ -72,20 +111,21 @@ def string_to_wddate(iso_timestamp: str, settings: Settings) -> WbTime:
 
 
 @sentry_sdk.trace
-async def fetch_json(url: str, client: AsyncClient, settings: Settings):
-    """Get JSON from an API and cache the result."""
-    response = await client.get(url, headers=settings.github_auth_headers)
+async def fetch_json(
+    url: str,
+    client: AsyncClient,
+    settings: Settings,
+    caching_headers: dict[str, str] | None = None,
+) -> tuple[Any | None, Mapping[str, str]]:
+    """Get JSON from an API while handling rate limiting and cache headers.
 
-    if response.extensions.get("hishel_from_cache"):
-        if response.extensions.get("hishel_revalidated"):
-            logger.info(f"cached, revalidated: {url}")
-        else:
-            logger.info(f"cached, stale: {url}")
-    else:
-        if response.extensions.get("hishel_revalidated"):
-            logger.info(f"revalidated: {url}")
-        else:
-            logger.info(f"uncached: {url}")
+    Returns `None` instead of the payload if the server returned a 304 Not Modified."""
+    if caching_headers is None:
+        caching_headers = {}
+
+    response = await client.get(
+        url, headers={**settings.github_auth_headers, **caching_headers}
+    )
 
     # We stop before we hit the actual rate limit cause github doesn't seem to like it
     # if we go to zero.
@@ -105,29 +145,144 @@ async def fetch_json(url: str, client: AsyncClient, settings: Settings):
     if response.status_code == 429:
         # We've hit github's abuse limits, wait 5min and try again
         raise RateLimitError(5 * 60)
+
+    if response.status_code == 304:
+        logger.info(f"Not modified: {url}")
+        return None, response.headers
+
+    # Handle other 4xx and 5xx status codes
     response.raise_for_status()
-    return response.json()
+
+    if caching_headers:
+        logger.info(f"Fresh response: {response.url}")
+    else:
+        logger.info(f"Received data: {response.url}")
+
+    return response.json(), response.headers
+
+
+async def fetch_cached(
+    api_url: str,
+    cache_path: Path,
+    client: AsyncClient,
+    allow_stale: bool,
+    settings: Settings,
+) -> Any:
+    cache_path.parent.mkdir(exist_ok=True, parents=True)
+    if cache_path.exists():
+        cached: CachedResponse = CachedResponse.model_validate_json(
+            cache_path.read_text()
+        )
+        if allow_stale:
+            logger.info(f"Assumed fresh: {api_url}")
+            return cached.payload
+
+        logger.info(f"Revalidating: {api_url}")
+        headers = {"If-None-Match": cached.metadata.etag}
+        payload, headers = await fetch_json(api_url, client, settings, headers)
+        if not payload:
+            logger.info(f"Revalidated, no change: {api_url}")
+            return cached.payload
+    else:
+        logger.info(f"No cache: {api_url}")
+        headers = {}
+        payload, headers = await fetch_json(api_url, client, settings, headers)
+        assert payload is not None  # For the type checker
+
+    etag = headers["etag"]
+    if etag.startswith("W/"):
+        # Bad etag parsing
+        etag = etag.removeprefix("W/")
+    cached_release: CachedResponse = CachedResponse(
+        metadata=CacheMeta(etag=etag), payload=payload
+    )
+    cache_path.write_text(cached_release.model_dump_json())
+    return payload
+
+
+class CacheMeta(BaseModel):
+    etag: str
+
+
+class CachedResponse(BaseModel):
+    metadata: CacheMeta
+    payload: Any
 
 
 @sentry_sdk.trace
-async def get_all_pages(
-    url: str, client: AsyncClient, settings: Settings
+async def get_releases(
+    repo: GitHubRepo,
+    repo_cache_root: Path,
+    client: AsyncClient,
+    allow_stale: bool,
+    settings: Settings,
 ) -> list[dict[str, Any]]:
     """Gets all pages of the release/tag information"""
-    page_number = 1
-    results: list[dict[str, Any]] = []
-    while True:
-        page = await fetch_json(
-            f"{url}?page={page_number}&per_page=100", client, settings
+    per_page = 100
+
+    releases_cache = repo_cache_root.joinpath(f"releases-{per_page}")
+    releases_cache.mkdir(exist_ok=True, parents=True)
+
+    all_releases: list[dict[str, Any]] = []
+    for page_number in itertools.count(1):
+        page_url = f"{repo.api_releases()}?page={page_number}&per_page={per_page}"
+        page_cache = releases_cache.joinpath(f"{page_number}.json")
+        if page_cache.exists():
+            cached: CachedResponse = CachedResponse.model_validate_json(
+                page_cache.read_text()
+            )
+            if allow_stale:
+                logger.info(f"Stale cache: {page_url}")
+                all_releases += cached.payload
+                # Assumption: github returns 100 entries per page when we request it.
+                if len(cached.payload) < per_page:
+                    break
+                else:
+                    continue
+
+            logger.info(f"Revalidating: {page_url}")
+            headers = {"If-None-Match": cached.metadata.etag}
+            page_releases, headers = await fetch_json(
+                page_url, client, settings, headers
+            )
+            # If the first page matches, assume all other pages are fresh too.
+            # It's unlikely that a release older than 100 gets updated, and can save a lot of requests.
+            if not page_releases:
+                all_releases += cached.payload
+                if page_number == 1:
+                    allow_stale = True
+                # Assumption: github returns 100 entries per page when we request it.
+                if len(cached.payload) < per_page:
+                    break
+                else:
+                    continue
+        else:
+            logger.info(f"No cache: {page_url}")
+            headers = {}
+            page_releases, headers = await fetch_json(
+                page_url, client, settings, headers
+            )
+            assert page_releases is not None  # For the type checker
+
+        logger.info(f"Fresh response: {page_url}")
+
+        assert isinstance(page_releases, list)  # For the type checker
+        all_releases += page_releases
+
+        etag = headers["etag"]
+        if etag.startswith("W/"):
+            # Bad etag parsing
+            etag = etag.removeprefix("W/")
+        cached_release = CachedResponse(
+            metadata=CacheMeta(etag=etag), payload=page_releases
         )
-        if not page:
-            break
-        page_number += 1
-        results += page
+        page_cache.write_text(cached_release.model_dump_json())
+
         # Assumption: github returns 100 entries per page when we request it.
-        if len(page) < 100:
+        if len(page_releases) < per_page:
             break
-    return results
+
+    return all_releases
 
 
 def analyse_release(
@@ -195,6 +350,7 @@ def analyse_tag(
 
     tag_type = release["object"]["type"]
     tag_url = release["object"]["url"]
+    sha = release["object"]["sha"]
     html_url = project_info["html_url"] + "/releases/tag/" + quote_plus(tag_name)
 
     return ReleaseTag(
@@ -203,13 +359,13 @@ def analyse_tag(
         release_type=release_type,
         tag_type=tag_type,
         tag_url=tag_url,
+        sha=sha,
     )
 
 
-async def get_date_from_tag_url(
-    release: ReleaseTag, client: AsyncClient, settings: Settings
+async def get_date_from_tag_details(
+    release: ReleaseTag, tag_details: dict[str, Any], settings: Settings
 ) -> Release | None:
-    tag_details = await fetch_json(release.tag_url, client, settings)
     if release.tag_type == "tag":
         # For some weird reason the api might not always have a date
         if not tag_details["tagger"]["date"]:
@@ -234,7 +390,11 @@ async def get_date_from_tag_url(
 
 @sentry_sdk.trace
 async def get_data_from_github(
-    url: str, properties: WikidataProject, client: AsyncClient, settings: Settings
+    repo: GitHubRepo,
+    properties: WikidataProject,
+    client: AsyncClient,
+    allow_stale: bool,
+    settings: Settings,
 ) -> Project:
     """
     Retrieve the following data from github:
@@ -254,7 +414,15 @@ async def get_data_from_github(
     retrieved = string_to_wddate(iso_timestamp, settings)
 
     # General project information
-    project_info = await fetch_json(github_repo_to_api(url), client, settings)
+    repo_cache_root = Path("cache").joinpath(repo.org).joinpath(repo.project)
+
+    project_info = await fetch_cached(
+        repo.api_base(),
+        repo_cache_root.joinpath("index.json"),
+        client,
+        allow_stale,
+        settings,
+    )
 
     website = project_info.get("homepage")
     if project_license := project_info.get("license"):
@@ -262,8 +430,7 @@ async def get_data_from_github(
     else:
         spdx_id = None
 
-    api_url = github_repo_to_api_releases(url)
-    releases = await get_all_pages(api_url, client, settings)
+    releases = await get_releases(repo, repo_cache_root, client, allow_stale, settings)
 
     invalid_releases = []
     extracted: list[Release | None] = []
@@ -283,9 +450,11 @@ async def get_data_from_github(
         len(extracted) == 0 or properties.wikidata_id in settings.whitelist
     ):
         logger.info("Falling back to tags")
-        api_url = github_repo_to_api_tags(url)
         try:
-            tags = await fetch_json(api_url, client, settings)
+            cache_file = repo_cache_root.joinpath("tags-index").joinpath("index.json")
+            tags = await fetch_cached(
+                repo.api_tags(), cache_file, client, allow_stale, settings
+            )
         except HTTPStatusError as e:
             # Github raises a 404 if there are no tags
             if e.response.status_code == 404:
@@ -311,7 +480,14 @@ async def get_data_from_github(
         # TODO: Don't use the API, use the git interface instead?
         async def tag_with_limit(tag: ReleaseTag) -> Release | None:
             async with settings.github_api_limit:
-                return await get_date_from_tag_url(tag, client, settings)
+                cache_file = repo_cache_root.joinpath("tags-detail").joinpath(
+                    f"{tag.sha}.json"
+                )
+                # Assumption: Tags are immutable, the page never needs to be refreshed.
+                tag_details = await fetch_cached(
+                    tag.tag_url, cache_file, client, True, settings
+                )
+                return await get_date_from_tag_details(tag, tag_details, settings)
 
         extracted = list(
             await asyncio.gather(*[tag_with_limit(tag) for tag in filtered])

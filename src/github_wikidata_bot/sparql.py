@@ -1,7 +1,6 @@
 import json
 import logging
 from collections import defaultdict
-from typing import Any
 
 import sentry_sdk
 from pydantic import BaseModel
@@ -23,9 +22,7 @@ class WikidataProject(BaseModel):
 
 
 def cached_sparql_query(
-    query_name: str,
-    use_cache: bool,
-    settings: Settings,
+    query_name: str, use_cache: bool, settings: Settings
 ) -> list[dict[str, str]]:
     """Run a SPARQL query against wikidata, reading from a local cache if requested."""
     cache_path = cache_root().joinpath(f"{query_name}.json")
@@ -43,12 +40,12 @@ def cached_sparql_query(
 
 
 def filter_projects(
-    ignore_blacklist: bool,
+    ignore_denylist: bool,
     project_filter: str | None,
     project_list: list[WikidataProject],
     response: list[dict[str, str]],
     settings: Settings,
-) -> list[Any]:
+) -> list[WikidataProject]:
     projects = []
     logger.info(f"{len(response)} projects were found by the sparql query")
     repo_filter = 0
@@ -68,7 +65,7 @@ def filter_projects(
         ):
             repo_filter += 1
             continue
-        if project.project[31:] in settings.blacklist and not ignore_blacklist:
+        if project.project[31:] in settings.blacklist and not ignore_denylist:
             logger.debug(
                 f"{project.projectLabel} ({project.wikidata_id}) is blacklisted"
             )
@@ -83,9 +80,9 @@ def filter_projects(
             continue
 
         if len(projects) > 1 and projects[-1].project == project.project:
-            if projects[-1].repo != project.repo:
+            if projects[-1].project != project.repo:
                 logger.debug(
-                    f"Repo mismatch: {project.projectLabel} {projects[-1].repo} {project.repo}"
+                    f"Repo mismatch: {project.projectLabel} {projects[-1].project} {project.repo}"
                 )
                 # TODO: Handle >2 repo entries
                 projects.pop(-1)

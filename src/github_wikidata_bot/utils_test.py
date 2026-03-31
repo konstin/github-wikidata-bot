@@ -1,11 +1,7 @@
+from github_wikidata_bot.github import GitHubRepo
 from pywikibot.exceptions import APIError
 
-from .utils import (
-    github_repo_to_api_releases,
-    is_edit_conflict,
-    normalize_url,
-    parse_filter_list,
-)
+from .utils import is_edit_conflict, parse_filter_list
 
 exceptions_page = """
 This page defines exceptions for [[User:Github-wiki-bot|Github-wiki-bot]]. You can add an item here to stop Github-wiki-bot to update this item.
@@ -32,7 +28,7 @@ def test_url_editing_with_fragment():
         "https://github.com/data2health/contributor-role-ontology"
         "#relevant-publications-and-scholarly-products"
     )
-    actual = github_repo_to_api_releases(url)
+    actual = GitHubRepo(url).api_releases()
     expected = (
         "https://api.github.com/repos/data2health/contributor-role-ontology/releases"
     )
@@ -41,7 +37,7 @@ def test_url_editing_with_fragment():
 
 def test_repo_normalization():
     url = "git://github.com/certbot/certbot.git"
-    actual = str(normalize_url(url))
+    actual = str(GitHubRepo(url))
     expected = "https://github.com/certbot/certbot"
     assert actual == expected
 

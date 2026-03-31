@@ -9,15 +9,10 @@ from httpx import AsyncClient
 from pywikibot import Claim, ItemPage, WbTime
 from pywikibot.exceptions import APIError
 
-from github_wikidata_bot.github import Project
+from github_wikidata_bot.github import Project, GitHubRepo
 from github_wikidata_bot.redirects import RedirectDict
 from github_wikidata_bot.settings import Settings
-from github_wikidata_bot.utils import (
-    normalize_url,
-    github_repo_to_api,
-    SimpleSortableVersion,
-    is_edit_conflict,
-)
+from github_wikidata_bot.utils import SimpleSortableVersion, is_edit_conflict
 from github_wikidata_bot.website import is_website_other_property
 
 logger = logging.getLogger(__name__)
@@ -75,11 +70,7 @@ def create_sources(
 
 
 def normalize_repo_url(
-    item: ItemPage,
-    url_normalized: str,
-    url_raw: str,
-    q_value: str,
-    settings: Settings,
+    item: ItemPage, url_normalized: str, url_raw: str, q_value: str, settings: Settings
 ):
     """Canonicalize the github url
     This use the format https://github.com/[owner]/[repo]
@@ -165,12 +156,12 @@ async def update_wikidata(project: Project, client: AsyncClient, settings: Setti
     urls = item.claims.get(Properties.source_code_repository.value, [])
     if len(urls) == 1:
         url_raw = urls[0].target
-        url_normalized = str(normalize_url(url_raw))
+        repo = GitHubRepo(url_raw)
         if settings.normalize_repo_url:
-            normalize_repo_url(item, url_normalized, url_raw, q_value, settings)
+            normalize_repo_url(item, str(repo), url_raw, q_value, settings)
     else:
         url_raw = project.repo
-        url_normalized = str(normalize_url(url_raw))
+        repo = GitHubRepo(url_raw)
 
     for claim, claim_kind in [
         (await set_website(project, client, settings), "website"),
@@ -180,9 +171,7 @@ async def update_wikidata(project: Project, client: AsyncClient, settings: Setti
             continue
         claim.addSources(
             create_sources(
-                url=github_repo_to_api(url_normalized),
-                retrieved=project.retrieved,
-                settings=settings,
+                url=repo.api_base(), retrieved=project.retrieved, settings=settings
             )
         )
         with sentry_sdk.start_span(

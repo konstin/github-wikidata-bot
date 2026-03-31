@@ -77,7 +77,10 @@ class Settings:
             github_oauth_token: str | None = config.get("github-oauth-token")
 
         if github_oauth_token is None:
-            print("Please add github-oauth-token to config.json", file=sys.stderr)
+            if not config_json.exists():
+                print(f"Missing config file at {config_json.absolute()}")
+            else:
+                print("Please add github-oauth-token to config.json", file=sys.stderr)
             sys.exit(1)
         else:
             self.github_auth_headers = {"Authorization": "token " + github_oauth_token}
@@ -88,6 +91,8 @@ class Settings:
         site = pywikibot.Site("wikidata", "wikidata", user=config["username"])
         site.login(cookie_only=True)
         if not site.logged_in():
+            # Clear stale BotPassword session cookies.
+            site.logout()
             bot_password = BotPassword(config["bot-name"], config["password"])
             login_manager = ClientLoginManager(
                 user=config["username"], password=bot_password.password, site=site
@@ -142,4 +147,4 @@ class Settings:
     def _get_filter_list(page_title: str) -> list[str]:
         site = pywikibot.Site()
         page = pywikibot.Page(site, page_title)
-        return parse_filter_list(page.text)  # ty: ignore[invalid-argument-type]
+        return parse_filter_list(page.text)

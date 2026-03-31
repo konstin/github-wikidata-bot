@@ -6,32 +6,26 @@ from pathlib import Path
 
 import pywikibot
 import sentry_sdk
-from hishel import AsyncSqliteStorage, CacheOptions, SpecificationPolicy
-from hishel.httpx import AsyncCacheClient
 from httpx import AsyncClient, HTTPError, HTTPStatusError
 from pydantic import TypeAdapter
 
 from .github import (
     Project,
+    RateLimitError,
     analyse_release,
     analyse_tag,
-    get_data_from_github,
     fetch_json,
-    RateLimitError,
+    get_data_from_github,
+    GitHubRepo,
 )
 from .settings import Settings
 from .sparql import (
     WikidataProject,
-    query_best_versions,
-    filter_projects,
     cached_sparql_query,
+    filter_projects,
+    query_best_versions,
 )
-from .utils import (
-    SimpleSortableVersion,
-    github_repo_to_api,
-    github_repo_to_api_releases,
-    github_repo_to_api_tags,
-)
+from .utils import SimpleSortableVersion
 from .wikidata import update_wikidata
 
 logger = logging.getLogger(__name__)
@@ -43,7 +37,7 @@ async def check_fast_path(
     client: AsyncClient,
     settings: Settings,
 ) -> bool:
-    """Check whether the latest github release matches the latest version on wikidata, and if so,
+    """Check whether the latest GitHub release matches the latest version on wikidata, and if so,
     skip the expensive processing."""
     if not project.projectLabel:
         logger.info(f"No fast path, no project label: {project.projectLabel}")
@@ -54,9 +48,13 @@ async def check_fast_path(
     else:
         project_version = None
 
-    api_url = github_repo_to_api_releases(project.repo)
+    repo = GitHubRepo(project.repo)
+
     try:
-        releases = await fetch_json(api_url + "?per_page=1", client, settings)
+        releases, _ = await fetch_json(
+            repo.api_releases() + "?per_page=1", client, settings
+        )
+        assert isinstance(releases, list)  # For the type checker
     except HTTPError as e:
         logger.info(f"No fast path, fetch releases errored: {e}")
         return False
@@ -75,9 +73,9 @@ async def check_fast_path(
             logger.info("No fast path, release failed to analyse")
             return False
     else:
-        api_url = github_repo_to_api_tags(project.repo)
         try:
-            tags = await fetch_json(api_url, client, settings)
+            tags, _ = await fetch_json(repo.api_tags(), client, settings)
+            assert isinstance(tags, list)  # For the type checker
         except HTTPStatusError as e:
             # GitHub raises a 404 if there are no tags
             if e.response.status_code == 404:
@@ -93,9 +91,8 @@ async def check_fast_path(
                 logger.info(f"No fast path, fetch tags errored: {e}")
                 return False
         else:
-            project_info = await fetch_json(
-                github_repo_to_api(project.repo), client, settings
-            )
+            project_info, _ = await fetch_json(repo.api_base(), client, settings)
+            assert isinstance(project_info, dict)  # For the type checker
             extracted_tags = [
                 analyse_tag(release, project_info, []) for release in tags
             ]
@@ -120,14 +117,16 @@ async def update_project(
     project: WikidataProject,
     best_versions: dict[str, list[str]],
     client: AsyncClient,
+    allow_stale: bool,
     settings: Settings,
 ):
-    if await check_fast_path(project, best_versions, client, settings):
-        return
-
     try:
+        if await check_fast_path(project, best_versions, client, settings):
+            return
+
+        repo = GitHubRepo(project.repo)
         properties: Project = await get_data_from_github(
-            project.repo, project, client, settings
+            repo, project, client, allow_stale, settings
         )
     except HTTPError as e:
         logger.error(
@@ -194,10 +193,14 @@ def init_logging(quiet: bool, http_debug: bool) -> None:
                 "backupCount": 10,
             },
         },
-        "loggers": {"github_wikidata_bot": {"handlers": handlers, "level": "INFO"}},
+        "loggers": {
+            "pywikibot": {"handlers": handlers, "level": "DEBUG"},
+            "github_wikidata_bot": {"handlers": handlers, "level": "INFO"},
+        },
     }
 
     logging.config.dictConfig(conf)
+    logger.info("Starting")
 
     if http_debug:
         from http.client import HTTPConnection
@@ -211,26 +214,17 @@ def init_logging(quiet: bool, http_debug: bool) -> None:
 
 async def run(
     project_filter: str | None,
-    ignore_blacklist: bool,
+    ignore_denylist: bool,
     cache_sparql: bool,
     allow_stale: bool,
     settings: Settings,
 ):
-    storage = AsyncSqliteStorage(
-        database_path="cache-http.db", default_ttl=365 * 24 * 60 * 60
-    )
-    cache_options = CacheOptions(
-        shared=False,
-        allow_stale=allow_stale,
-    )
-    async with AsyncCacheClient(
-        storage=storage, policy=SpecificationPolicy(cache_options=cache_options)
-    ) as client:
+    async with AsyncClient() as client:
         logger.info("Querying Projects")
         response = cached_sparql_query("free_software_items", cache_sparql, settings)
         project_list = TypeAdapter(list[WikidataProject]).validate_python(response)
         projects = filter_projects(
-            ignore_blacklist, project_filter, project_list, response, settings
+            ignore_denylist, project_filter, project_list, response, settings
         )
         logger.info(f"{len(projects)} projects were found")
         logger.info("Querying versions")
@@ -251,7 +245,11 @@ async def run(
                             # If a project takes over 1min, skip it for performance.
                             await asyncio.wait_for(
                                 update_project(
-                                    project, best_versions, client, settings
+                                    project,
+                                    best_versions,
+                                    client,
+                                    allow_stale,
+                                    settings,
                                 ),
                                 timeout=60,
                             )
@@ -285,7 +283,7 @@ def main():
         action="store_true",
     )
     parser.add_argument("--debug-http", action="store_true")
-    parser.add_argument("--ignore-blacklist", action="store_true")
+    parser.add_argument("--ignore-denylist", action="store_true")
     parser.add_argument(
         "--quiet", action="store_true", help="Do not log to stdout/stderr"
     )
@@ -297,7 +295,7 @@ def main():
     asyncio.run(
         run(
             args.filter,
-            args.ignore_blacklist,
+            args.ignore_denylist,
             args.cache_sparql,
             args.allow_stale,
             settings,

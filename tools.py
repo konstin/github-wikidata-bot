@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
+from pathlib import Path
 from random import sample
 
 from pydantic import TypeAdapter
 
-from github_wikidata_bot.github import fetch_json, get_all_pages, analyse_release
+from github_wikidata_bot.github import (
+    fetch_json,
+    get_releases,
+    analyse_release,
+    GitHubRepo,
+)
 from github_wikidata_bot.main import logger
 from github_wikidata_bot.settings import Settings
 from github_wikidata_bot.sparql import (
@@ -13,7 +19,6 @@ from github_wikidata_bot.sparql import (
     cached_sparql_query,
     WikidataProject,
 )
-from github_wikidata_bot.utils import github_repo_to_api, github_repo_to_api_releases
 from httpx import AsyncClient
 
 
@@ -35,9 +40,17 @@ async def debug_version_handling(
         if not no_sampling:
             projects = safe_sample(projects, threshold)
         for project in projects:
-            project_info = await fetch_json(github_repo_to_api(project.repo))
-            apiurl = github_repo_to_api_releases(project.repo)
-            github_releases = await get_all_pages(apiurl, client, settings)
+            project_info, _ = await fetch_json(
+                GitHubRepo(project.repo).api_base(), client, settings
+            )
+            assert project_info is not None  # For the type checker
+            org_name = project.repo.removeprefix("https://github.com/")
+            if not org_name.count("/") == 1:
+                raise ValueError(f"Invalid repo URL: {project.repo}")
+            repo_cache_root = Path("cache").joinpath(org_name)
+            github_releases = await get_releases(
+                GitHubRepo(project.repo), repo_cache_root, client, False, settings
+            )
             if not no_sampling:
                 github_releases = safe_sample(github_releases, size)
             for github_release in github_releases:
