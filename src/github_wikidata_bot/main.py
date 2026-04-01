@@ -237,7 +237,7 @@ async def run(
                     transaction.set_data("project", project.project)
                     transaction.set_data("project-label", project.projectLabel)
                     logger.info(
-                        f"## [{idx}/{len(projects)}] {project.projectLabel}: {project.project}"
+                        f"## [{idx}/{len(projects)}] {project.projectLabel}: {project.project} {project.repo}"
                     )
                     start = time.time()
                     try:
