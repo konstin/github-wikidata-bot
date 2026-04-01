@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
-from pathlib import Path
 from random import sample
 
 from pydantic import TypeAdapter
