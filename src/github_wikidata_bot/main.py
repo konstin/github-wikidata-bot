@@ -219,7 +219,7 @@ async def run(
     allow_stale: bool,
     settings: Settings,
 ):
-    async with AsyncClient() as client:
+    async with AsyncClient(follow_redirects=True) as client:
         logger.info("Querying Projects")
         response = cached_sparql_query("free_software_items", cache_sparql, settings)
         project_list = TypeAdapter(list[WikidataProject]).validate_python(response)
