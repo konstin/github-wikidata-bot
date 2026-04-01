@@ -156,7 +156,7 @@ async def fetch_json(
     if caching_headers:
         logger.info(f"Fresh response: {response.url}")
     else:
-        logger.info(f"Received data: {response.url}")
+        logger.info(f"Fetched: {response.url}")
 
     return response.json(), response.headers
 
@@ -232,7 +232,7 @@ async def get_releases(
                 page_cache.read_text()
             )
             if allow_stale:
-                logger.info(f"Stale cache: {page_url}")
+                logger.info(f"Cache unchecked: {page_url}")
                 all_releases += cached.payload
                 # Assumption: github returns 100 entries per page when we request it.
                 if len(cached.payload) < per_page:
