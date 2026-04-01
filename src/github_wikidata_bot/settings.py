@@ -8,10 +8,15 @@ from asyncio import Semaphore
 from functools import lru_cache
 from pathlib import Path
 from subprocess import CalledProcessError
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from sentry_sdk._types import Event
 
 import pywikibot
 import sentry_sdk
 from pywikibot.data import sparql
+from pywikibot.exceptions import MaxlagTimeoutError
 from pywikibot.login import BotPassword, ClientLoginManager
 
 from .utils import parse_filter_list
@@ -137,7 +142,8 @@ class Settings:
         sentry_sdk.init(
             dsn=dsn,
             release=release,
-            ignore_errors=[KeyboardInterrupt],
+            ignore_errors=[KeyboardInterrupt, MaxlagTimeoutError],
+            before_send=_filter_edit_conflicts,
             traces_sample_rate=1.0,
             profile_session_sample_rate=1.0,
             profile_lifecycle="trace",
@@ -148,3 +154,15 @@ class Settings:
         site = pywikibot.Site()
         page = pywikibot.Page(site, page_title)
         return parse_filter_list(page.text)
+
+
+def _filter_edit_conflicts(
+    event: "Event",
+    hint: dict[str, Any],  # noqa: ARG001
+) -> "Event | None":
+    """Ignore non-actionable errors"""
+    # Ignore edit conflicts.
+    message = event.get("logentry", {}).get("message", "")
+    if isinstance(message, str) and "editconflict" in message:
+        return None
+    return event
