@@ -13,7 +13,7 @@ from github_wikidata_bot.github import (
     GitHubRepo,
 )
 from github_wikidata_bot.main import logger
-from github_wikidata_bot.settings import Settings
+from github_wikidata_bot.settings import Settings, cache_root
 from github_wikidata_bot.sparql import (
     filter_projects,
     cached_sparql_query,
@@ -47,7 +47,7 @@ async def debug_version_handling(
             org_name = project.repo.removeprefix("https://github.com/")
             if not org_name.count("/") == 1:
                 raise ValueError(f"Invalid repo URL: {project.repo}")
-            repo_cache_root = Path("cache").joinpath(org_name)
+            repo_cache_root = cache_root().joinpath(org_name)
             github_releases = await get_releases(
                 GitHubRepo(project.repo), repo_cache_root, client, False, settings
             )

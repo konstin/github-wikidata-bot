@@ -29,7 +29,7 @@ def project_root() -> Path:
 
 @lru_cache
 def cache_root() -> Path:
-    return project_root().joinpath(".cache")
+    return project_root().joinpath("cache")
 
 
 class NoTracebackFormatter(logging.Formatter):

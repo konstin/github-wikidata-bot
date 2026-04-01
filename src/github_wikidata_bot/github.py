@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from pywikibot import WbTime
 from yarl import URL
 
-from .settings import Settings
+from .settings import Settings, cache_root
 from .sparql import WikidataProject
 from .utils import SimpleSortableVersion
 from .versionhandler import extract_version
@@ -414,7 +414,7 @@ async def get_data_from_github(
     retrieved = string_to_wddate(iso_timestamp, settings)
 
     # General project information
-    repo_cache_root = Path("cache").joinpath(repo.org).joinpath(repo.project)
+    repo_cache_root = cache_root().joinpath(repo.org).joinpath(repo.project)
 
     project_info = await fetch_cached(
         repo.api_base(),
