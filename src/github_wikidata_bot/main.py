@@ -239,31 +239,26 @@ async def run(
                     logger.info(
                         f"## [{idx}/{len(projects)}] {project.projectLabel}: {project.project}"
                     )
+                    start = time.time()
                     try:
-                        start = time.time()
-                        try:
-                            # If a project takes over 1min, skip it for performance.
-                            await asyncio.wait_for(
-                                update_project(
-                                    project,
-                                    best_versions,
-                                    client,
-                                    allow_stale,
-                                    settings,
-                                ),
-                                timeout=60,
-                            )
-                        except TimeoutError:
-                            logger.warning(f"Timeout processing {project.projectLabel}")
-
-                        duration = time.time() - start
-                        logger.info(f"{project.projectLabel} took {duration:.3f}s")
+                        # If a project takes over 1min, skip it for performance.
+                        await asyncio.wait_for(
+                            update_project(
+                                project, best_versions, client, allow_stale, settings
+                            ),
+                            timeout=60,
+                        )
+                    except TimeoutError:
+                        logger.warning(f"Timeout processing {project.projectLabel}")
                     except RateLimitError as e:
                         logger.info(
                             f"github rate limit exceed, sleeping until reset in {int(e.sleep)}s"
                         )
                         await asyncio.sleep(e.sleep)
                         continue
+
+                    duration = time.time() - start
+                    logger.info(f"{project.projectLabel} took {duration:.3f}s")
                 break
         logger.info("# Finished successfully")
 
