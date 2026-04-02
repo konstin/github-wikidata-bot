@@ -136,22 +136,27 @@ async def update_project(
         return
 
     if settings.do_update_wikidata:
-        try:
-            # There are many spurious errors, mostly because pywikibot lacks http retrying,
-            # so we just retry any pywikibot once.
+        # There are many spurious errors, mostly because pywikibot lacks http retrying,
+        # so we retry pywikibot errors.
+        for attempt in range(settings.retries):
             try:
                 await update_wikidata(properties, client, settings)
             except pywikibot.exceptions.Error as e:
-                logger.error(
-                    f"Failed to update {properties.project}, retrying: {e}",
-                    exc_info=True,
-                )
+                if attempt < settings.retries - 1:
+                    backoff = 2**attempt + 2
+                    logger.error(
+                        f"Failed to update {properties.project} (attempt {attempt + 1}/{settings.retries}), "
+                        f"retrying after {backoff}s: {e}",
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(backoff)
+                else:
+                    logger.error(
+                        f"Failed to update {properties.project}: {e}", exc_info=True
+                    )
+                    raise
             else:
                 return
-            await update_wikidata(properties, client, settings)
-        except Exception as e:
-            logger.error(f"Failed to update {properties.project}: {e}", exc_info=True)
-            raise
 
 
 def init_logging(quiet: bool, http_debug: bool) -> None:

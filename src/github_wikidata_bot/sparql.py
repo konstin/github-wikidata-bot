@@ -1,10 +1,12 @@
 import json
 import logging
+import time
 from collections import defaultdict
 
 import sentry_sdk
 from pydantic import BaseModel
 from pywikibot.data import sparql
+from pywikibot.exceptions import ServerError
 
 from github_wikidata_bot.settings import Settings, cache_root
 
@@ -28,15 +30,26 @@ def cached_sparql_query(
     cache_path = cache_root().joinpath(f"{query_name}.json")
     if use_cache and cache_path.exists():
         return json.loads(cache_path.read_text())
-    with sentry_sdk.start_span(op="sparql", name=f"Query {query_name}"):
-        wikidata_sparql = sparql.SparqlQuery()
-        response = wikidata_sparql.select(
-            settings.sparql_dir.joinpath(f"{query_name}.rq").read_text()
-        )
+    query_text = settings.sparql_dir.joinpath(f"{query_name}.rq").read_text()
+    for attempt in range(settings.retries):
+        with sentry_sdk.start_span(op="sparql", name=f"Query {query_name}"):
+            try:
+                wikidata_sparql = sparql.SparqlQuery()
+                response = wikidata_sparql.select(query_text)
+            except ServerError as e:
+                if attempt < settings.retries - 1:
+                    sleep = 2**attempt * 10
+                    logger.warning(
+                        f"SPARQL query {query_name} failed (attempt {attempt + 1}/{settings.retries}), retrying after {sleep}s: {e}"
+                    )
+                    time.sleep(sleep)
+                    continue
+                raise
         assert response is not None  # Type cast
-    cache_root().mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(json.dumps(response))
-    return response
+        cache_root().mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(response))
+        return response
+    raise RuntimeError("unreachable")
 
 
 def filter_projects(

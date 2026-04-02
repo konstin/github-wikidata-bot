@@ -56,6 +56,7 @@ class Settings:
     whitelist_page = "User:Github-wiki-bot/Whitelist"
     max_releases = 100
     max_tags = 300
+    retries = 3
     sparql_dir = Path(__file__).parent.parent
     repo_regex = re.compile(r"^[a-z]+://github.com/[^/]+/[^/]+/?$")
 
