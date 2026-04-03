@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import pytest
 
-from .versionhandler import extract_version
+from github_wikidata_bot.version import extract_version
 
 
 @pytest.mark.parametrize(

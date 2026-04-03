@@ -1,7 +1,31 @@
+from __future__ import annotations
+
+import functools
 import logging
 import re
 
 logger = logging.getLogger(__name__)
+
+
+@functools.total_ordering
+class SimpleSortableVersion:
+    """Sort a version by only the release part, ignoring everything else."""
+
+    version: list[int]
+
+    def __init__(self, version: str):
+        loose_version = re.sub(r"[^0-9.]", "", version)
+        self.version = [int(x) for x in loose_version.split(".") if x]
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, SimpleSortableVersion):
+            return NotImplemented
+        return self.version < other.version
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SimpleSortableVersion):
+            return NotImplemented
+        return self.version == other.version
 
 
 def number_of_unique_values(values: list[str]) -> int:

@@ -1,54 +1,34 @@
-from github_wikidata_bot.github import GitHubRepo
+from __future__ import annotations
+
 import asyncio
-import json
 import logging
 from asyncio import Semaphore
-from pathlib import Path
 
 import tqdm
-from pydantic import TypeAdapter
-
-from github_wikidata_bot.settings import Settings
 from httpx import AsyncClient
 
-from github_wikidata_bot.sparql import (
-    filter_projects,
-    cached_sparql_query,
-    WikidataProject,
-)
+from github_wikidata_bot.session import Config, Session
+from github_wikidata_bot.sparql import cached_projects_query
 
 logger = logging.getLogger(__name__)
-
-config = json.loads(Path("config.json").read_text())
-github_oauth_token = config.get("github-oauth-token")
-
-
-async def query(
-    client: AsyncClient, semaphore: Semaphore, url: str, wikidata_id: str
-) -> tuple[str, str, int]:
-    async with semaphore:
-        response = await client.head(
-            url, headers={"Authorization": "token " + github_oauth_token}
-        )
-    return url, wikidata_id, response.status_code
 
 
 async def main():
     logger.info("Querying Projects")
-    settings = Settings(None)
-    response = cached_sparql_query("free_software_items", False, settings)
-    project_list = TypeAdapter(list[WikidataProject]).validate_python(response)
-    projects = filter_projects(False, None, project_list, response, settings)
+    config = Config.load()
+    session = Session(config)
+    await session.connect()
+    projects = await cached_projects_query(False, session, None)
     semaphore = Semaphore(50)
     async with AsyncClient() as client:
+
+        async def query(url: str, wikidata_id: str) -> tuple[str, str, int]:
+            async with semaphore:
+                response = await client.head(url, headers=session.github_auth_headers)
+            return url, wikidata_id, response.status_code
+
         tasks = [
-            query(
-                client,
-                semaphore,
-                GitHubRepo(project.repo).api_base(),
-                project.wikidata_id,
-            )
-            for project in projects
+            query(project.repo.api_base(), project.q_value_url) for project in projects
         ]
         for finished in tqdm.tqdm(asyncio.as_completed(tasks), total=len(projects)):
             url, wikidata_id, status_code = await finished

@@ -4,6 +4,8 @@
 # * r"^(https?://www\.[a-z]+\.com)/?\.$"  # will be automatically replaced to \1.
 # * r"^(https?://www\.[a-z]+\.com)/?,$"  # will be automatically replaced to \1.
 # * r"^(https?):///(www\..+)$"  # will be automatically replaced to \1://\2.
+from __future__ import annotations
+
 import re
 
 # Pattern list from https://www.wikidata.org/wiki/Property_talk:P856 with minor regex syntax edits.
