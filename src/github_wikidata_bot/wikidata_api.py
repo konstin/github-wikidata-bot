@@ -468,6 +468,7 @@ class WikidataClient:
         last_error = WikidataError("no retries")
         for attempt in range(self.retries):
             self.request_counter += 1
+            print(params)
             response = await self.client.post(self.api_url, data=params)
 
             if 500 <= response.status_code < 600:
@@ -483,16 +484,23 @@ class WikidataClient:
 
             if error := data.get("error"):
                 if error.get("code") == "maxlag":
-                    # Recommendation from https://www.mediawiki.org/wiki/Manual:Maxlag_parameter is 5s, but that's
-                    # not enough in my experience.
+                    # We don't follow the recommendation https://www.mediawiki.org/wiki/Manual:Maxlag_parameter of 5s
+                    # as otherwise we get to do no edits at all. Counter to the documentation, pywikibot can't be
+                    # following this either, as it manages to make edits. Instead, we double the maxlag with each
+                    # attempt. We still apply server-directed throttle. Be mindful of the total timeout for projects.
                     retry_after = int(
                         response.headers.get("Retry-After", str(self.max_lag))
                     )
                     logger.info(
-                        f"Server is lagging behind too much, retrying in {retry_after}s"
+                        f"Server is lagging behind too much, retrying in {retry_after:.1f}s"
                     )
                     await asyncio.sleep(retry_after)
-                    last_error = MaxLagError("Max retries exceeded due to server lag")
+                    server_lag = float(error["lag"])
+                    last_error = MaxLagError(
+                        f"Wikidata edit failed due to server lag of {server_lag:.1f}s"
+                    )
+                    # TODO: typing
+                    params["maxlag"] = str(int(params["maxlag"]) * 2)
                     continue
                 elif error.get("code") == "badtoken":
                     self.csrf_token = None

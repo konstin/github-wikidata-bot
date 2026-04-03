@@ -174,7 +174,7 @@ async def update_project_with_retries(
         for _ in range(settings.retries):
             start = time.time()
             try:
-                # If a project takes over 2min, skip it for performance.
+                # If a project takes over 5min, skip it for performance.
                 await asyncio.wait_for(
                     update_project(
                         project,
@@ -184,7 +184,7 @@ async def update_project_with_retries(
                         wikidata,
                         github_client,
                     ),
-                    timeout=120,
+                    timeout=5 * 60,
                 )
             except TimeoutError:
                 logger.warning(f"Timeout processing {project.label}")
