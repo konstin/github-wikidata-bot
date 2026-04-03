@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging.config
+import textwrap
 import time
 from pathlib import Path
 
@@ -59,9 +60,11 @@ async def check_fast_path(
                 logger.info(f"Fresh using releases fast path: {project_version}")
                 return True
             else:
+                wikidata = ", ".join(best_versions.get(project.q_value_url, []))
+                wikidata = textwrap.shorten(wikidata, width=50, placeholder="...")
                 logger.info(
                     "No fast path, "
-                    + f"wikidata: {', '.join(best_versions.get(project.q_value_url, []))}, "
+                    + f"wikidata: {wikidata}, "
                     + f"releases: {result.version}"
                 )
                 return False
@@ -99,8 +102,10 @@ async def check_fast_path(
                     logger.info(f"Fresh using tags fast path: {project_version}")
                     return True
                 else:
+                    wikidata = ", ".join(best_versions.get(project.q_value_url, []))
+                    wikidata = textwrap.shorten(wikidata, width=50, placeholder="...")
                     logger.info(
-                        f"No fast path, wikidata: {best_versions.get(project.q_value_url, [])}, tags: {filtered[-1].version}"
+                        f"No fast path, wikidata: {wikidata}, tags: {filtered[-1].version}"
                     )
                     return False
             else:
