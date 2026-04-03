@@ -352,6 +352,8 @@ class WikidataClient:
     csrf_token: str | None
     last_edit_time: float
 
+    request_counter = 0
+
     def __init__(
         self,
         *,
@@ -375,6 +377,7 @@ class WikidataClient:
     async def login(self, username: str, bot_name: str, bot_password: str) -> None:
         """Log in with a bot password."""
         logger.info("Logging in")
+        self.request_counter += 1
         response = await self.client.get(
             self.api_url,
             params={
@@ -388,6 +391,7 @@ class WikidataClient:
         login_token = response.json()["query"]["tokens"]["logintoken"]
 
         login_user = f"{username}@{bot_name}"
+        self.request_counter += 1
         response = await self.client.post(
             self.api_url,
             data={
@@ -411,6 +415,7 @@ class WikidataClient:
         if self.csrf_token:
             return self.csrf_token
         logger.info("Fetching CSRF token")
+        self.request_counter += 1
         response = await self.client.get(
             self.api_url, params={"action": "query", "meta": "tokens", "format": "json"}
         )
@@ -435,6 +440,7 @@ class WikidataClient:
 
         last_error = WikidataError("no retries")
         for attempt in range(self.retries):
+            self.request_counter += 1
             response = await self.client.post(self.api_url, data=params)
 
             if 500 <= response.status_code < 600:
@@ -484,6 +490,7 @@ class WikidataClient:
         params["format"] = "json"
 
         for attempt in range(self.retries):
+            self.request_counter += 1
             resp = await self.client.get(self.api_url, params=params)
 
             if 500 <= resp.status_code < 600:
@@ -580,6 +587,7 @@ class WikidataClient:
     @sentry_sdk.trace
     async def sparql_query(self, query: str) -> list[dict[str, str]]:
         """Execute a SPARQL query against Wikidata."""
+        self.request_counter += 1
         resp = await self.client.get(
             self.sparql_url,
             params={"query": query},

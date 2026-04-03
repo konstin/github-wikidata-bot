@@ -288,3 +288,4 @@ async def main():
         session = Session(config, client)
 
         await run(args.filter, args.cache_sparql, args.allow_stale, session)
+        logger.info(f"Made {session.wikidata.request_counter} wikidata requests")
