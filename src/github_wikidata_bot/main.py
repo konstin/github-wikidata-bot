@@ -18,9 +18,9 @@ from github_wikidata_bot.github import (
     fetch_json,
     get_data_from_github,
 )
-from github_wikidata_bot.session import Config, Session
-from github_wikidata_bot.sparql import query_best_versions, cached_projects_query
 from github_wikidata_bot.project import WikidataProject
+from github_wikidata_bot.session import Config, Session
+from github_wikidata_bot.sparql import cached_projects_query, query_best_versions
 from github_wikidata_bot.version import SimpleSortableVersion
 from github_wikidata_bot.wikidata_api import WikidataError
 from github_wikidata_bot.wikidata_update import update_wikidata
@@ -186,6 +186,9 @@ async def update_project_with_retries(
                 )
                 await asyncio.sleep(e.sleep)
                 continue
+            except WikidataError as e:
+                logger.error(f"Failed to update: {e}")
+                break
 
             duration = time.time() - start
             logger.info(f"{project.label} took {duration:.3f}s")

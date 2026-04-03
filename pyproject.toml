@@ -30,7 +30,7 @@ skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
 extend-select = ["B", "I002", "PT", "PTH", "TRY", "UP"]
-extend-ignore = ["TRY003"]
+extend-ignore = ["TRY003", "TRY400"]
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]
