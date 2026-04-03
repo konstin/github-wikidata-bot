@@ -1,24 +1,16 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import asyncio
 from random import sample
 
-from pydantic import TypeAdapter
-
-from github_wikidata_bot.github import (
-    fetch_json,
-    get_releases,
-    analyse_release,
-    GitHubRepo,
-)
-from github_wikidata_bot.main import logger
-from github_wikidata_bot.settings import Settings, cache_root
-from github_wikidata_bot.sparql import (
-    filter_projects,
-    cached_sparql_query,
-    WikidataProject,
-)
 from httpx import AsyncClient
+
+from github_wikidata_bot.github import analyse_release, fetch_json, get_releases
+from github_wikidata_bot.main import logger
+from github_wikidata_bot.session import Config, Session, cache_root
+from github_wikidata_bot.sparql import cached_projects_query
 
 
 def safe_sample[T](population: list[T], size: int) -> list[T]:
@@ -29,37 +21,33 @@ def safe_sample[T](population: list[T], size: int) -> list[T]:
 
 
 async def debug_version_handling(
-    settings: Settings, threshold: int = 50, size: int = 20, no_sampling: bool = False
+    session: Session, threshold: int = 50, size: int = 20, no_sampling: bool = False
 ):
     logger.setLevel(40)
+    await session.connect()
     async with AsyncClient() as client:
-        response = cached_sparql_query("free_software_items", False, settings)
-        project_list = TypeAdapter(list[WikidataProject]).validate_python(response)
-        projects = filter_projects(False, None, project_list, response, settings)
+        projects = await cached_projects_query(False, session, None)
         if not no_sampling:
             projects = safe_sample(projects, threshold)
         for project in projects:
-            project_info, _ = await fetch_json(
-                GitHubRepo(project.repo).api_base(), client, settings
-            )
+            project_info, _ = await fetch_json(project.repo.api_base(), client, session)
             assert project_info is not None  # For the type checker
-            org_name = project.repo.removeprefix("https://github.com/")
-            if not org_name.count("/") == 1:
-                raise ValueError(f"Invalid repo URL: {project.repo}")
-            repo_cache_root = cache_root().joinpath(org_name)
+            repo_cache_root = (
+                cache_root().joinpath(project.repo.org).joinpath(project.repo.project)
+            )
             github_releases = await get_releases(
-                GitHubRepo(project.repo), repo_cache_root, client, False, settings
+                project.repo, repo_cache_root, client, False, session
             )
             if not no_sampling:
                 github_releases = safe_sample(github_releases, size)
             for github_release in github_releases:
-                release = analyse_release(github_release, project_info, settings)
+                release = analyse_release(github_release, project_info["name"])
                 print(
                     "{:15} | {:10} | {:20} | {:25} | {}".format(
                         release.version if release else "---",
                         release.release_type if release else "---",
                         github_release["tag_name"],
-                        repr(project.projectLabel),
+                        repr(project.label),
                         github_release["name"],
                     )
                 )
@@ -70,10 +58,10 @@ def main():
     parser.add_argument("--threshold", default=50, type=int)
     parser.add_argument("--maxsize", default=20, type=int)
     parser.add_argument("--no-sampling", action="store_true", default=False)
-    parser.add_argument("--github-oauth-token")
     args = parser.parse_args()
 
-    settings = Settings(args.github_oauth_token)
+    config = Config.load()
+    settings = Session(config)
     asyncio.run(
         debug_version_handling(settings, args.threshold, args.maxsize, args.no_sampling)
     )
