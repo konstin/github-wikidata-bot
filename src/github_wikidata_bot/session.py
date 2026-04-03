@@ -90,8 +90,9 @@ class Session:
 
     # Wikidata API settings
     edit_throttle = 1
-    # Recommendation from https://www.mediawiki.org/wiki/Manual:Maxlag_parameter
-    max_lag = 5
+    # Higher than the recommendation from https://www.mediawiki.org/wiki/Manual:Maxlag_parameter, we get too timeouts
+    # otherwise.
+    max_lag = 8
     user_agent = f"github-wikidata-bot/{version('github-wikidata-bot')} (https://github.com/konstin/github-wikidata-bot)"
 
     denylist: list[str]

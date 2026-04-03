@@ -452,7 +452,9 @@ class WikidataClient:
                 if error.get("code") == "maxlag":
                     # Recommendation from https://www.mediawiki.org/wiki/Manual:Maxlag_parameter is 5s, but that's
                     # not enough in my experience.
-                    retry_after = int(response.headers.get("Retry-After", "5")) * 2
+                    retry_after = int(
+                        response.headers.get("Retry-After", str(Session.max_lag))
+                    )
                     logger.warning(
                         f"Server is lagging behind too much, retrying in {retry_after}s"
                     )

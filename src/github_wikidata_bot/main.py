@@ -169,12 +169,12 @@ async def update_project_with_retries(
         for _ in range(session.retries):
             start = time.time()
             try:
-                # If a project takes over 1min, skip it for performance.
+                # If a project takes over 2min, skip it for performance.
                 await asyncio.wait_for(
                     update_project(
                         project, best_versions, client, allow_stale, session
                     ),
-                    timeout=60,
+                    timeout=120,
                 )
             except TimeoutError:
                 logger.warning(f"Timeout processing {project.label}")
