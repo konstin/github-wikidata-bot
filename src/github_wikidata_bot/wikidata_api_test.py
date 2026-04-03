@@ -300,7 +300,7 @@ async def test_save_claim():
                 "summary": "test edit",
                 "bot": "1",
                 "format": "json",
-                "maxlag": "5",
+                "maxlag": "8",
             },
         ),
     ]
@@ -438,7 +438,7 @@ async def test_remove_claim():
                 "summary": "cleanup",
                 "bot": "1",
                 "format": "json",
-                "maxlag": "5",
+                "maxlag": "8",
             },
         ),
     ]
