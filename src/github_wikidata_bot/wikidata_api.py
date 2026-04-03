@@ -488,7 +488,7 @@ class WikidataClient:
                     retry_after = int(
                         response.headers.get("Retry-After", str(self.max_lag))
                     )
-                    logger.warning(
+                    logger.info(
                         f"Server is lagging behind too much, retrying in {retry_after}s"
                     )
                     await asyncio.sleep(retry_after)
