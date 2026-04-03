@@ -140,17 +140,13 @@ async def update_project(
                 if attempt < session.retries - 1:
                     backoff = 2**attempt + 2
                     logger.error(
-                        f"Failed to update {properties.wikidata} (attempt {
-                            attempt + 1
-                        }/{session.retries}), "
+                        f"Failed to update (attempt {attempt + 1}/{session.retries}), "
                         f"retrying after {backoff}s: {e}",
                         exc_info=True,
                     )
                     await asyncio.sleep(backoff)
                 else:
-                    logger.error(
-                        f"Failed to update {properties.wikidata}: {e}", exc_info=True
-                    )
+                    logger.error(f"Failed to update: {e}", exc_info=True)
                     raise
             else:
                 return
