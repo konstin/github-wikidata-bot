@@ -6,6 +6,8 @@ import asyncio
 import datetime
 import json
 import logging
+import random
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Self
@@ -14,7 +16,7 @@ import httpx
 import sentry_sdk
 from httpx import AsyncClient
 
-from github_wikidata_bot.session import Session
+from github_wikidata_bot.settings import Settings, Secrets, sparql_dir
 
 logger = logging.getLogger(__name__)
 
@@ -343,35 +345,42 @@ class Item:
 class WikidataClient:
     """Manages authentication and API calls to Wikidata."""
 
+    # Mutable
     client: httpx.AsyncClient
+    last_edit_time: float
+    request_counter = 0
+
+    # Constants (settings)
     api_url: str
     sparql_url: str
     edit_throttle: float
     max_lag: int
     retries: int
     csrf_token: str | None
-    last_edit_time: float
 
-    request_counter = 0
+    # Session-dynamic
+    # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
+    edit_group_hash: str
+    edit_summary: str
 
-    def __init__(
-        self,
-        *,
-        client: AsyncClient,
-        api_url: str = "https://www.wikidata.org/w/api.php",
-        sparql_url: str = "https://query.wikidata.org/sparql",
-        edit_throttle: float = Session.edit_throttle,
-        max_lag: int = Session.max_lag,
-        retries: int = Session.retries,
-    ):
+    # Loaded from remote.
+    denylist: list[str]
+    tags_over_releases: list[str]
+    licenses: dict[str, str]
+
+    def __init__(self, *, client: AsyncClient, settings: Settings):
         self.client = client
-        self.api_url = api_url
-        self.sparql_url = sparql_url
-        self.edit_throttle = edit_throttle
-        self.max_lag = max_lag
-        self.retries = retries
+        self.api_url = settings.api_url
+        self.sparql_url = settings.sparql_url
+        self.edit_throttle = settings.edit_throttle
+        self.max_lag = settings.max_lag
+        self.retries = settings.retries
         self.csrf_token = None
         self.last_edit_time = 0
+
+        # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
+        self.edit_group_hash = f"{random.randrange(0, 2**48):x}"
+        self.edit_summary = f"Update with GitHub data ([[:toollabs:editgroups/b/CB/{self.edit_group_hash}|details]])"
 
     @sentry_sdk.trace
     async def login(self, username: str, bot_name: str, bot_password: str) -> None:
@@ -408,6 +417,24 @@ class WikidataClient:
             raise WikidataError(f"Login failed: {result}")
 
         logger.info(f"Logged in as {login_user}")
+
+    @sentry_sdk.trace
+    async def connect(self, secrets: Secrets, settings: Settings) -> None:
+        """Login and fetch initial data."""
+        await self.login(secrets.username, secrets.bot_name, secrets.password)
+
+        response = await self.sparql_query(
+            sparql_dir().joinpath("free_licenses.rq").read_text()
+        )
+        self.licenses = {row["spdx"]: row["license"][31:] for row in response}
+
+        logger.info("Fetching allow and deny lists")
+        self.denylist = parse_filter_list(
+            await self.get_page_text(settings.denylist_page)
+        )
+        self.tags_over_releases = parse_filter_list(
+            await self.get_page_text(settings.tags_over_releases_page)
+        )
 
     @sentry_sdk.trace
     async def _get_csrf_token(self) -> str:
@@ -459,7 +486,7 @@ class WikidataClient:
                     # Recommendation from https://www.mediawiki.org/wiki/Manual:Maxlag_parameter is 5s, but that's
                     # not enough in my experience.
                     retry_after = int(
-                        response.headers.get("Retry-After", str(Session.max_lag))
+                        response.headers.get("Retry-After", str(self.max_lag))
                     )
                     logger.warning(
                         f"Server is lagging behind too much, retrying in {retry_after}s"
@@ -603,3 +630,14 @@ class WikidataClient:
             {var: val["value"] for var, val in binding.items()}
             for binding in data["results"]["bindings"]
         ]
+
+
+def parse_filter_list(text: str) -> list[str]:
+    q_value_regex = re.compile(r"(Q\d+)\s*(#.*)?")
+    filterlist = []
+    for line in text.splitlines():
+        line = line.strip()
+        fullmatch = q_value_regex.fullmatch(line)
+        if fullmatch:
+            filterlist.append(fullmatch.group(1))
+    return filterlist

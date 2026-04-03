@@ -8,7 +8,7 @@ import httpx
 import pytest
 from httpx import AsyncClient
 
-from github_wikidata_bot.session import Session
+from github_wikidata_bot.settings import Settings
 from github_wikidata_bot.wikidata_api import (
     APIError,
     Claim,
@@ -68,12 +68,14 @@ def _json_response(
 
 @asynccontextmanager
 async def _make_session(transport: MockTransport) -> AsyncIterator[WikidataClient]:
+    settings = Settings()
+    settings.retries = 2
     async with AsyncClient(
-        timeout=Session.http_timeout,
-        headers={"User-Agent": "test-agent"},
+        timeout=settings.http_timeout,
+        headers={"User-Agent": settings.user_agent},
         transport=transport,
     ) as client:
-        yield WikidataClient(client=client, edit_throttle=0, retries=2)
+        yield WikidataClient(client=client, settings=settings)
 
 
 @pytest.mark.anyio

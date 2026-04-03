@@ -1,4 +1,5 @@
 from __future__ import annotations
+from github_wikidata_bot.settings import Settings
 
 import enum
 import logging
@@ -10,7 +11,6 @@ from httpx import AsyncClient
 from github_wikidata_bot.github import Project, Release
 from github_wikidata_bot.project import GitHubRepo
 from github_wikidata_bot.redirects import RedirectDict
-from github_wikidata_bot.session import Session
 from github_wikidata_bot.version import SimpleSortableVersion
 from github_wikidata_bot.website import is_website_other_property
 from github_wikidata_bot.wikidata_api import (
@@ -19,6 +19,7 @@ from github_wikidata_bot.wikidata_api import (
     ItemValue,
     WikibaseMonolingualText,
     WikibaseTime,
+    WikidataClient,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,11 +42,13 @@ class Property(enum.Enum):
 
 
 async def normalize_repo_url(
-    item: Item, url_normalized: str, url_raw: str, q_value: str, session: Session
+    item: Item,
+    url_normalized: str,
+    url_raw: str,
+    q_value: str,
+    wikidata: WikidataClient,
 ):
-    """Canonicalize the github url.
-
-    This use the format https://github.com/[owner]/[repo]
+    """Canonicalize the github url to the format `https://github.com/[owner]/[repo]`.
 
     Note: This apparently only works with a bot account
     """
@@ -59,11 +62,11 @@ async def normalize_repo_url(
     if source_p in item.claims and len(urls) == 2:
         if urls[0].value == url_normalized and urls[1].value == url_raw:
             logger.info("The old and the new url are already set, removing the old")
-            await session.wikidata.remove_claim(urls[1], summary=session.edit_summary)
+            await wikidata.remove_claim(urls[1], summary=wikidata.edit_summary)
             return
         if urls[0].value == url_raw and urls[1].value == url_normalized:
             logger.info("The old and the new url are already set, removing the old")
-            await session.wikidata.remove_claim(urls[0], summary=session.edit_summary)
+            await wikidata.remove_claim(urls[0], summary=wikidata.edit_summary)
             return
 
     if source_p in item.claims and len(urls) > 1:
@@ -87,9 +90,7 @@ async def normalize_repo_url(
     if Property.web_interface_software.value not in url_claim.qualifiers:
         github = ItemValue("Q364")
         url_claim.add_qualifier(Property.web_interface_software.value, github)
-    await session.wikidata.save_claims(
-        item.id, [url_claim], summary=session.edit_summary
-    )
+    await wikidata.save_claims(item.id, [url_claim], summary=wikidata.edit_summary)
 
 
 async def set_website(project: Project, client: AsyncClient) -> Claim | None:
@@ -105,12 +106,12 @@ async def set_website(project: Project, client: AsyncClient) -> Claim | None:
     return Claim(Property.official_website.value, url)
 
 
-def set_license(project: Project, session: Session) -> Claim | None:
+def set_license(project: Project, wikidata: WikidataClient) -> Claim | None:
     """Add the license if it does not already exist"""
-    if not project.license or project.license not in session.licenses:
+    if not project.license or project.license not in wikidata.licenses:
         return None
 
-    project_license = session.licenses[project.license]
+    project_license = wikidata.licenses[project.license]
     return Claim(Property.license.value, ItemValue(project_license))
 
 
@@ -141,23 +142,25 @@ def release_to_claim(release: Release, project: Project, rank: str = "normal") -
 
 
 async def update_website_and_license(
-    project: Project, item: Item, client: AsyncClient, session: Session
+    project: Project, item: Item, wikidata: WikidataClient, settings: Settings
 ):
     urls = item.claims.get(Property.source_code_repository.value, [])
     if len(urls) == 1:
         assert isinstance(urls[0].value, str)
         url_raw = urls[0].value
         repo = GitHubRepo.from_url(url_raw)
-        if session.normalize_repo_url:
+        if settings.normalize_repo_url:
             await normalize_repo_url(
-                item, str(repo), url_raw, project.wikidata.q_value, session
+                item, str(repo), url_raw, project.wikidata.q_value, wikidata
             )
     else:
         repo = project.wikidata.repo
 
+    # TODO: Stop breaking client isolation to fetch redirects
+    resolved_website = await set_website(project, wikidata.client)
     for claim, kind in [
-        (await set_website(project, client), "website"),
-        (set_license(project, session), "license"),
+        (resolved_website, "website"),
+        (set_license(project, wikidata), "license"),
     ]:
         if not claim:
             continue
@@ -173,15 +176,17 @@ async def update_website_and_license(
         )
         if not item.has_claim(claim, single_valued=True):
             logger.info(f"Updating {kind}")
-            await session.wikidata.add_claim(item, claim, summary=session.edit_summary)
+            await wikidata.add_claim(item, claim, summary=wikidata.edit_summary)
 
 
 @sentry_sdk.trace
-async def update_wikidata(project: Project, client: AsyncClient, session: Session):
+async def update_wikidata(
+    project: Project, settings: Settings, wikidata: WikidataClient
+):
     """Update wikidata entry with data from GitHub"""
-    item = await session.wikidata.get_entity(project.wikidata.q_value)
+    item = await wikidata.get_entity(project.wikidata.q_value)
 
-    await update_website_and_license(project, item, client, session)
+    await update_website_and_license(project, item, wikidata, settings)
 
     # Add all stable releases
     stable_releases = project.stable_release
@@ -202,11 +207,11 @@ async def update_wikidata(project: Project, client: AsyncClient, session: Sessio
         logger.info(f"There are duplicate releases: {message}")
         return
 
-    if len(stable_releases) > session.max_releases:
+    if len(stable_releases) > settings.max_releases:
         logger.info(
-            f"Limiting to {session.max_releases} of {len(stable_releases)} stable releases"
+            f"Limiting to {settings.max_releases} of {len(stable_releases)} stable releases"
         )
-        stable_releases = stable_releases[-session.max_releases :]
+        stable_releases = stable_releases[-settings.max_releases :]
     else:
         logger.info(f"There are {len(stable_releases)} stable releases")
 
@@ -252,7 +257,7 @@ async def update_wikidata(project: Project, client: AsyncClient, session: Sessio
         if item.has_claim(claim):
             continue
         logger.info(f"Creating {release.version}")
-        await session.wikidata.add_claim(item, claim, summary=session.edit_summary)
+        await wikidata.add_claim(item, claim, summary=wikidata.edit_summary)
 
     # In a single api call, demote non-latest preferred to normal and promote or create the latest with preferred rank,
     # to avoid a project having zero or two preferred ranks.
@@ -287,6 +292,6 @@ async def update_wikidata(project: Project, client: AsyncClient, session: Sessio
                 rank_changes.append(claim)
         if rank_changes:
             logger.info(f"Rank changes: {', '.join(change_summaries)}")
-            await session.wikidata.save_claims(
-                item.id, rank_changes, summary=session.edit_summary
+            await wikidata.save_claims(
+                item.id, rank_changes, summary=wikidata.edit_summary
             )

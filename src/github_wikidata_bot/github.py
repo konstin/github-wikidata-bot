@@ -6,6 +6,7 @@ import itertools
 import logging
 import textwrap
 import time
+from asyncio import Semaphore
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +18,7 @@ from httpx import AsyncClient, HTTPStatusError
 from pydantic import BaseModel
 
 from github_wikidata_bot.project import GitHubRepo, WikidataProject
-from github_wikidata_bot.session import Session, cache_root
+from github_wikidata_bot.settings import Secrets, Settings, cache_root
 from github_wikidata_bot.version import SimpleSortableVersion, extract_version
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,64 @@ class RateLimitError(Exception):
 
     def __init__(self, sleep: float):
         self.sleep = sleep
+
+
+class GitHubClient:
+    auth_headers: dict[str, str]
+    api_concurrency: Semaphore
+    client: AsyncClient
+
+    def __init__(self, secrets: Secrets, client: AsyncClient):
+        self.auth_headers = {"Authorization": f"token {secrets.github_oauth_token}"}
+        self.api_concurrency = Semaphore(20)
+        self.client = client
+
+    @sentry_sdk.trace
+    async def fetch_json(
+        self, url: str, caching_headers: dict[str, str] | None = None
+    ) -> tuple[Any | None, Mapping[str, str]]:
+        """Get JSON from an API while handling rate limiting and cache headers.
+
+        Returns `None` instead of the payload if the server returned a 304 Not Modified."""
+        if caching_headers is None:
+            caching_headers = {}
+
+        response = await self.client.get(
+            url, headers={**self.auth_headers, **caching_headers}
+        )
+
+        # We stop before we hit the actual rate limit cause github doesn't seem to like it
+        # if we go to zero.
+        total_limit = int(response.headers.get("x-ratelimit-limit", "0"))
+        remaining_requests = int(response.headers.get("x-ratelimit-remaining", "0"))
+        if remaining_requests < total_limit * 0.1 or (
+            response.status_code == 403 and remaining_requests == 0
+        ):
+            reset = response.headers["x-ratelimit-reset"]
+            seconds_to_reset = int(reset) - time.time()
+            # Sleep a second longer as buffer
+            for key, value in response.headers.items():
+                if key.startswith("x-ratelimit"):
+                    logger.info(f"header {key}: {value}")
+            raise RateLimitError(seconds_to_reset + 1)
+
+        if response.status_code == 429:
+            # We've hit github's abuse limits, wait 5min and try again
+            raise RateLimitError(5 * 60)
+
+        if response.status_code == 304:
+            logger.info(f"Not modified: {url}")
+            return None, response.headers
+
+        # Handle other 4xx and 5xx status codes
+        response.raise_for_status()
+
+        if caching_headers:
+            logger.info(f"Fresh response: {response.url}")
+        else:
+            logger.info(f"Fetched: {response.url}")
+
+        return response.json(), response.headers
 
 
 @dataclass
@@ -57,63 +116,8 @@ class Project:
     retrieved: datetime.datetime
 
 
-@sentry_sdk.trace
-async def fetch_json(
-    url: str,
-    client: AsyncClient,
-    session: Session,
-    caching_headers: dict[str, str] | None = None,
-) -> tuple[Any | None, Mapping[str, str]]:
-    """Get JSON from an API while handling rate limiting and cache headers.
-
-    Returns `None` instead of the payload if the server returned a 304 Not Modified."""
-    if caching_headers is None:
-        caching_headers = {}
-
-    response = await client.get(
-        url, headers={**session.github_auth_headers, **caching_headers}
-    )
-
-    # We stop before we hit the actual rate limit cause github doesn't seem to like it
-    # if we go to zero.
-    total_limit = int(response.headers.get("x-ratelimit-limit", "0"))
-    remaining_requests = int(response.headers.get("x-ratelimit-remaining", "0"))
-    if remaining_requests < total_limit * 0.1 or (
-        response.status_code == 403 and remaining_requests == 0
-    ):
-        reset = response.headers["x-ratelimit-reset"]
-        seconds_to_reset = int(reset) - time.time()
-        # Sleep a second longer as buffer
-        for key, value in response.headers.items():
-            if key.startswith("x-ratelimit"):
-                logger.info(f"header {key}: {value}")
-        raise RateLimitError(seconds_to_reset + 1)
-
-    if response.status_code == 429:
-        # We've hit github's abuse limits, wait 5min and try again
-        raise RateLimitError(5 * 60)
-
-    if response.status_code == 304:
-        logger.info(f"Not modified: {url}")
-        return None, response.headers
-
-    # Handle other 4xx and 5xx status codes
-    response.raise_for_status()
-
-    if caching_headers:
-        logger.info(f"Fresh response: {response.url}")
-    else:
-        logger.info(f"Fetched: {response.url}")
-
-    return response.json(), response.headers
-
-
 async def fetch_cached(
-    api_url: str,
-    cache_path: Path,
-    client: AsyncClient,
-    allow_stale: bool,
-    session: Session,
+    api_url: str, cache_path: Path, client: GitHubClient, allow_stale: bool
 ) -> Any:
     cache_path.parent.mkdir(exist_ok=True, parents=True)
     if cache_path.exists():
@@ -126,14 +130,14 @@ async def fetch_cached(
 
         logger.info(f"Revalidating: {api_url}")
         headers = {"If-None-Match": cached.metadata.etag}
-        payload, headers = await fetch_json(api_url, client, session, headers)
+        payload, headers = await client.fetch_json(api_url, headers)
         if payload is None:
             logger.info(f"Revalidated, not modified: {api_url}")
             return cached.payload
     else:
         logger.info(f"No cache: {api_url}")
         headers = {}
-        payload, headers = await fetch_json(api_url, client, session, headers)
+        payload, headers = await client.fetch_json(api_url, headers)
         assert payload is not None  # For the type checker
 
     etag = headers["etag"]
@@ -158,11 +162,7 @@ class CachedResponse(BaseModel):
 
 @sentry_sdk.trace
 async def get_releases(
-    repo: GitHubRepo,
-    repo_cache_root: Path,
-    client: AsyncClient,
-    allow_stale: bool,
-    session: Session,
+    repo: GitHubRepo, repo_cache_root: Path, client: GitHubClient, allow_stale: bool
 ) -> list[dict[str, Any]]:
     """Gets all pages of the release/tag information"""
     per_page = 100
@@ -189,9 +189,7 @@ async def get_releases(
 
             logger.info(f"Revalidating: {page_url}")
             headers = {"If-None-Match": cached.metadata.etag}
-            page_releases, headers = await fetch_json(
-                page_url, client, session, headers
-            )
+            page_releases, headers = await client.fetch_json(page_url, headers)
             # If the first page matches, assume all other pages are fresh too.
             # It's unlikely that a release older than 100 gets updated, and can save a lot of requests.
             if not page_releases:
@@ -206,9 +204,7 @@ async def get_releases(
         else:
             logger.info(f"No cache: {page_url}")
             headers = {}
-            page_releases, headers = await fetch_json(
-                page_url, client, session, headers
-            )
+            page_releases, headers = await client.fetch_json(page_url, headers)
             assert page_releases is not None  # For the type checker
 
         logger.info(f"Fresh response: {page_url}")
@@ -340,11 +336,12 @@ async def get_date_from_tag_details(
 
 @sentry_sdk.trace
 async def get_data_from_github(
-    repo: GitHubRepo,
     project: WikidataProject,
-    client: AsyncClient,
     allow_stale: bool,
-    session: Session,
+    client: GitHubClient,
+    settings: Settings,
+    # This is data from wikidata
+    tags_over_releases: list[str],
 ) -> Project:
     """
     Retrieve the following data from github:
@@ -361,15 +358,16 @@ async def get_data_from_github(
     # For the sources of the wikidata claims.
     retrieved = datetime.datetime.now(datetime.UTC)
 
-    repo_cache_root = cache_root().joinpath(repo.org).joinpath(repo.project)
+    repo_cache_root = (
+        cache_root().joinpath(project.repo.org).joinpath(project.repo.project)
+    )
 
     # General project information
     project_info = await fetch_cached(
-        repo.api_base(),
+        project.repo.api_base(),
         repo_cache_root.joinpath("index.json"),
         client,
         allow_stale,
-        session,
     )
 
     website = project_info.get("homepage")
@@ -378,7 +376,7 @@ async def get_data_from_github(
     else:
         spdx_id = None
 
-    releases = await get_releases(repo, repo_cache_root, client, allow_stale, session)
+    releases = await get_releases(project.repo, repo_cache_root, client, allow_stale)
 
     invalid_releases = []
     extracted: list[Release | None] = []
@@ -394,14 +392,14 @@ async def get_data_from_github(
         message = textwrap.shorten(message, width=200, placeholder="...")
         logger.info(f"{len(invalid_releases)} invalid releases: {message}")
 
-    if session.read_tags and (
-        len(extracted) == 0 or project.q_value in session.allowlist
+    if settings.read_tags and (
+        len(extracted) == 0 or project.q_value in tags_over_releases
     ):
         logger.info("Falling back to tags")
         try:
             cache_file = repo_cache_root.joinpath("tags-index").joinpath("index.json")
             tags = await fetch_cached(
-                repo.api_tags(), cache_file, client, allow_stale, session
+                project.repo.api_tags(), cache_file, client, allow_stale
             )
         except HTTPStatusError as e:
             # Github raises a 404 if there are no tags
@@ -417,24 +415,22 @@ async def get_data_from_github(
         ]
         filtered = [v for v in extracted_tags if v is not None]
         filtered.sort(key=lambda x: SimpleSortableVersion(x.version))
-        if len(filtered) > session.max_tags:
+        if len(filtered) > settings.max_tags:
             logger.info(
-                f"Limiting {project.q_value} to {session.max_tags} of {len(filtered)} tags "
+                f"Limiting {project.q_value} to {settings.max_tags} of {len(filtered)} tags "
                 f"for performance reasons."
             )
-            filtered = filtered[-session.max_tags :]
+            filtered = filtered[-settings.max_tags :]
 
         # Fetch tags in parallel
         # TODO: Don't use the API, use the git interface instead?
         async def tag_with_limit(tag: ReleaseTag) -> Release | None:
-            async with session.github_api_limit:
+            async with client.api_concurrency:
                 cache_file = repo_cache_root.joinpath("tags-detail").joinpath(
                     f"{tag.sha}.json"
                 )
                 # Assumption: Tags are immutable, the page never needs to be refreshed.
-                tag_details = await fetch_cached(
-                    tag.tag_url, cache_file, client, True, session
-                )
+                tag_details = await fetch_cached(tag.tag_url, cache_file, client, True)
                 return await get_date_from_tag_details(tag, tag_details)
 
         extracted = list(

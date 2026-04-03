@@ -7,10 +7,11 @@ from random import sample
 
 from httpx import AsyncClient
 
-from github_wikidata_bot.github import analyse_release, fetch_json, get_releases
+from github_wikidata_bot.github import GitHubClient, analyse_release, get_releases
 from github_wikidata_bot.main import logger
-from github_wikidata_bot.session import Config, Session, cache_root
+from github_wikidata_bot.settings import Secrets, Settings, cache_root
 from github_wikidata_bot.sparql import cached_projects_query
+from github_wikidata_bot.wikidata_api import WikidataClient
 
 
 def safe_sample[T](population: list[T], size: int) -> list[T]:
@@ -21,23 +22,25 @@ def safe_sample[T](population: list[T], size: int) -> list[T]:
 
 
 async def debug_version_handling(
-    session: Session, threshold: int = 50, size: int = 20, no_sampling: bool = False
+    github: GitHubClient,
+    wikidata: WikidataClient,
+    settings: Settings,
+    threshold: int = 50,
+    size: int = 20,
+    no_sampling: bool = False,
 ):
     logger.setLevel(40)
-    await session.connect()
-    projects = await cached_projects_query(False, session, None)
+    projects = await cached_projects_query(False, wikidata, settings, None)
     if not no_sampling:
         projects = safe_sample(projects, threshold)
     for project in projects:
-        project_info, _ = await fetch_json(
-            project.repo.api_base(), session.wikidata.client, session
-        )
+        project_info, _ = await github.fetch_json(project.repo.api_base())
         assert project_info is not None  # For the type checker
         repo_cache_root = (
             cache_root().joinpath(project.repo.org).joinpath(project.repo.project)
         )
         github_releases = await get_releases(
-            project.repo, repo_cache_root, session.wikidata.client, False, session
+            project.repo, repo_cache_root, github, False
         )
         if not no_sampling:
             github_releases = safe_sample(github_releases, size)
@@ -61,13 +64,16 @@ async def main():
     parser.add_argument("--no-sampling", action="store_true", default=False)
     args = parser.parse_args()
 
-    config = Config.load()
+    secrets = Secrets.load()
+    settings = Settings()
     async with AsyncClient(
-        timeout=Session.http_timeout, headers={"User-Agent": Session.user_agent}
+        timeout=settings.http_timeout, headers={"User-Agent": settings.user_agent}
     ) as client:
-        settings = Session(config, client)
+        github = GitHubClient(secrets, client)
+        wikidata = WikidataClient(client=client, settings=settings)
+        await wikidata.connect(secrets, settings)
         await debug_version_handling(
-            settings, args.threshold, args.maxsize, args.no_sampling
+            github, wikidata, settings, args.threshold, args.maxsize, args.no_sampling
         )
 
 

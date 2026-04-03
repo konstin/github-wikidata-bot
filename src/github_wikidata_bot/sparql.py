@@ -8,29 +8,29 @@ from collections import defaultdict
 import sentry_sdk
 
 from github_wikidata_bot.project import WikidataProject
-from github_wikidata_bot.session import Session, cache_root, sparql_dir
-from github_wikidata_bot.wikidata_api import ServerError
+from github_wikidata_bot.settings import cache_root, sparql_dir, Settings
+from github_wikidata_bot.wikidata_api import ServerError, WikidataClient
 
 logger = logging.getLogger(__name__)
 
 
 @sentry_sdk.trace
 async def cached_sparql_query(
-    query_name: str, use_cache: bool, session: Session
+    query_name: str, use_cache: bool, wikidata: WikidataClient, settings: Settings
 ) -> list[dict[str, str]]:
     """Run a SPARQL query against wikidata, reading from a local cache if requested."""
     cache_path = cache_root().joinpath(f"{query_name}.json")
     if use_cache and cache_path.exists():
         return json.loads(cache_path.read_text())
     query_text = sparql_dir().joinpath(f"{query_name}.rq").read_text()
-    for attempt in range(session.retries):
+    for attempt in range(settings.retries):
         try:
-            response = await session.wikidata.sparql_query(query_text)
+            response = await wikidata.sparql_query(query_text)
         except ServerError as e:
-            if attempt < session.retries - 1:
+            if attempt < settings.retries - 1:
                 sleep = 2**attempt * 10
                 logger.warning(
-                    f"SPARQL query {query_name} failed (attempt {attempt + 1}/{session.retries}), retrying after {sleep}s: {e}"
+                    f"SPARQL query {query_name} failed (attempt {attempt + 1}/{settings.retries}), retrying after {sleep}s: {e}"
                 )
                 await asyncio.sleep(sleep)
                 continue
@@ -42,10 +42,15 @@ async def cached_sparql_query(
 
 
 async def cached_projects_query(
-    use_cache: bool, session: Session, project_filter: str | None
+    use_cache: bool,
+    wikidata: WikidataClient,
+    settings: Settings,
+    project_filter: str | None,
 ) -> list[WikidataProject]:
     """Run a SPARQL query against wikidata, reading from a local cache if requested."""
-    response = await cached_sparql_query("free_software_items", use_cache, session)
+    response = await cached_sparql_query(
+        "free_software_items", use_cache, wikidata, settings
+    )
     logger.info(f"SPARQL query found {len(response)} projects")
 
     invalid_repo = 0
@@ -69,7 +74,7 @@ async def cached_projects_query(
         ):
             repo_filter += 1
             continue
-        if project.q_value in session.denylist:
+        if project.q_value in wikidata.denylist:
             logger.debug(f"{project.label} ({project.q_value}) is blacklisted")
             blacklist += 1
             continue
@@ -100,11 +105,13 @@ async def cached_projects_query(
 
 @sentry_sdk.trace
 async def query_best_versions(
-    use_cache: bool, session: Session
+    use_cache: bool, wikidata: WikidataClient, settings: Settings
 ) -> dict[str, list[str]]:
     """Query for all software projects and their best version(s) on wikidata."""
     logger.info("Querying wikidata for project versions")
-    response = await cached_sparql_query("free_software_versions", use_cache, session)
+    response = await cached_sparql_query(
+        "free_software_versions", use_cache, wikidata, settings
+    )
 
     best_versions = defaultdict(list)
     for entry in response:

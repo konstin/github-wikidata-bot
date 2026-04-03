@@ -4,8 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from github_wikidata_bot.session import parse_filter_list
+from github_wikidata_bot.settings import Settings
 from github_wikidata_bot.sparql import cached_projects_query
+from github_wikidata_bot.wikidata_api import parse_filter_list
 
 
 @pytest.mark.anyio
@@ -36,9 +37,9 @@ async def test_denylist_excludes_project():
         },
     ]
 
-    session = MagicMock()
-    session.denylist = parse_filter_list(exceptions_page)
-    session.retries = 1
+    wikidata = MagicMock()
+    wikidata.denylist = parse_filter_list(exceptions_page)
+    settings = Settings()
 
     with patch(
         "github_wikidata_bot.sparql.cached_sparql_query",
@@ -46,7 +47,7 @@ async def test_denylist_excludes_project():
         return_value=sparql_response,
     ):
         projects = await cached_projects_query(
-            use_cache=False, session=session, project_filter=None
+            use_cache=False, wikidata=wikidata, settings=settings, project_filter=None
         )
 
     assert [project.q_value for project in projects] == ["Q99999"]

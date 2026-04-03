@@ -5,7 +5,7 @@ from pathlib import Path
 
 from httpx import AsyncClient, HTTPError
 
-from github_wikidata_bot.session import cache_root
+from github_wikidata_bot.settings import cache_root
 
 
 class RedirectDict:

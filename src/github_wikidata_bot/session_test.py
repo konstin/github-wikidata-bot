@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from github_wikidata_bot.session import parse_filter_list
+from github_wikidata_bot.wikidata_api import parse_filter_list
 
 exceptions_page = """
 This page defines exceptions for [[User:Github-wiki-bot|Github-wiki-bot]]. You can add an item here to stop Github-wiki-bot to update this item.
