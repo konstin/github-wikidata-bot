@@ -25,35 +25,36 @@ async def debug_version_handling(
 ):
     logger.setLevel(40)
     await session.connect()
-    async with AsyncClient() as client:
-        projects = await cached_projects_query(False, session, None)
+    projects = await cached_projects_query(False, session, None)
+    if not no_sampling:
+        projects = safe_sample(projects, threshold)
+    for project in projects:
+        project_info, _ = await fetch_json(
+            project.repo.api_base(), session.wikidata.client, session
+        )
+        assert project_info is not None  # For the type checker
+        repo_cache_root = (
+            cache_root().joinpath(project.repo.org).joinpath(project.repo.project)
+        )
+        github_releases = await get_releases(
+            project.repo, repo_cache_root, session.wikidata.client, False, session
+        )
         if not no_sampling:
-            projects = safe_sample(projects, threshold)
-        for project in projects:
-            project_info, _ = await fetch_json(project.repo.api_base(), client, session)
-            assert project_info is not None  # For the type checker
-            repo_cache_root = (
-                cache_root().joinpath(project.repo.org).joinpath(project.repo.project)
-            )
-            github_releases = await get_releases(
-                project.repo, repo_cache_root, client, False, session
-            )
-            if not no_sampling:
-                github_releases = safe_sample(github_releases, size)
-            for github_release in github_releases:
-                release = analyse_release(github_release, project_info["name"])
-                print(
-                    "{:15} | {:10} | {:20} | {:25} | {}".format(
-                        release.version if release else "---",
-                        release.release_type if release else "---",
-                        github_release["tag_name"],
-                        repr(project.label),
-                        github_release["name"],
-                    )
+            github_releases = safe_sample(github_releases, size)
+        for github_release in github_releases:
+            release = analyse_release(github_release, project_info["name"])
+            print(
+                "{:15} | {:10} | {:20} | {:25} | {}".format(
+                    release.version if release else "---",
+                    release.release_type if release else "---",
+                    github_release["tag_name"],
+                    repr(project.label),
+                    github_release["name"],
                 )
+            )
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--threshold", default=50, type=int)
     parser.add_argument("--maxsize", default=20, type=int)
@@ -61,11 +62,14 @@ def main():
     args = parser.parse_args()
 
     config = Config.load()
-    settings = Session(config)
-    asyncio.run(
-        debug_version_handling(settings, args.threshold, args.maxsize, args.no_sampling)
-    )
+    async with AsyncClient(
+        timeout=Session.http_timeout, headers={"User-Agent": Session.user_agent}
+    ) as client:
+        settings = Session(config, client)
+        await debug_version_handling(
+            settings, args.threshold, args.maxsize, args.no_sampling
+        )
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

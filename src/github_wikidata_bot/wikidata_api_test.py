@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import httpx
@@ -64,13 +66,14 @@ def _json_response(
     return httpx.Response(status_code=status_code, json=body, headers=headers or {})
 
 
-def _make_session(transport: MockTransport) -> WikidataClient:
-    client = AsyncClient(
+@asynccontextmanager
+async def _make_session(transport: MockTransport) -> AsyncIterator[WikidataClient]:
+    async with AsyncClient(
         timeout=Session.http_timeout,
         headers={"User-Agent": "test-agent"},
         transport=transport,
-    )
-    return WikidataClient(client=client, edit_throttle=0, retries=2)
+    ) as client:
+        yield WikidataClient(client=client, edit_throttle=0, retries=2)
 
 
 @pytest.mark.anyio
@@ -83,9 +86,8 @@ async def test_login():
             ),
         ]
     )
-    session = _make_session(transport)
-
-    await session.login("TestUser", "TestBot", "secret-password")
+    async with _make_session(transport) as session:
+        await session.login("TestUser", "TestBot", "secret-password")
 
     assert transport.requests == [
         RecordedRequest(
@@ -124,10 +126,9 @@ async def test_login_failure():
             _json_response({"login": {"result": "Failed", "reason": "bad password"}}),
         ]
     )
-    session = _make_session(transport)
-
-    with pytest.raises(WikidataError, match="Login failed"):
-        await session.login("User", "Bot", "wrong")
+    async with _make_session(transport) as session:
+        with pytest.raises(WikidataError, match="Login failed"):
+            await session.login("User", "Bot", "wrong")
 
 
 @pytest.mark.anyio
@@ -208,9 +209,8 @@ async def test_get_entity():
     }
 
     transport = MockTransport(responses=[_json_response(entity_response)])
-    session = _make_session(transport)
-
-    item = await session.get_entity("Q42")
+    async with _make_session(transport) as session:
+        item = await session.get_entity("Q42")
 
     assert item.id == "Q42"
     assert "P348" in item.claims
@@ -253,11 +253,9 @@ async def test_get_page_text():
             )
         ]
     )
-    session = _make_session(transport)
-
-    text = await session.get_page_text("User:TestBot/Config")
-
-    assert text == "Q123\nQ456\nQ789"
+    async with _make_session(transport) as session:
+        text = await session.get_page_text("User:TestBot/Config")
+        assert text == "Q123\nQ456\nQ789"
 
 
 @pytest.mark.anyio
@@ -268,18 +266,17 @@ async def test_save_claim():
             _json_response({"success": 1}),
         ]
     )
-    session = _make_session(transport)
+    async with _make_session(transport) as session:
+        claim = Claim(property="P348", value="2.0.0")
+        claim.add_qualifier("P577", WikibaseTime.from_iso("2024-01-01T00:00:00Z"))
+        claim.add_sources(
+            [
+                Claim("P854", "https://example.com"),
+                Claim("P813", WikibaseTime.from_iso("2024-03-15T00:00:00Z")),
+            ]
+        )
 
-    claim = Claim(property="P348", value="2.0.0")
-    claim.add_qualifier("P577", WikibaseTime.from_iso("2024-01-01T00:00:00Z"))
-    claim.add_sources(
-        [
-            Claim("P854", "https://example.com"),
-            Claim("P813", WikibaseTime.from_iso("2024-03-15T00:00:00Z")),
-        ]
-    )
-
-    await session.save_claims("Q42", [claim], summary="test edit")
+        await session.save_claims("Q42", [claim], summary="test edit")
 
     assert transport.requests == [
         RecordedRequest(
@@ -397,11 +394,10 @@ async def test_add_claim():
             _json_response({"success": 1}),
         ]
     )
-    session = _make_session(transport)
-    item = Item("Q42", {"claims": {}})
-
-    claim = Claim(property="P856", value="https://example.com")
-    await session.add_claim(item, claim, summary="add website")
+    async with _make_session(transport) as session:
+        item = Item("Q42", {"claims": {}})
+        claim = Claim(property="P856", value="https://example.com")
+        await session.add_claim(item, claim, summary="add website")
 
     assert "P856" in item.claims
     assert item.claims["P856"][0].value == "https://example.com"
@@ -415,10 +411,11 @@ async def test_remove_claim():
             _json_response({"success": 1}),
         ]
     )
-    session = _make_session(transport)
-
-    claim = Claim(property="P856", value="https://old.example.com", id="Q42$old-claim")
-    await session.remove_claim(claim, summary="cleanup")
+    async with _make_session(transport) as session:
+        claim = Claim(
+            property="P856", value="https://old.example.com", id="Q42$old-claim"
+        )
+        await session.remove_claim(claim, summary="cleanup")
 
     assert transport.requests == [
         RecordedRequest(
@@ -478,9 +475,8 @@ async def test_sparql_query():
             )
         ]
     )
-    session = _make_session(transport)
-
-    results = await session.sparql_query("SELECT ?project ?repo WHERE { ... }")
+    async with _make_session(transport) as session:
+        results = await session.sparql_query("SELECT ?project ?repo WHERE { ... }")
 
     assert len(results) == 2
     assert results[0]["project"] == "http://www.wikidata.org/entity/Q42"
@@ -490,10 +486,9 @@ async def test_sparql_query():
 @pytest.mark.anyio
 async def test_sparql_server_error():
     transport = MockTransport(responses=[httpx.Response(status_code=500)])
-    session = _make_session(transport)
-
-    with pytest.raises(ServerError):
-        await session.sparql_query("SELECT ...")
+    async with _make_session(transport) as session:
+        with pytest.raises(ServerError):
+            await session.sparql_query("SELECT ...")
 
 
 @pytest.mark.anyio
@@ -510,10 +505,10 @@ async def test_api_error():
             )
         ]
     )
-    session = _make_session(transport)
 
-    with pytest.raises(APIError) as exc_info:
-        await session.get_entity("Q99999999")
+    async with _make_session(transport) as session:
+        with pytest.raises(APIError) as exc_info:
+            await session.get_entity("Q99999999")
     assert exc_info.value.code == "no-such-entity"
 
 
@@ -529,10 +524,9 @@ async def test_maxlag_retry():
             _json_response({"success": 1}),
         ]
     )
-    session = _make_session(transport)
-
-    claim = Claim(property="P348", value="1.0.0")
-    await session.save_claims("Q42", [claim])
+    async with _make_session(transport) as session:
+        claim = Claim(property="P348", value="1.0.0")
+        await session.save_claims("Q42", [claim])
 
     assert len(transport.requests) == 3
 
@@ -549,10 +543,9 @@ async def test_badtoken_retry():
             _json_response({"success": 1}),
         ]
     )
-    session = _make_session(transport)
-
-    claim = Claim(property="P348", value="1.0.0")
-    await session.save_claims("Q42", [claim])
+    async with _make_session(transport) as session:
+        claim = Claim(property="P348", value="1.0.0")
+        await session.save_claims("Q42", [claim])
 
     last_post = transport.requests[-1]
     assert last_post.data["token"] == "new-tok"

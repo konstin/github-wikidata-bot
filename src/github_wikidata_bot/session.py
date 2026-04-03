@@ -107,7 +107,7 @@ class Session:
     wikidata: WikidataClient
     config: Config
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, client: AsyncClient) -> None:
         from github_wikidata_bot.wikidata_api import (
             WikidataClient,
         )  # Local import due to import cycle
@@ -118,10 +118,6 @@ class Session:
         }
         self.github_api_limit = Semaphore(20)
 
-        # TODO: use async with once the config types layout changes.
-        client = AsyncClient(
-            timeout=self.http_timeout, headers={"User-Agent": self.user_agent}
-        )
         self.wikidata = WikidataClient(
             client=client,
             edit_throttle=self.edit_throttle,

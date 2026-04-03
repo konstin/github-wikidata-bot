@@ -16,11 +16,13 @@ logger = logging.getLogger(__name__)
 async def main():
     logger.info("Querying Projects")
     config = Config.load()
-    session = Session(config)
-    await session.connect()
-    projects = await cached_projects_query(False, session, None)
-    semaphore = Semaphore(50)
-    async with AsyncClient() as client:
+    async with AsyncClient(
+        timeout=Session.http_timeout, headers={"User-Agent": Session.user_agent}
+    ) as client:
+        session = Session(config, client)
+        await session.connect()
+        projects = await cached_projects_query(False, session, None)
+        semaphore = Semaphore(50)
 
         async def query(url: str, wikidata_id: str) -> tuple[str, str, int]:
             async with semaphore:

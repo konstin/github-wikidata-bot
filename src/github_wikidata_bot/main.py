@@ -245,25 +245,24 @@ async def run(
     project_filter: str | None, cache_sparql: bool, allow_stale: bool, session: Session
 ):
     await session.connect()
-    async with AsyncClient(follow_redirects=True) as client:
-        logger.info("Querying Projects")
-        projects = await cached_projects_query(cache_sparql, session, project_filter)
-        logger.info(f"Found {len(projects)} projects")
-        logger.info("Querying versions")
-        best_versions = await query_best_versions(cache_sparql, session)
-        logger.info("Processing projects")
+    logger.info("Querying Projects")
+    projects = await cached_projects_query(cache_sparql, session, project_filter)
+    logger.info(f"Found {len(projects)} projects")
+    logger.info("Querying versions")
+    best_versions = await query_best_versions(cache_sparql, session)
+    logger.info("Processing projects")
 
-        for idx, project in enumerate(projects):
-            logger.info(
-                f"## [{idx}/{len(projects)}] {project.label}: {project.q_value_url} {project.repo}"
-            )
-            await update_project_with_retries(
-                project, best_versions, allow_stale, client, session
-            )
-        logger.info("# Finished successfully")
+    for idx, project in enumerate(projects):
+        logger.info(
+            f"## [{idx}/{len(projects)}] {project.label}: {project.q_value_url} {project.repo}"
+        )
+        await update_project_with_retries(
+            project, best_versions, allow_stale, session.wikidata.client, session
+        )
+    logger.info("# Finished successfully")
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--filter")
     parser.add_argument(
@@ -282,7 +281,10 @@ def main():
     args = parser.parse_args()
 
     init_logging(args.quiet)
-    config = Config.load()
-    session = Session(config)
+    async with AsyncClient(
+        timeout=Session.http_timeout, headers={"User-Agent": Session.user_agent}
+    ) as client:
+        config = Config.load()
+        session = Session(config, client)
 
-    asyncio.run(run(args.filter, args.cache_sparql, args.allow_stale, session))
+        await run(args.filter, args.cache_sparql, args.allow_stale, session)
