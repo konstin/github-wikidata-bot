@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import itertools
 import logging
 import textwrap
 import time
@@ -177,8 +176,10 @@ async def get_releases(
     releases_cache = repo_cache_root.joinpath(f"releases-{per_page}")
     releases_cache.mkdir(exist_ok=True, parents=True)
 
+    # GitHub API returns at most 1000 results (100 per page * 10 pages).
+    max_pages = 1000 // per_page
     all_releases: list[dict[str, Any]] = []
-    for page_number in itertools.count(1):
+    for page_number in range(1, max_pages + 1):
         page_url = f"{repo.api_releases()}?page={page_number}&per_page={per_page}"
         page_cache = releases_cache.joinpath(f"{page_number}.json")
         if page_cache.exists():
