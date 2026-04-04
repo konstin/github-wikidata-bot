@@ -34,7 +34,7 @@ async def debug_version_handling(
     if not no_sampling:
         projects = safe_sample(projects, threshold)
     for project in projects:
-        project_info, _ = await github.fetch_json(project.repo.api_base())
+        project_info, _, _ = await github.fetch_json(project.repo.api_base())
         assert project_info is not None  # For the type checker
         repo_cache_root = (
             cache_root().joinpath(project.repo.org).joinpath(project.repo.project)

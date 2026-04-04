@@ -44,10 +44,12 @@ class GitHubClient:
     @sentry_sdk.trace
     async def fetch_json(
         self, url: str, caching_headers: dict[str, str] | None = None
-    ) -> tuple[Any | None, Mapping[str, str]]:
+    ) -> tuple[Any | None, Mapping[str, str], str]:
         """Get JSON from an API while handling rate limiting and cache headers.
 
-        Returns `None` instead of the payload if the server returned a 304 Not Modified."""
+        Returns `(payload, headers, response_url)`. `payload` is `None` if the
+        server returned 304 Not Modified.
+        """
         if caching_headers is None:
             caching_headers = {}
 
@@ -76,7 +78,7 @@ class GitHubClient:
 
         if response.status_code == 304:
             logger.info(f"Not modified: {url}")
-            return None, response.headers
+            return None, response.headers, str(response.url)
 
         # Handle other 4xx and 5xx status codes
         response.raise_for_status()
@@ -86,7 +88,7 @@ class GitHubClient:
         else:
             logger.info(f"Fetched: {response.url}")
 
-        return response.json(), response.headers
+        return response.json(), response.headers, str(response.url)
 
 
 @dataclass
@@ -114,11 +116,14 @@ class Project:
     website: str | None
     license: str | None
     retrieved: datetime.datetime
+    # The repo from the response url, to track renames (through redirects).
+    canonical_repo: GitHubRepo | None = None
 
 
 async def fetch_cached(
     api_url: str, cache_path: Path, client: GitHubClient, allow_stale: bool
-) -> Any:
+) -> tuple[Any, str]:
+    """Fetch JSON with caching. Returns `(payload, response_url)`."""
     cache_path.parent.mkdir(exist_ok=True, parents=True)
     if cache_path.exists():
         cached: CachedResponse = CachedResponse.model_validate_json(
@@ -126,18 +131,18 @@ async def fetch_cached(
         )
         if allow_stale:
             logger.info(f"Assumed fresh: {api_url}")
-            return cached.payload
+            return cached.payload, cached.metadata.response_url or api_url
 
         logger.info(f"Revalidating: {api_url}")
         headers = {"If-None-Match": cached.metadata.etag}
-        payload, headers = await client.fetch_json(api_url, headers)
+        payload, headers, response_url = await client.fetch_json(api_url, headers)
         if payload is None:
             logger.info(f"Revalidated, not modified: {api_url}")
-            return cached.payload
+            return cached.payload, response_url
     else:
         logger.info(f"No cache: {api_url}")
         headers = {}
-        payload, headers = await client.fetch_json(api_url, headers)
+        payload, headers, response_url = await client.fetch_json(api_url, headers)
         assert payload is not None  # For the type checker
 
     etag = headers["etag"]
@@ -145,14 +150,16 @@ async def fetch_cached(
         # Bad etag parsing
         etag = etag.removeprefix("W/")
     cached_release: CachedResponse = CachedResponse(
-        metadata=CacheMeta(etag=etag), payload=payload
+        metadata=CacheMeta(etag=etag, response_url=response_url), payload=payload
     )
     cache_path.write_text(cached_release.model_dump_json())
-    return payload
+    return payload, response_url
 
 
 class CacheMeta(BaseModel):
     etag: str
+    # The final URL after redirects, if different from the request URL.
+    response_url: str | None = None
 
 
 class CachedResponse(BaseModel):
@@ -189,7 +196,7 @@ async def get_releases(
 
             logger.info(f"Revalidating: {page_url}")
             headers = {"If-None-Match": cached.metadata.etag}
-            page_releases, headers = await client.fetch_json(page_url, headers)
+            page_releases, headers, _url = await client.fetch_json(page_url, headers)
             # If the first page matches, assume all other pages are fresh too.
             # It's unlikely that a release older than 100 gets updated, and can save a lot of requests.
             if not page_releases:
@@ -204,7 +211,7 @@ async def get_releases(
         else:
             logger.info(f"No cache: {page_url}")
             headers = {}
-            page_releases, headers = await client.fetch_json(page_url, headers)
+            page_releases, headers, _url = await client.fetch_json(page_url, headers)
             assert page_releases is not None  # For the type checker
 
         logger.info(f"Fresh response: {page_url}")
@@ -363,11 +370,9 @@ async def get_data_from_github(
     )
 
     # General project information
-    project_info = await fetch_cached(
-        project.repo.api_base(),
-        repo_cache_root.joinpath("index.json"),
-        client,
-        allow_stale,
+    api_url = project.repo.api_base()
+    project_info, response_url = await fetch_cached(
+        api_url, repo_cache_root.joinpath("index.json"), client, allow_stale
     )
 
     website = project_info.get("homepage")
@@ -375,6 +380,16 @@ async def get_data_from_github(
         spdx_id = project_license["spdx_id"]
     else:
         spdx_id = None
+
+    # Detect repo renames. We need to use the response body as the redirect goes to
+    # `https://api.github.com/repositories/<id>`.
+    if response_url != api_url:
+        canonical_repo = GitHubRepo(
+            project_info["owner"]["login"], project_info["name"]
+        )
+        logger.info(f"Repo renamed: {project.repo} -> {canonical_repo}")
+    else:
+        canonical_repo = None
 
     releases = await get_releases(project.repo, repo_cache_root, client, allow_stale)
 
@@ -398,7 +413,7 @@ async def get_data_from_github(
         logger.info("Falling back to tags")
         try:
             cache_file = repo_cache_root.joinpath("tags-index").joinpath("index.json")
-            tags = await fetch_cached(
+            tags, _tags_url = await fetch_cached(
                 project.repo.api_tags(), cache_file, client, allow_stale
             )
         except HTTPStatusError as e:
@@ -430,7 +445,9 @@ async def get_data_from_github(
                     f"{tag.sha}.json"
                 )
                 # Assumption: Tags are immutable, the page never needs to be refreshed.
-                tag_details = await fetch_cached(tag.tag_url, cache_file, client, True)
+                tag_details, _tag_url = await fetch_cached(
+                    tag.tag_url, cache_file, client, True
+                )
                 return await get_date_from_tag_details(tag, tag_details)
 
         extracted = list(
@@ -452,4 +469,5 @@ async def get_data_from_github(
         website=website,
         license=spdx_id,
         retrieved=retrieved,
+        canonical_repo=canonical_repo,
     )

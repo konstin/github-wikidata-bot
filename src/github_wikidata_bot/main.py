@@ -48,7 +48,7 @@ async def check_fast_path(
         project_version = None
 
     try:
-        releases, _ = await github_client.fetch_json(
+        releases, _, _ = await github_client.fetch_json(
             project.repo.api_releases() + "?per_page=1"
         )
         assert isinstance(releases, list)  # For the type checker
@@ -75,7 +75,7 @@ async def check_fast_path(
             return False
     else:
         try:
-            tags, _ = await github_client.fetch_json(project.repo.api_tags())
+            tags, _, _ = await github_client.fetch_json(project.repo.api_tags())
             assert isinstance(tags, list)  # For the type checker
         except HTTPStatusError as e:
             # GitHub raises a 404 if there are no tags
@@ -92,7 +92,7 @@ async def check_fast_path(
                 logger.info(f"No fast path, fetch tags errored: {e}")
                 return False
         else:
-            project_info, _ = await github_client.fetch_json(project.repo.api_base())
+            project_info, _, _ = await github_client.fetch_json(project.repo.api_base())
             assert isinstance(project_info, dict)  # For the type checker
             extracted_tags = [
                 analyse_tag(release, project_info, []) for release in tags
@@ -330,7 +330,9 @@ async def main():
         init_sentry(secrets.sentry_dsn)
     settings = Settings()
     async with AsyncClient(
-        timeout=settings.http_timeout, headers={"User-Agent": settings.user_agent}
+        timeout=settings.http_timeout,
+        headers={"User-Agent": settings.user_agent},
+        follow_redirects=True,
     ) as client:
         wikidata = WikidataClient(client=client, settings=settings)
         await wikidata.connect(secrets, settings)

@@ -148,13 +148,18 @@ async def update_website_and_license(
     if len(urls) == 1:
         assert isinstance(urls[0].value, str)
         url_raw = urls[0].value
-        repo = GitHubRepo.from_url(url_raw)
-        if settings.normalize_repo_url:
+        # Update the github repo if it was renamed.
+        repo = project.canonical_repo or GitHubRepo.from_url(url_raw)
+        is_rename = (
+            project.canonical_repo is not None
+            and str(project.canonical_repo) != url_raw
+        )
+        if is_rename or settings.normalize_repo_url:
             await normalize_repo_url(
                 item, str(repo), url_raw, project.wikidata.q_value, wikidata
             )
     else:
-        repo = project.wikidata.repo
+        repo = project.canonical_repo or project.wikidata.repo
 
     # TODO: Stop breaking client isolation to fetch redirects
     resolved_website = await set_website(project, wikidata.client)
