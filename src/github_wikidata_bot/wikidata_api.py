@@ -491,11 +491,11 @@ class WikidataClient:
                     retry_after = int(
                         response.headers.get("Retry-After", str(self.max_lag))
                     )
+                    server_lag = float(error["lag"])
                     logger.info(
-                        f"Server is lagging behind too much, retrying in {retry_after:.1f}s"
+                        f"Server is lagging behind too much ({server_lag:.1f}s), retrying in {retry_after:.1f}s"
                     )
                     await asyncio.sleep(retry_after)
-                    server_lag = float(error["lag"])
                     last_error = MaxLagError(
                         f"Wikidata edit failed due to server lag of {server_lag:.1f}s"
                     )
