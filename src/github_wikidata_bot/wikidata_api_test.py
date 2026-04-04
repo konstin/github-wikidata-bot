@@ -14,6 +14,7 @@ from github_wikidata_bot.wikidata_api import (
     Claim,
     Item,
     ItemValue,
+    MaxLagError,
     ServerError,
     WikibaseMonolingualText,
     WikibaseTime,
@@ -520,7 +521,7 @@ async def test_maxlag_retry():
         responses=[
             _json_response({"query": {"tokens": {"csrftoken": "tok"}}}),
             _json_response(
-                {"error": {"code": "maxlag", "info": "Waiting for ..."}},
+                {"error": {"code": "maxlag", "info": "Waiting for ...", "lag": 5.0}},
                 headers={"Retry-After": "0"},
             ),
             _json_response({"success": 1}),
@@ -531,6 +532,31 @@ async def test_maxlag_retry():
         await session.save_claims("Q42", [claim])
 
     assert len(transport.requests) == 3
+    # maxlag doubles from 8 to 16 on retry
+    assert transport.requests[1].data["maxlag"] == "8"
+    assert transport.requests[2].data["maxlag"] == "16"
+
+
+@pytest.mark.anyio
+async def test_maxlag_exhausted():
+    """When all retries are exhausted due to maxlag, MaxLagError is raised."""
+    transport = MockTransport(
+        responses=[
+            _json_response({"query": {"tokens": {"csrftoken": "tok"}}}),
+            _json_response(
+                {"error": {"code": "maxlag", "info": "Waiting for ...", "lag": 10.0}},
+                headers={"Retry-After": "0"},
+            ),
+            _json_response(
+                {"error": {"code": "maxlag", "info": "Waiting for ...", "lag": 12.0}},
+                headers={"Retry-After": "0"},
+            ),
+        ]
+    )
+    async with _make_session(transport) as session:
+        claim = Claim(property="P348", value="1.0.0")
+        with pytest.raises(MaxLagError, match="server lag"):
+            await session.save_claims("Q42", [claim])
 
 
 @pytest.mark.anyio
