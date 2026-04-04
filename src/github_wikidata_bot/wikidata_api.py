@@ -35,9 +35,16 @@ class APIError(WikidataError):
 
     def is_edit_conflict(self) -> bool:
         """Check if this error is an edit conflict."""
+        return self._has_message("edit-conflict")
+
+    def is_entity_too_big(self) -> bool:
+        """Check if this error is due to entity size limit."""
+        return self._has_message("wikibase-error-entity-too-big")
+
+    def _has_message(self, name: str) -> bool:
         if messages := self.other.get("messages"):
             for message in messages:
-                if message.get("name") == "edit-conflict":
+                if message.get("name") == name:
                     return True
         return False
 

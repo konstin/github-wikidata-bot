@@ -25,7 +25,12 @@ from github_wikidata_bot.project import WikidataProject
 from github_wikidata_bot.settings import Secrets, Settings
 from github_wikidata_bot.sparql import cached_projects_query, query_best_versions
 from github_wikidata_bot.version import SimpleSortableVersion
-from github_wikidata_bot.wikidata_api import MaxLagError, WikidataClient, WikidataError
+from github_wikidata_bot.wikidata_api import (
+    APIError,
+    MaxLagError,
+    WikidataClient,
+    WikidataError,
+)
 from github_wikidata_bot.wikidata_update import update_wikidata
 
 logger = logging.getLogger(__name__)
@@ -148,6 +153,25 @@ async def update_project(
         for attempt in range(settings.retries):
             try:
                 await update_wikidata(properties, settings, wikidata)
+            except APIError as e:
+                if e.is_entity_too_big():
+                    # Wikidata has a hard 3 MiB entity size limit (maxSerializedEntitySize=3000 KB).
+                    # https://www.wikidata.org/wiki/Wikidata:WikiProject_Limits_of_Wikidata
+                    # https://doc.wikimedia.org/Wikibase/master/php/docs_topics_options.html
+                    # TODO: Remove old version claims to make room for new ones.
+                    logger.warning("Entity too big, skipping")
+                    return
+                if attempt < settings.retries - 1:
+                    backoff = 2**attempt + 2
+                    logger.error(
+                        f"Failed to update (attempt {attempt + 1}/{settings.retries}), "
+                        f"retrying after {backoff}s: {e}",
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(backoff)
+                else:
+                    logger.error(f"Failed to update: {e}", exc_info=True)
+                    raise
             except WikidataError as e:
                 if attempt < settings.retries - 1:
                     backoff = 2**attempt + 2
