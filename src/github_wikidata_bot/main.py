@@ -131,11 +131,15 @@ async def update_project(
         properties: Project = await get_data_from_github(
             project, allow_stale, github_client, settings, wikidata.tags_over_releases
         )
+    except HTTPStatusError as e:
+        # TODO: Figure out what update wikidata should get when a project was deleted.
+        if e.response.status_code == 404:
+            logger.warning(f"GitHub repo not found: {e}")
+            return
+        else:
+            raise
     except HTTPError as e:
-        logger.error(
-            f"Github API request for {project.label} ({project.q_value}) failed: {e}",
-            exc_info=True,
-        )
+        logger.error(f"Github API request failed: {e}", exc_info=True)
         return
 
     if not settings.dry_run:
