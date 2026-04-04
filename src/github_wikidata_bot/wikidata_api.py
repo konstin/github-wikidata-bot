@@ -468,7 +468,6 @@ class WikidataClient:
         last_error = WikidataError("no retries")
         for attempt in range(self.retries):
             self.request_counter += 1
-            print(params)
             response = await self.client.post(self.api_url, data=params)
 
             if 500 <= response.status_code < 600:
@@ -499,8 +498,8 @@ class WikidataClient:
                     last_error = MaxLagError(
                         f"Wikidata edit failed due to server lag of {server_lag:.1f}s"
                     )
-                    # TODO: typing
-                    params["maxlag"] = str(int(params["maxlag"]) * 2)
+                    # Double the max lag each time.
+                    params["maxlag"] = self.max_lag * 2 ** (attempt + 1)
                     continue
                 elif error.get("code") == "badtoken":
                     self.csrf_token = None
