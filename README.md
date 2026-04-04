@@ -37,7 +37,11 @@ Run the bot in a terminal and enter the password for your bot account:
 uv run main.py
 ```
 
-Run `pytest`, `ruff format`, `ruff check` and `ty check` after making code changes.
+Run `pytest`, `ruff format`, `ruff check` and `ty check` after making code changes:
+
+```
+uv run ruff format && uv run ruff check && uv run ty check && uv run pytest
+```
 
 ## Implementation notes
 
