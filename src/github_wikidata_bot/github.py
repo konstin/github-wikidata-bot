@@ -418,8 +418,8 @@ async def get_data_from_github(
                 project.repo.api_tags(), cache_file, client, allow_stale
             )
         except HTTPStatusError as e:
-            # Github raises a 404 if there are no tags
-            if e.response.status_code == 404:
+            # GitHub raises 404 if there are no tags, 409 for empty repos
+            if e.response.status_code in (404, 409):
                 tags = []
             else:
                 raise

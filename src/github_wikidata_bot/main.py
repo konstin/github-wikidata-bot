@@ -78,8 +78,8 @@ async def check_fast_path(
             tags, _, _ = await github_client.fetch_json(project.repo.api_tags())
             assert isinstance(tags, list)  # For the type checker
         except HTTPStatusError as e:
-            # GitHub raises a 404 if there are no tags
-            if e.response.status_code == 404:
+            # GitHub raises 404 if there are no tags, 409 for empty repos
+            if e.response.status_code in (404, 409):
                 if not best_versions.get(project.q_value_url):
                     logger.info("Fresh, no releases or tags")
                     return True
