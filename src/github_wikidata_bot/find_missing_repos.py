@@ -24,7 +24,7 @@ async def main():
     ) as client:
         wikidata = WikidataClient(client=client, settings=settings)
         await wikidata.connect(secrets, settings)
-        github_client = GitHubClient(secrets, client)
+        github_client = GitHubClient(secrets, client, settings)
         projects = await cached_projects_query(False, wikidata, settings, None)
         semaphore = Semaphore(50)
 

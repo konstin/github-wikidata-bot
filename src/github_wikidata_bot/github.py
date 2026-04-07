@@ -34,11 +34,13 @@ class GitHubClient:
     auth_headers: dict[str, str]
     api_concurrency: Semaphore
     client: AsyncClient
+    settings: Settings
 
-    def __init__(self, secrets: Secrets, client: AsyncClient):
+    def __init__(self, secrets: Secrets, client: AsyncClient, settings: Settings):
         self.auth_headers = {"Authorization": f"token {secrets.github_oauth_token}"}
         self.api_concurrency = Semaphore(20)
         self.client = client
+        self.settings = settings
 
     @sentry_sdk.trace
     async def fetch_json(
@@ -52,9 +54,19 @@ class GitHubClient:
         if caching_headers is None:
             caching_headers = {}
 
-        response = await self.client.get(
-            url, headers={**self.auth_headers, **caching_headers}
-        )
+        for attempt in range(self.settings.retries):
+            response = await self.client.get(
+                url, headers={**self.auth_headers, **caching_headers}
+            )
+            if 500 <= response.status_code < 600 and attempt < 4:
+                backoff = 2**attempt
+                logger.warning(
+                    f"GitHub {response.status_code} for {url}, "
+                    f"retrying after {backoff}s"
+                )
+                await asyncio.sleep(backoff)
+                continue
+            break
 
         # We stop before we hit the actual rate limit cause github doesn't seem to like it
         # if we go to zero.

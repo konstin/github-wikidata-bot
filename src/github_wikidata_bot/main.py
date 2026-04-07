@@ -226,6 +226,9 @@ async def update_project_with_retries(
             except WikidataError as e:
                 logger.error(f"Failed to update: {e}")
                 break
+            except HTTPError as e:
+                logger.error(f"{e}")
+                break
 
             duration = time.time() - start
             logger.info(f"{project.label} took {duration:.3f}s")
@@ -364,7 +367,7 @@ async def main():
     ) as client:
         wikidata = WikidataClient(client=client, settings=settings)
         await wikidata.connect(secrets, settings)
-        github_client = GitHubClient(secrets, client)
+        github_client = GitHubClient(secrets, client, settings)
 
         await run(
             args.filter,

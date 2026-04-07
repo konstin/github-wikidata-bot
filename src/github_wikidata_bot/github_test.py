@@ -150,7 +150,7 @@ async def test_repo_rename_updates_wikidata(tmp_path, monkeypatch):
         username="test", bot_name="test", password="test", github_oauth_token="fake"
     )
     async with AsyncClient(transport=transport, follow_redirects=True) as client:
-        github_client = GitHubClient(secrets, client)
+        github_client = GitHubClient(secrets, client, settings)
         wikidata = WikidataClient(client=client, settings=settings)
 
         project = await get_data_from_github(
