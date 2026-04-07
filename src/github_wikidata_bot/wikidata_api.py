@@ -364,6 +364,7 @@ class WikidataClient:
     max_lag: int
     retries: int
     csrf_token: str | None
+    api_assert: str | None
 
     # Session-dynamic
     # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
@@ -382,6 +383,7 @@ class WikidataClient:
         self.edit_throttle = settings.edit_throttle
         self.max_lag = settings.max_lag
         self.retries = settings.retries
+        self.api_assert = settings.api_assert
         self.csrf_token = None
         self.last_edit_time = 0
 
@@ -471,6 +473,8 @@ class WikidataClient:
         """Make a POST API call with maxlag handling and retries."""
         params["format"] = "json"
         params["maxlag"] = str(self.max_lag)
+        if self.api_assert is not None:
+            params["assert"] = self.api_assert
 
         last_error = WikidataError("no retries")
         for attempt in range(self.retries):

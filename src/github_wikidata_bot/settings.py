@@ -57,6 +57,7 @@ class Settings:
     tags_over_releases_page = "User:Github-wiki-bot/Whitelist"
     api_url: str = "https://www.wikidata.org/w/api.php"
     sparql_url: str = "https://query.wikidata.org/sparql"
+    api_assert: str | None = "bot"
 
 
 @lru_cache
