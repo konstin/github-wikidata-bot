@@ -301,6 +301,7 @@ async def test_save_claim():
                 "bot": "1",
                 "format": "json",
                 "maxlag": "8",
+                "assert": "bot",
             },
         ),
     ]
@@ -439,6 +440,7 @@ async def test_remove_claim():
                 "bot": "1",
                 "format": "json",
                 "maxlag": "8",
+                "assert": "bot",
             },
         ),
     ]
