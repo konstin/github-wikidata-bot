@@ -365,8 +365,8 @@ async def main():
         headers={"User-Agent": settings.user_agent},
         follow_redirects=True,
     ) as client:
-        wikidata = WikidataClient(client=client, settings=settings)
-        await wikidata.connect(secrets, settings)
+        wikidata = WikidataClient(client, secrets, settings)
+        await wikidata.connect(settings)
         github_client = GitHubClient(secrets, client, settings)
 
         await run(

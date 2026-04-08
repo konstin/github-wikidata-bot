@@ -8,7 +8,7 @@ import httpx
 import pytest
 from httpx import AsyncClient
 
-from github_wikidata_bot.settings import Settings
+from github_wikidata_bot.settings import Secrets, Settings
 from github_wikidata_bot.wikidata_api import (
     APIError,
     Claim,
@@ -76,7 +76,8 @@ async def _make_session(transport: MockTransport) -> AsyncIterator[WikidataClien
         headers={"User-Agent": settings.user_agent},
         transport=transport,
     ) as client:
-        yield WikidataClient(client=client, settings=settings)
+        secrets = Secrets("bot", "bot", "secret", "secret_github_token", None)
+        yield WikidataClient(client, secrets, settings)
 
 
 @pytest.mark.anyio
@@ -569,16 +570,55 @@ async def test_badtoken_retry():
             _json_response(
                 {"error": {"code": "badtoken", "info": "Invalid CSRF token"}}
             ),
+            # Re-login flow.
+            _json_response({"query": {"tokens": {"logintoken": "lt"}}}),
+            _json_response({"login": {"result": "Success"}}),
             _json_response({"query": {"tokens": {"csrftoken": "new-tok"}}}),
             _json_response({"success": 1}),
         ]
     )
     async with _make_session(transport) as session:
+        session.secrets = Secrets(
+            username="U", bot_name="B", password="P", github_oauth_token=""
+        )
         claim = Claim(property="P348", value="1.0.0")
         await session.save_claims("Q42", [claim])
 
     last_post = transport.requests[-1]
     assert last_post.data["token"] == "new-tok"
+
+
+@pytest.mark.anyio
+async def test_assertbotfailed_relogin():
+    """Session expired mid-run: assertbotfailed should re-login and retry."""
+    transport = MockTransport(
+        responses=[
+            _json_response({"query": {"tokens": {"csrftoken": "tok1"}}}),
+            _json_response(
+                {
+                    "error": {
+                        "code": "assertbotfailed",
+                        "info": 'You do not have the "bot" right',
+                    }
+                }
+            ),
+            # Re-login flow.
+            _json_response({"query": {"tokens": {"logintoken": "lt"}}}),
+            _json_response({"login": {"result": "Success"}}),
+            _json_response({"query": {"tokens": {"csrftoken": "tok2"}}}),
+            _json_response({"success": 1}),
+        ]
+    )
+    async with _make_session(transport) as session:
+        session.secrets = Secrets(
+            username="U", bot_name="B", password="P", github_oauth_token=""
+        )
+        claim = Claim(property="P348", value="1.0.0")
+        await session.save_claims("Q42", [claim])
+
+    last_post = transport.requests[-1]
+    assert last_post.data["token"] == "tok2"
+    assert last_post.data["assert"] == "bot"
 
 
 def test_claim_round_trip():

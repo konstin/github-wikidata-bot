@@ -22,8 +22,8 @@ async def main():
     async with AsyncClient(
         timeout=settings.http_timeout, headers={"User-Agent": settings.user_agent}
     ) as client:
-        wikidata = WikidataClient(client=client, settings=settings)
-        await wikidata.connect(secrets, settings)
+        wikidata = WikidataClient(client, secrets, settings)
+        await wikidata.connect(settings)
         github_client = GitHubClient(secrets, client, settings)
         projects = await cached_projects_query(False, wikidata, settings, None)
         semaphore = Semaphore(50)

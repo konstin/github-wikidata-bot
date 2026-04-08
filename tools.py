@@ -70,8 +70,8 @@ async def main():
         timeout=settings.http_timeout, headers={"User-Agent": settings.user_agent}
     ) as client:
         github = GitHubClient(secrets, client, settings)
-        wikidata = WikidataClient(client=client, settings=settings)
-        await wikidata.connect(secrets, settings)
+        wikidata = WikidataClient(client, secrets, settings)
+        await wikidata.connect(settings)
         await debug_version_handling(
             github, wikidata, settings, args.threshold, args.maxsize, args.no_sampling
         )

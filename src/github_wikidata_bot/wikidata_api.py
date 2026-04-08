@@ -365,6 +365,7 @@ class WikidataClient:
     retries: int
     csrf_token: str | None
     api_assert: str | None
+    secrets: Secrets
 
     # Session-dynamic
     # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
@@ -376,7 +377,7 @@ class WikidataClient:
     tags_over_releases: list[str]
     licenses: dict[str, str]
 
-    def __init__(self, *, client: AsyncClient, settings: Settings):
+    def __init__(self, client: AsyncClient, secrets: Secrets, settings: Settings):
         self.client = client
         self.api_url = settings.api_url
         self.sparql_url = settings.sparql_url
@@ -385,6 +386,7 @@ class WikidataClient:
         self.retries = settings.retries
         self.api_assert = settings.api_assert
         self.csrf_token = None
+        self.secrets = secrets
         self.last_edit_time = 0
 
         # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
@@ -428,9 +430,11 @@ class WikidataClient:
         logger.info(f"Logged in as {login_user}")
 
     @sentry_sdk.trace
-    async def connect(self, secrets: Secrets, settings: Settings) -> None:
+    async def connect(self, settings: Settings) -> None:
         """Login and fetch initial data."""
-        await self.login(secrets.username, secrets.bot_name, secrets.password)
+        await self.login(
+            self.secrets.username, self.secrets.bot_name, self.secrets.password
+        )
 
         response = await self.sparql_query(
             sparql_dir().joinpath("free_licenses.rq").read_text()
@@ -512,11 +516,27 @@ class WikidataClient:
                     # Double the max lag each time.
                     params["maxlag"] = self.max_lag * 2 ** (attempt + 1)
                     continue
-                elif error.get("code") == "badtoken":
+                elif error.get("code") in (
+                    "badtoken",
+                    "assertbotfailed",
+                    "assertuserfailed",
+                ):
+                    # MediaWiki bot-password sessions expire after $wgObjectCacheSessionExpiry (default 1h) of
+                    # inactivity (https://www.mediawiki.org/wiki/Manual:$wgObjectCacheSessionExpiry).
+                    # Without re-login, refetching the CSRF token returns the anonymous token `+\` and subsequent edits
+                    # are logged out (https://www.mediawiki.org/wiki/API:Assert).
+                    # The fix is to re-login (https://github.com/Wikidata/Wikidata-Toolkit/issues/569).
+                    logger.info(f"Session lost ({error.get('code')}), re-logging in")
+                    await self.login(
+                        self.secrets.username,
+                        self.secrets.bot_name,
+                        self.secrets.password,
+                    )
                     self.csrf_token = None
                     if "token" in params:
                         params["token"] = await self._get_csrf_token()
-                    last_error = WikidataError("bad token")
+                    last_error = WikidataError(f"session lost: {error.get('code')}")
+                    # TODO: This shouldn't cost us a retry.
                     continue
                 else:
                     raise APIError(
