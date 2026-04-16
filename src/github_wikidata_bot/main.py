@@ -360,24 +360,29 @@ async def main():
     if secrets.sentry_dsn:
         init_sentry(secrets.sentry_dsn)
     settings = Settings()
-    async with AsyncClient(
-        timeout=settings.http_timeout,
-        headers={"User-Agent": settings.user_agent},
-        follow_redirects=True,
-    ) as client:
-        wikidata = WikidataClient(client, secrets, settings)
-        await wikidata.connect(settings)
-        github_client = GitHubClient(secrets, client, settings)
+    try:
+        async with AsyncClient(
+            timeout=settings.http_timeout,
+            headers={"User-Agent": settings.user_agent},
+            follow_redirects=True,
+        ) as client:
+            wikidata = WikidataClient(client, secrets, settings)
+            await wikidata.connect(settings)
+            github_client = GitHubClient(secrets, client, settings)
 
-        await run(
-            args.filter,
-            args.cache_sparql,
-            args.allow_stale,
-            settings,
-            wikidata,
-            github_client,
-        )
-        logger.info(f"Made {wikidata.request_counter} wikidata requests")
+            await run(
+                args.filter,
+                args.cache_sparql,
+                args.allow_stale,
+                settings,
+                wikidata,
+                github_client,
+            )
+            logger.info(f"Made {wikidata.request_counter} wikidata requests")
+    finally:
+        # Block until pending events are sent so the atexit handler doesn't
+        # print "Sentry is attempting to send N pending events".
+        await sentry_sdk.flush_async(timeout=10)
 
 
 class NoTracebackFormatter(logging.Formatter):
