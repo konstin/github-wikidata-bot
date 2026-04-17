@@ -382,7 +382,8 @@ async def main():
     finally:
         # Block until pending events are sent so the atexit handler doesn't
         # print "Sentry is attempting to send N pending events".
-        await sentry_sdk.flush_async(timeout=10)
+        # The default transport is sync, so flush_async is a no-op.
+        sentry_sdk.flush(timeout=10)
 
 
 class NoTracebackFormatter(logging.Formatter):
