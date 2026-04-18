@@ -380,10 +380,11 @@ async def main():
             )
             logger.info(f"Made {wikidata.request_counter} wikidata requests")
     finally:
-        # Block until pending events are sent so the atexit handler doesn't
-        # print "Sentry is attempting to send N pending events".
-        # The default transport is sync, so flush_async is a no-op.
-        sentry_sdk.flush(timeout=10)
+        # Close the client so the atexit handler early-returns instead of
+        # printing "Sentry is attempting to send N pending events". flush()
+        # alone leaves the client alive, and events queued during teardown
+        # re-trigger the atexit drain (getsentry/sentry-python#862).
+        sentry_sdk.get_client().close(timeout=10)
 
 
 class NoTracebackFormatter(logging.Formatter):
