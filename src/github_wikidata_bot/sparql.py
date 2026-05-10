@@ -5,6 +5,7 @@ import json
 import logging
 from collections import defaultdict
 
+import httpx
 import sentry_sdk
 
 from github_wikidata_bot.project import WikidataProject
@@ -26,7 +27,7 @@ async def cached_sparql_query(
     for attempt in range(settings.retries):
         try:
             response = await wikidata.sparql_query(query_text)
-        except ServerError as e:
+        except (ServerError, httpx.TransportError) as e:
             if attempt < settings.retries - 1:
                 sleep = 2**attempt * 10
                 logger.warning(
