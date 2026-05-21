@@ -21,7 +21,7 @@ from github_wikidata_bot.github import (
     analyse_tag,
     get_data_from_github,
 )
-from github_wikidata_bot.project import WikidataProject
+from github_wikidata_bot.project import InvalidProject, WikidataProject
 from github_wikidata_bot.settings import Secrets, Settings
 from github_wikidata_bot.sparql import cached_projects_query, query_best_versions
 from github_wikidata_bot.version import SimpleSortableVersion
@@ -223,6 +223,9 @@ async def update_project_with_retries(
                 )
                 await asyncio.sleep(e.sleep)
                 continue
+            except InvalidProject as e:
+                logger.warning(f"Invalid project, skipping: {e}")
+                break
             except WikidataError as e:
                 logger.error(f"Failed to update: {e}")
                 break

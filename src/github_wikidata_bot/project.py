@@ -8,6 +8,10 @@ from yarl import URL
 WIKIDATA_PREFIX = "http://www.wikidata.org/entity/"
 
 
+class InvalidProject(ValueError):
+    """A Wikidata project contains invalid data and should be skipped."""
+
+
 @dataclass(frozen=True)
 class WikidataProject:
     # Ex) Q42
@@ -25,7 +29,7 @@ class WikidataProject:
     def from_sparql(cls, project: dict[str, str]) -> Self:
         url = project["project"]
         if not url.startswith(WIKIDATA_PREFIX):
-            raise ValueError(f"Invalid wikidata entity URL: {url}")
+            raise InvalidProject(f"Invalid wikidata entity URL: {url}")
         q_value = url.removeprefix(WIKIDATA_PREFIX)
         return cls(
             q_value=q_value,
@@ -54,7 +58,7 @@ class GitHubRepo:
         parsed = parsed.with_path(parsed.path.rstrip("/"))
 
         if parsed.host != "github.com" or parsed.path.count("/") != 2:
-            raise ValueError(f"Invalid repo URL: {url}")
+            raise InvalidProject(f"Invalid repo URL: {url}")
         # Ignore the trailing slash at the beginning of the path.
         _, org, project = parsed.path.split("/")
         return cls(org, project)
