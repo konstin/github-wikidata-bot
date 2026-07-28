@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib.metadata import version

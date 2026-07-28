@@ -143,8 +143,8 @@ async def update_project(
             return
         else:
             raise
-    except HTTPError as e:
-        logger.error(f"Github API request failed: {e}", exc_info=True)
+    except HTTPError:
+        logger.exception("Github API request failed")
         return
 
     if not settings.dry_run:
@@ -163,26 +163,24 @@ async def update_project(
                     return
                 if attempt < settings.retries - 1:
                     backoff = 2**attempt + 2
-                    logger.error(
+                    logger.exception(
                         f"Failed to update (attempt {attempt + 1}/{settings.retries}), "
-                        f"retrying after {backoff}s: {e}",
-                        exc_info=True,
+                        f"retrying after {backoff}s"
                     )
                     await asyncio.sleep(backoff)
                 else:
-                    logger.error(f"Failed to update: {e}", exc_info=True)
+                    logger.exception("Failed to update")
                     raise
-            except WikidataError as e:
+            except WikidataError:
                 if attempt < settings.retries - 1:
                     backoff = 2**attempt + 2
-                    logger.error(
+                    logger.exception(
                         f"Failed to update (attempt {attempt + 1}/{settings.retries}), "
-                        f"retrying after {backoff}s: {e}",
-                        exc_info=True,
+                        f"retrying after {backoff}s"
                     )
                     await asyncio.sleep(backoff)
                 else:
-                    logger.error(f"Failed to update: {e}", exc_info=True)
+                    logger.exception("Failed to update")
                     raise
             else:
                 return

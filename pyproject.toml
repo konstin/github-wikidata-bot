@@ -20,9 +20,9 @@ dev = [
     "anyio >=4,<5",
     "httpx >=0.28.0,<0.29",
     "pytest >=9.0.0,<10.0.0",
-    "ruff >=0.15,<0.16",
+    "ruff >=0.16,<0.17",
     "tqdm >=4.66.4,<5",
-    "ty >=0.0.4,<0.1",
+    "ty >=0.0.64,<0.1",
 ]
 
 [tool.ruff.format]
@@ -34,6 +34,7 @@ extend-ignore = ["TRY003", "TRY400"]
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]
+split-on-trailing-comma = false
 
 [tool.mypy]
 ignore_missing_imports = true

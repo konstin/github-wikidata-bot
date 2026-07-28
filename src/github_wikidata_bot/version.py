@@ -30,7 +30,7 @@ class SimpleSortableVersion:
 
 def number_of_unique_values(values: list[str]) -> int:
     """Count number of unique strings in list, ignoring the case."""
-    return len(set(map(lambda s: s.lower(), values)))
+    return len({value.lower() for value in values})
 
 
 def extract_version(string: str, name: str | None = None) -> tuple[str, str] | None:
@@ -93,7 +93,7 @@ def extract_version(string: str, name: str | None = None) -> tuple[str, str] | N
     )
     res = gen.findall(string)
     # remove "stable" from version string
-    res = list(map(lambda s: re.sub(r"[._-]stable[._-]?", "", s[1]), res))
+    res = [re.sub(r"[._-]stable[._-]?", "", match[1]) for match in res]
     if number_of_unique_values(res) == 1:
         extracted_version = res[0]
     else:
