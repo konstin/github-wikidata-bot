@@ -25,17 +25,6 @@ dev = [
     "ty >=0.0.64,<0.1",
 ]
 
-[tool.ruff.format]
-skip-magic-trailing-comma = true
-
-[tool.ruff.lint]
-extend-select = ["B", "I002", "PT", "PTH", "TRY", "UP"]
-extend-ignore = ["TRY003", "TRY400"]
-
-[tool.ruff.lint.isort]
-required-imports = ["from __future__ import annotations"]
-split-on-trailing-comma = false
-
 [tool.mypy]
 ignore_missing_imports = true
 
