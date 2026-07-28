@@ -12,7 +12,7 @@ Q1274326
 Q4914654 # Comment on this line
 Q17064545
 </pre>
-"""  # noqa: E501
+"""
 
 
 def test_parse_filter_list():

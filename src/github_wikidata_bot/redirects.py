@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import ClassVar
 
 from httpx import AsyncClient, HTTPError
 
@@ -11,7 +12,7 @@ from github_wikidata_bot.settings import cache_root
 class RedirectDict:
     """Caches HTTP redirects on disk."""
 
-    _redirects: dict[str, str] = {}
+    _redirects: ClassVar[dict[str, str]] = {}
 
     @classmethod
     def redirects_json(cls) -> Path:
@@ -40,7 +41,7 @@ class RedirectDict:
             with cls.redirects_json().open() as fp:
                 cls._redirects = json.load(fp)
         else:
-            cls._redirects = dict()
+            cls._redirects = {}
 
     @classmethod
     def _save(cls):

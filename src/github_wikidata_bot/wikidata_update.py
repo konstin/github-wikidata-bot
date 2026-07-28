@@ -1,5 +1,4 @@
 from __future__ import annotations
-from github_wikidata_bot.settings import Settings
 
 import enum
 import logging
@@ -11,6 +10,7 @@ from httpx import AsyncClient
 from github_wikidata_bot.github import Project, Release
 from github_wikidata_bot.project import GitHubRepo
 from github_wikidata_bot.redirects import RedirectDict
+from github_wikidata_bot.settings import Settings
 from github_wikidata_bot.version import SimpleSortableVersion
 from github_wikidata_bot.website import is_website_other_property
 from github_wikidata_bot.wikidata_api import (
