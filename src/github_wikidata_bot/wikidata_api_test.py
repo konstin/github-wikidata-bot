@@ -490,8 +490,9 @@ async def test_sparql_query():
 
 
 @pytest.mark.anyio
-async def test_sparql_server_error():
-    transport = MockTransport(responses=[httpx.Response(status_code=500)])
+@pytest.mark.parametrize("status_code", [429, 500])
+async def test_sparql_server_error(status_code):
+    transport = MockTransport(responses=[httpx.Response(status_code=status_code)])
     async with _make_session(transport) as session:
         with pytest.raises(ServerError):
             await session.sparql_query("SELECT ...")

@@ -659,7 +659,7 @@ class WikidataClient:
             headers={"Accept": "application/sparql-results+json"},
             timeout=120,
         )
-        if 500 <= resp.status_code < 600:
+        if resp.status_code == 429 or 500 <= resp.status_code < 600:
             raise ServerError(f"SPARQL server error: {resp.status_code}")
         resp.raise_for_status()
 
