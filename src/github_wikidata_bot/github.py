@@ -215,14 +215,34 @@ class CachedResponse(BaseModel):
 async def get_releases(
     repo: GitHubRepo, repo_cache_root: Path, client: GitHubClient, allow_stale: bool
 ) -> list[dict[str, Any]]:
-    """Gets all pages of the release/tag information"""
-    per_page = 100
+    """Fetch releases, reducing the page size if GitHub cannot serve larger pages."""
+    try:
+        return await _get_releases(repo, repo_cache_root, client, allow_stale, 100)
+    except (HTTPStatusError, RemoteProtocolError) as err:
+        if isinstance(err, HTTPStatusError) and err.response.status_code != 504:
+            raise
+        logger.warning(
+            f"GitHub release requests for {repo} failed after retries: {err}; "
+            "restarting with 30 releases per page"
+        )
 
+    # Page offsets change with the page size, so restart with a separate cache.
+    return await _get_releases(repo, repo_cache_root, client, allow_stale, 30)
+
+
+async def _get_releases(
+    repo: GitHubRepo,
+    repo_cache_root: Path,
+    client: GitHubClient,
+    allow_stale: bool,
+    per_page: int,
+) -> list[dict[str, Any]]:
     releases_cache = repo_cache_root.joinpath(f"releases-{per_page}")
     releases_cache.mkdir(exist_ok=True, parents=True)
 
-    # GitHub API returns at most 1000 results (100 per page * 10 pages).
-    max_pages = 1000 // per_page
+    # Preserve the 1000-release limit even when the page size does not divide it.
+    max_releases = 1000
+    max_pages = (max_releases + per_page - 1) // per_page
     all_releases: list[dict[str, Any]] = []
     for page_number in range(1, max_pages + 1):
         page_url = f"{repo.api_releases()}?page={page_number}&per_page={per_page}"
@@ -234,7 +254,7 @@ async def get_releases(
             if allow_stale:
                 logger.info(f"Cache unchecked: {page_url}")
                 all_releases += cached.payload
-                # Assumption: github returns 100 entries per page when we request it.
+                # A short page marks the end of the release history.
                 if len(cached.payload) < per_page:
                     break
                 else:
@@ -244,12 +264,12 @@ async def get_releases(
             headers = {"If-None-Match": cached.metadata.etag}
             page_releases, headers, _url = await client.fetch_json(page_url, headers)
             # If the first page matches, assume all other pages are fresh too.
-            # It's unlikely that a release older than 100 gets updated, and can save a lot of requests.
-            if not page_releases:
+            # Older releases rarely change, so this can save a lot of requests.
+            if page_releases is None:
                 all_releases += cached.payload
                 if page_number == 1:
                     allow_stale = True
-                # Assumption: github returns 100 entries per page when we request it.
+                # A short page marks the end of the release history.
                 if len(cached.payload) < per_page:
                     break
                 else:
@@ -274,11 +294,11 @@ async def get_releases(
         )
         page_cache.write_text(cached_release.model_dump_json())
 
-        # Assumption: github returns 100 entries per page when we request it.
+        # A short page marks the end of the release history.
         if len(page_releases) < per_page:
             break
 
-    return all_releases
+    return all_releases[:max_releases]
 
 
 def analyse_release(
