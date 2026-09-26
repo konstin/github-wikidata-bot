@@ -17,6 +17,7 @@ from github_wikidata_bot.github import (
     GitHubClient,
     Project,
     RateLimitError,
+    RepositoryUnavailableError,
     analyse_release,
     analyse_tag,
     get_data_from_github,
@@ -58,6 +59,8 @@ async def check_fast_path(
             project.repo.api_releases() + "?per_page=1"
         )
         assert isinstance(releases, list)  # For the type checker
+    except RepositoryUnavailableError:
+        raise
     except HTTPError as e:
         logger.info(f"No fast path, fetch releases errored: {e}")
         return False
@@ -83,6 +86,8 @@ async def check_fast_path(
         try:
             tags, _, _ = await github_client.fetch_json(project.repo.api_tags())
             assert isinstance(tags, list)  # For the type checker
+        except RepositoryUnavailableError:
+            raise
         except HTTPStatusError as e:
             # GitHub raises 404 if there are no tags, 409 for empty repos
             if e.response.status_code in (404, 409):
@@ -137,6 +142,9 @@ async def update_project(
         properties: Project = await get_data_from_github(
             project, allow_stale, github_client, settings, wikidata.tags_over_releases
         )
+    except RepositoryUnavailableError as err:
+        logger.warning(f"GitHub repository unavailable, skipping: {err}")
+        return
     except HTTPStatusError as err:
         # TODO: Figure out what update wikidata should get when a project was deleted.
         if err.response.status_code == 404:
@@ -144,9 +152,6 @@ async def update_project(
             return
         else:
             raise
-    except HTTPError:
-        logger.exception("Github API request failed")
-        return
 
     if not settings.dry_run:
         # TODO: Move retries to the http calls themselves, we want to retry individual network requests, not the whole
@@ -169,24 +174,22 @@ async def update_project(
                     return
                 if attempt < settings.retries - 1:
                     backoff = 2**attempt + 2
-                    logger.exception(
+                    logger.warning(
                         f"Failed to update (attempt {attempt + 1}/{settings.retries}), "
-                        f"retrying after {backoff}s"
+                        f"retrying after {backoff}s: {err}"
                     )
                     await asyncio.sleep(backoff)
                 else:
-                    logger.exception("Failed to update")
                     raise
-            except WikidataError:
+            except WikidataError as err:
                 if attempt < settings.retries - 1:
                     backoff = 2**attempt + 2
-                    logger.exception(
+                    logger.warning(
                         f"Failed to update (attempt {attempt + 1}/{settings.retries}), "
-                        f"retrying after {backoff}s"
+                        f"retrying after {backoff}s: {err}"
                     )
                     await asyncio.sleep(backoff)
                 else:
-                    logger.exception("Failed to update")
                     raise
             else:
                 return
@@ -230,11 +233,15 @@ async def update_project_with_retries(
             except InvalidProject as e:
                 logger.warning(f"Invalid project, skipping: {e}")
                 break
-            except WikidataError as e:
-                logger.error(f"Failed to update: {e}")
+            except MaxLagError as err:
+                logger.warning(
+                    f"Wikidata server lag, skipping {project.q_value}: {err}"
+                )
                 break
-            except HTTPError as e:
-                logger.error(f"{e}")
+            except (WikidataError, HTTPError) as err:
+                logger.exception(
+                    f"Failed to update {project.q_value}: {type(err).__name__}: {err}"
+                )
                 break
 
             duration = time.time() - start

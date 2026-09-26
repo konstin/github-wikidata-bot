@@ -13,7 +13,13 @@ from typing import Any
 from urllib.parse import quote_plus
 
 import sentry_sdk
-from httpx import AsyncClient, HTTPStatusError
+from httpx import (
+    AsyncClient,
+    HTTPStatusError,
+    NetworkError,
+    RemoteProtocolError,
+    TimeoutException,
+)
 from pydantic import BaseModel
 
 from github_wikidata_bot.project import GitHubRepo, WikidataProject
@@ -28,6 +34,10 @@ class RateLimitError(Exception):
 
     def __init__(self, sleep: float):
         self.sleep = sleep
+
+
+class RepositoryUnavailableError(HTTPStatusError):
+    """GitHub has blocked access to the repository."""
 
 
 class GitHubClient:
@@ -55,10 +65,24 @@ class GitHubClient:
             caching_headers = {}
 
         for attempt in range(self.settings.retries):
-            response = await self.client.get(
-                url, headers={**self.auth_headers, **caching_headers}
-            )
-            if 500 <= response.status_code < 600 and attempt < 4:
+            try:
+                response = await self.client.get(
+                    url, headers={**self.auth_headers, **caching_headers}
+                )
+            except (NetworkError, RemoteProtocolError, TimeoutException) as err:
+                if attempt == self.settings.retries - 1:
+                    raise
+                backoff = 2**attempt
+                logger.warning(
+                    f"GitHub {type(err).__name__} for {url}, "
+                    f"retrying after {backoff}s: {err}"
+                )
+                await asyncio.sleep(backoff)
+                continue
+            if (
+                500 <= response.status_code < 600
+                and attempt < self.settings.retries - 1
+            ):
                 backoff = 2**attempt
                 logger.warning(
                     f"GitHub {response.status_code} for {url}, "
@@ -67,6 +91,15 @@ class GitHubClient:
                 await asyncio.sleep(backoff)
                 continue
             break
+        else:
+            raise ValueError("retries can't be 0")
+
+        if response.status_code == 451:
+            raise RepositoryUnavailableError(
+                f"GitHub repository unavailable (HTTP 451): {response.url}",
+                request=response.request,
+                response=response,
+            )
 
         # We stop before we hit the actual rate limit cause github doesn't seem to like it
         # if we go to zero.

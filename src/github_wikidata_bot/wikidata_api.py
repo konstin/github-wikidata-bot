@@ -12,9 +12,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Self
 
-import httpx
 import sentry_sdk
-from httpx import AsyncClient
+from httpx import AsyncClient, NetworkError, RemoteProtocolError, TimeoutException
 
 from github_wikidata_bot.settings import Secrets, Settings, sparql_dir
 
@@ -66,6 +65,14 @@ class MissingEntityError(WikidataError):
 
 class ServerError(WikidataError):
     """SPARQL or API server error."""
+
+    status_code: int
+    operation: str
+
+    def __init__(self, status_code: int, operation: str) -> None:
+        self.status_code = status_code
+        self.operation = operation
+        super().__init__(f"{operation} failed with HTTP {status_code}")
 
 
 @dataclass
@@ -357,7 +364,7 @@ class WikidataClient:
     """Manages authentication and API calls to Wikidata."""
 
     # Mutable
-    client: httpx.AsyncClient
+    client: AsyncClient
     last_edit_time: float
     request_counter = 0
 
@@ -401,18 +408,14 @@ class WikidataClient:
     async def login(self, username: str, bot_name: str, bot_password: str) -> None:
         """Log in with a bot password."""
         logger.info("Logging in")
-        self.request_counter += 1
-        response = await self.client.get(
-            self.api_url,
-            params={
+        data = await self._api_get(
+            {
                 "action": "query",
                 "meta": "tokens",
                 "type": "login",
-                "format": "json",
-            },
+            }
         )
-        response.raise_for_status()
-        login_token = response.json()["query"]["tokens"]["logintoken"]
+        login_token = data["query"]["tokens"]["logintoken"]
 
         login_user = f"{username}@{bot_name}"
         self.request_counter += 1
@@ -459,12 +462,8 @@ class WikidataClient:
         if self.csrf_token:
             return self.csrf_token
         logger.info("Fetching CSRF token")
-        self.request_counter += 1
-        response = await self.client.get(
-            self.api_url, params={"action": "query", "meta": "tokens", "format": "json"}
-        )
-        response.raise_for_status()
-        self.csrf_token = response.json()["query"]["tokens"]["csrftoken"]
+        data = await self._api_get({"action": "query", "meta": "tokens"})
+        self.csrf_token = data["query"]["tokens"]["csrftoken"]
         return self.csrf_token
 
     @sentry_sdk.trace
@@ -484,16 +483,17 @@ class WikidataClient:
         if self.api_assert is not None:
             params["assert"] = self.api_assert
 
-        last_error = WikidataError("no retries")
+        last_error: WikidataError | None = None
         for attempt in range(self.retries):
             self.request_counter += 1
             response = await self.client.post(self.api_url, data=params)
 
             if 500 <= response.status_code < 600:
+                last_error = ServerError(response.status_code, params["action"])
+                if attempt == self.retries - 1:
+                    break
                 wait = 2**attempt + 1
-                logger.warning(
-                    f"Server error {response.status_code}, retrying in {wait}s"
-                )
+                logger.warning(f"{last_error}, retrying in {wait}s")
                 await asyncio.sleep(wait)
                 continue
 
@@ -554,7 +554,9 @@ class WikidataClient:
 
             return data
 
-        raise last_error
+        if last_error is not None:
+            raise last_error
+        raise ValueError("retries can't be 0")
 
     async def _api_get(self, params: dict[str, str]) -> dict[str, Any]:
         """Make a GET API call with retries."""
@@ -562,11 +564,23 @@ class WikidataClient:
 
         for attempt in range(self.retries):
             self.request_counter += 1
-            resp = await self.client.get(self.api_url, params=params)
-
-            if 500 <= resp.status_code < 600:
+            try:
+                resp = await self.client.get(self.api_url, params=params)
+                if 500 <= resp.status_code < 600:
+                    raise ServerError(resp.status_code, params["action"])
+            except (
+                ServerError,
+                NetworkError,
+                RemoteProtocolError,
+                TimeoutException,
+            ) as err:
+                if attempt == self.retries - 1:
+                    raise
                 wait = 2**attempt + 1
-                logger.warning(f"Server error {resp.status_code}, retrying in {wait}s")
+                logger.warning(
+                    f"Wikidata {params['action']} failed with {type(err).__name__}, "
+                    f"retrying in {wait}s: {err}"
+                )
                 await asyncio.sleep(wait)
                 continue
 
@@ -585,7 +599,7 @@ class WikidataClient:
 
             return data
 
-        raise ServerError("Max retries exceeded")
+        raise ValueError("retries can't be 0")
 
     @sentry_sdk.trace
     async def get_entity(self, entity_id: str) -> Item:
@@ -670,7 +684,7 @@ class WikidataClient:
             timeout=120,
         )
         if resp.status_code == 429 or 500 <= resp.status_code < 600:
-            raise ServerError(f"SPARQL server error: {resp.status_code}")
+            raise ServerError(resp.status_code, "SPARQL query")
         resp.raise_for_status()
 
         data = resp.json()
