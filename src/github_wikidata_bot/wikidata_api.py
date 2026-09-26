@@ -60,6 +60,10 @@ class MaxLagError(WikidataError):
     """Server is lagging beyond tolerance."""
 
 
+class MissingEntityError(WikidataError):
+    """The Wikidata entity no longer exists."""
+
+
 class ServerError(WikidataError):
     """SPARQL or API server error."""
 
@@ -538,6 +542,8 @@ class WikidataClient:
                     last_error = WikidataError(f"session lost: {error.get('code')}")
                     # TODO: This shouldn't cost us a retry.
                     continue
+                elif error.get("code") == "no-such-entity":
+                    raise MissingEntityError(error.get("info", "Entity does not exist"))
                 else:
                     raise APIError(
                         code=error.get("code", "unknown"),
@@ -569,6 +575,8 @@ class WikidataClient:
 
             if "error" in data:
                 err = data["error"]
+                if err.get("code") == "no-such-entity":
+                    raise MissingEntityError(err.get("info", "Entity does not exist"))
                 raise APIError(
                     code=err.get("code", "unknown"),
                     info=err.get("info", ""),
@@ -585,6 +593,8 @@ class WikidataClient:
         logger.info(f"Fetching {entity_id}")
         data = await self._api_get({"action": "wbgetentities", "ids": entity_id})
         entity_data = data["entities"][entity_id]
+        if "missing" in entity_data:
+            raise MissingEntityError(f"Entity {entity_id} does not exist")
         return Item(entity_id, entity_data)
 
     @sentry_sdk.trace

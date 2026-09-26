@@ -10,11 +10,11 @@ from httpx import AsyncClient
 
 from github_wikidata_bot.settings import Secrets, Settings
 from github_wikidata_bot.wikidata_api import (
-    APIError,
     Claim,
     Item,
     ItemValue,
     MaxLagError,
+    MissingEntityError,
     ServerError,
     WikibaseMonolingualText,
     WikibaseTime,
@@ -499,7 +499,7 @@ async def test_sparql_server_error(status_code):
 
 
 @pytest.mark.anyio
-async def test_api_error():
+async def test_missing_entity_error():
     transport = MockTransport(
         responses=[
             _json_response(
@@ -514,9 +514,8 @@ async def test_api_error():
     )
 
     async with _make_session(transport) as session:
-        with pytest.raises(APIError) as exc_info:
+        with pytest.raises(MissingEntityError, match="Could not find entity Q99999999"):
             await session.get_entity("Q99999999")
-    assert exc_info.value.code == "no-such-entity"
 
 
 @pytest.mark.anyio

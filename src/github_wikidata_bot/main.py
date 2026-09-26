@@ -28,6 +28,7 @@ from github_wikidata_bot.version import SimpleSortableVersion
 from github_wikidata_bot.wikidata_api import (
     APIError,
     MaxLagError,
+    MissingEntityError,
     WikidataClient,
     WikidataError,
 )
@@ -136,10 +137,10 @@ async def update_project(
         properties: Project = await get_data_from_github(
             project, allow_stale, github_client, settings, wikidata.tags_over_releases
         )
-    except HTTPStatusError as e:
+    except HTTPStatusError as err:
         # TODO: Figure out what update wikidata should get when a project was deleted.
-        if e.response.status_code == 404:
-            logger.warning(f"GitHub repo not found: {e}")
+        if err.response.status_code == 404:
+            logger.warning(f"GitHub repo not found: {err}")
             return
         else:
             raise
@@ -153,8 +154,13 @@ async def update_project(
         for attempt in range(settings.retries):
             try:
                 await update_wikidata(properties, settings, wikidata)
-            except APIError as e:
-                if e.is_entity_too_big():
+            except MissingEntityError:
+                logger.warning(
+                    f"Wikidata entity {project.q_value} no longer exists, skipping"
+                )
+                return
+            except APIError as err:
+                if err.is_entity_too_big():
                     # Wikidata has a hard 3 MiB entity size limit (maxSerializedEntitySize=3000 KB).
                     # https://www.wikidata.org/wiki/Wikidata:WikiProject_Limits_of_Wikidata
                     # https://doc.wikimedia.org/Wikibase/master/php/docs_topics_options.html
