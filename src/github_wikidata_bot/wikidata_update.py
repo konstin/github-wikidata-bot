@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from github_wikidata_bot.github import Project, Release
 from github_wikidata_bot.project import GitHubRepo
 from github_wikidata_bot.redirects import RedirectDict
+from github_wikidata_bot.run_summary import SkipReason
 from github_wikidata_bot.settings import Settings
 from github_wikidata_bot.version import SimpleSortableVersion
 from github_wikidata_bot.website import is_website_other_property
@@ -187,7 +188,7 @@ async def update_website_and_license(
 @sentry_sdk.trace
 async def update_wikidata(
     project: Project, settings: Settings, wikidata: WikidataClient
-):
+) -> SkipReason | None:
     """Update wikidata entry with data from GitHub"""
     item = await wikidata.get_entity(project.wikidata.q_value)
 
@@ -210,7 +211,7 @@ async def update_wikidata(
         ]
         message = textwrap.shorten(", ".join(duplicates), width=200, placeholder="...")
         logger.info(f"There are duplicate releases: {message}")
-        return
+        return SkipReason.DUPLICATE_RELEASES
 
     if len(stable_releases) > settings.max_releases:
         logger.info(

@@ -263,11 +263,14 @@ async def test_get_page_text():
 
 
 @pytest.mark.anyio
-async def test_save_claim():
+@pytest.mark.parametrize("nochange", [False, True])
+async def test_save_claim(nochange: bool):
     transport = MockTransport(
         responses=[
             _json_response({"query": {"tokens": {"csrftoken": "csrf+\\"}}}),
-            _json_response({"success": 1}),
+            _json_response(
+                {"success": 1, "entity": {"nochange": ""} if nochange else {}}
+            ),
         ]
     )
     async with _make_session(transport) as session:
@@ -281,6 +284,7 @@ async def test_save_claim():
         )
 
         await session.save_claims("Q42", [claim], summary="test edit")
+        assert session.edit_counter == (0 if nochange else 1)
 
     assert transport.requests == [
         RecordedRequest(

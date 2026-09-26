@@ -367,6 +367,7 @@ class WikidataClient:
     client: AsyncClient
     last_edit_time: float
     request_counter = 0
+    edit_counter: int
 
     # Constants (settings)
     api_url: str
@@ -388,7 +389,9 @@ class WikidataClient:
     tags_over_releases: list[str]
     licenses: dict[str, str]
 
-    def __init__(self, client: AsyncClient, secrets: Secrets, settings: Settings):
+    def __init__(
+        self, client: AsyncClient, secrets: Secrets, settings: Settings
+    ) -> None:
         self.client = client
         self.api_url = settings.api_url
         self.sparql_url = settings.sparql_url
@@ -399,6 +402,7 @@ class WikidataClient:
         self.csrf_token = None
         self.secrets = secrets
         self.last_edit_time = 0
+        self.edit_counter = 0
 
         # https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool#For_custom_bots
         self.edit_group_hash = f"{random.randrange(0, 2**48):x}"
@@ -641,7 +645,7 @@ class WikidataClient:
         await self._throttle()
         claims_json = [claim.to_json() for claim in claims]
         csrf_token = await self._get_csrf_token()
-        await self._api_post(
+        response = await self._api_post(
             {
                 "action": "wbeditentity",
                 "id": entity_id,
@@ -651,6 +655,9 @@ class WikidataClient:
                 "bot": "1",
             }
         )
+        # Wikibase puts the nochange flag inside the returned entity.
+        if "nochange" not in response.get("entity", {}):
+            self.edit_counter += 1
 
     @sentry_sdk.trace
     async def add_claim(self, item: Item, claim: Claim, summary: str = "") -> None:
@@ -672,6 +679,7 @@ class WikidataClient:
                 "bot": "1",
             }
         )
+        self.edit_counter += 1
 
     @sentry_sdk.trace
     async def sparql_query(self, query: str) -> list[dict[str, str]]:

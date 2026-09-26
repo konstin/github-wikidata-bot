@@ -23,6 +23,13 @@ from github_wikidata_bot.github import (
     get_data_from_github,
 )
 from github_wikidata_bot.project import InvalidProject, WikidataProject
+from github_wikidata_bot.run_summary import (
+    FailureReason,
+    ProjectOutcome,
+    ProjectResult,
+    RunSummary,
+    SkipReason,
+)
 from github_wikidata_bot.settings import Secrets, Settings
 from github_wikidata_bot.sparql import cached_projects_query, query_best_versions
 from github_wikidata_bot.version import SimpleSortableVersion
@@ -134,7 +141,7 @@ async def update_project(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
-):
+) -> SkipReason | None:
     try:
         if await check_fast_path(project, best_versions, github_client):
             return
@@ -144,12 +151,12 @@ async def update_project(
         )
     except RepositoryUnavailableError as err:
         logger.warning(f"GitHub repository unavailable, skipping: {err}")
-        return
+        return SkipReason.REPOSITORY_UNAVAILABLE
     except HTTPStatusError as err:
         # TODO: Figure out what update wikidata should get when a project was deleted.
         if err.response.status_code == 404:
             logger.warning(f"GitHub repo not found: {err}")
-            return
+            return SkipReason.REPOSITORY_NOT_FOUND
         else:
             raise
 
@@ -158,12 +165,12 @@ async def update_project(
         # item as we had to do with pywikibot.
         for attempt in range(settings.retries):
             try:
-                await update_wikidata(properties, settings, wikidata)
+                return await update_wikidata(properties, settings, wikidata)
             except MissingEntityError:
                 logger.warning(
                     f"Wikidata entity {project.q_value} no longer exists, skipping"
                 )
-                return
+                return SkipReason.MISSING_ENTITY
             except APIError as err:
                 if err.is_entity_too_big():
                     # Wikidata has a hard 3 MiB entity size limit (maxSerializedEntitySize=3000 KB).
@@ -171,7 +178,7 @@ async def update_project(
                     # https://doc.wikimedia.org/Wikibase/master/php/docs_topics_options.html
                     # TODO: Remove old version claims to make room for new ones.
                     logger.warning("Entity too big, skipping")
-                    return
+                    return SkipReason.ENTITY_TOO_BIG
                 if attempt < settings.retries - 1:
                     backoff = 2**attempt + 2
                     logger.warning(
@@ -191,8 +198,8 @@ async def update_project(
                     await asyncio.sleep(backoff)
                 else:
                     raise
-            else:
-                return
+        raise ValueError("retries can't be 0")
+    return SkipReason.DRY_RUN
 
 
 async def update_project_with_retries(
@@ -202,7 +209,8 @@ async def update_project_with_retries(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
-):
+) -> ProjectResult:
+    edits_before = wikidata.edit_counter
     with sentry_sdk.start_transaction(name="Update project") as transaction:
         transaction.set_data("project", project.q_value_url)
         transaction.set_data("project-label", project.label)
@@ -210,7 +218,7 @@ async def update_project_with_retries(
             start = time.time()
             try:
                 # If a project takes over 5min, skip it for performance.
-                await asyncio.wait_for(
+                skip_reason = await asyncio.wait_for(
                     update_project(
                         project,
                         best_versions,
@@ -223,6 +231,7 @@ async def update_project_with_retries(
                 )
             except TimeoutError:
                 logger.warning(f"Timeout processing {project.label}")
+                return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.TIMEOUT)
             except RateLimitError as e:
                 # We have to catch this error here to avoid the timeout.
                 logger.info(
@@ -232,21 +241,33 @@ async def update_project_with_retries(
                 continue
             except InvalidProject as e:
                 logger.warning(f"Invalid project, skipping: {e}")
-                break
+                return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.INVALID_PROJECT)
             except MaxLagError as err:
                 logger.warning(
                     f"Wikidata server lag, skipping {project.q_value}: {err}"
                 )
-                break
+                return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.SERVER_LAG)
             except (WikidataError, HTTPError) as err:
                 logger.exception(
                     f"Failed to update {project.q_value}: {type(err).__name__}: {err}"
                 )
-                break
+                return ProjectResult(
+                    ProjectOutcome.FAILED, FailureReason.from_exception(err)
+                )
 
             duration = time.time() - start
             logger.info(f"{project.label} took {duration:.3f}s")
-            break
+            if skip_reason is not None:
+                return ProjectResult(ProjectOutcome.SKIPPED, skip_reason)
+            return ProjectResult(
+                ProjectOutcome.UPDATED
+                if wikidata.edit_counter > edits_before
+                else ProjectOutcome.UNCHANGED
+            )
+        logger.warning(
+            f"GitHub rate limit retries exhausted, skipping {project.q_value}"
+        )
+        return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.RATE_LIMIT)
 
 
 def init_logging(quiet: bool) -> None:
@@ -330,7 +351,7 @@ async def run(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
-):
+) -> RunSummary:
     logger.info("Querying Projects")
     projects = await cached_projects_query(
         cache_sparql, wikidata, settings, project_filter
@@ -340,14 +361,17 @@ async def run(
     best_versions = await query_best_versions(cache_sparql, wikidata, settings)
     logger.info("Processing projects")
 
+    summary = RunSummary()
     for idx, project in enumerate(projects):
         logger.info(
             f"## [{idx}/{len(projects)}] {project.label}: {project.q_value_url} {project.repo}"
         )
-        await update_project_with_retries(
+        result = await update_project_with_retries(
             project, best_versions, allow_stale, settings, wikidata, github_client
         )
-    logger.info("# Finished successfully")
+        summary.record(result)
+    logger.info(f"# Finished: {summary}")
+    return summary
 
 
 async def main():
