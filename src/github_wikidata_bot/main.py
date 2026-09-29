@@ -9,6 +9,7 @@ import textwrap
 import time
 from pathlib import Path
 from subprocess import CalledProcessError
+from typing import Any
 
 import sentry_sdk
 from httpx import AsyncClient, HTTPError, HTTPStatusError
@@ -49,6 +50,7 @@ async def check_fast_path(
     project: WikidataProject,
     best_versions: dict[str, list[str]],
     github_client: GitHubClient,
+    releases: list[dict[str, Any]] | None = None,
 ) -> bool:
     """Check whether the latest GitHub release matches the latest version on wikidata, and if so,
     skip the expensive processing."""
@@ -61,16 +63,17 @@ async def check_fast_path(
     else:
         project_version = None
 
-    try:
-        releases, _, _ = await github_client.fetch_json(
-            project.repo.api_releases() + "?per_page=1"
-        )
-        assert isinstance(releases, list)  # For the type checker
-    except RepositoryUnavailableError:
-        raise
-    except HTTPError as e:
-        logger.info(f"No fast path, fetch releases errored: {e}")
-        return False
+    if releases is None:
+        try:
+            releases, _, _ = await github_client.fetch_json(
+                project.repo.api_releases() + "?per_page=1"
+            )
+            assert isinstance(releases, list)  # For the type checker
+        except RepositoryUnavailableError:
+            raise
+        except HTTPError as e:
+            logger.info(f"No fast path, fetch releases errored: {e}")
+            return False
     if len(releases) == 1:
         result = analyse_release(releases[0], project.label)
         if result:
@@ -141,9 +144,12 @@ async def update_project(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
+    latest_releases: list[dict[str, Any]] | None = None,
 ) -> SkipReason | None:
     try:
-        if await check_fast_path(project, best_versions, github_client):
+        if await check_fast_path(
+            project, best_versions, github_client, latest_releases
+        ):
             return
 
         properties: Project = await get_data_from_github(
@@ -209,6 +215,7 @@ async def update_project_with_retries(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
+    latest_releases: list[dict[str, Any]] | None = None,
 ) -> ProjectResult:
     edits_before = wikidata.edit_counter
     with sentry_sdk.start_transaction(name="Update project") as transaction:
@@ -226,6 +233,7 @@ async def update_project_with_retries(
                         settings,
                         wikidata,
                         github_client,
+                        latest_releases,
                     ),
                     timeout=5 * 60,
                 )
@@ -363,11 +371,21 @@ async def run(
 
     summary = RunSummary()
     for idx, project in enumerate(projects):
+        if idx % 100 == 0:
+            latest_releases = await github_client.fetch_latest_releases_graphql(
+                [p.repo for p in projects[idx : idx + 100] if p.label]
+            )
         logger.info(
             f"## [{idx}/{len(projects)}] {project.label}: {project.q_value_url} {project.repo}"
         )
         result = await update_project_with_retries(
-            project, best_versions, allow_stale, settings, wikidata, github_client
+            project,
+            best_versions,
+            allow_stale,
+            settings,
+            wikidata,
+            github_client,
+            latest_releases.get(project.repo),
         )
         summary.record(result)
     logger.info(f"# Finished: {summary}")

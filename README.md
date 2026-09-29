@@ -43,10 +43,6 @@ Run `pytest`, `ruff format`, `ruff check` and `ty check` after making code chang
 uv run ruff format && uv run ruff check && uv run ty check && uv run pytest
 ```
 
-## Implementation notes
-
-First, a SPARQL query gathers all the free software projects in Wikidata which have a GitHub repository specified in the [source code repository][repo-property] property. For each entry, a cached request to the GitHub API is made, which is authenticated by the OAuth key. The wikidata entries are then inserted using a "exists or insert" logic. For each entry, the GitHub api link is added as reference.
-
 ## Why does the bot not work for item Q…?
 
 - Does the entity already have a VCS repository set? Use [this query][no-repo-query]

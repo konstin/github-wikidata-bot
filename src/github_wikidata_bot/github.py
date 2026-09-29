@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import json
 import logging
 import textwrap
 import time
@@ -15,6 +16,7 @@ from urllib.parse import quote_plus
 import sentry_sdk
 from httpx import (
     AsyncClient,
+    HTTPError,
     HTTPStatusError,
     NetworkError,
     RemoteProtocolError,
@@ -54,9 +56,13 @@ class GitHubClient:
 
     @sentry_sdk.trace
     async def fetch_json(
-        self, url: str, caching_headers: dict[str, str] | None = None
+        self,
+        url: str,
+        caching_headers: dict[str, str] | None = None,
+        *,
+        query: str | None = None,
     ) -> tuple[Any | None, Mapping[str, str], str]:
-        """Get JSON from an API while handling rate limiting and cache headers.
+        """Fetch REST JSON or a GraphQL query with retries and rate-limit handling.
 
         Returns `(payload, headers, response_url)`. `payload` is `None` if the
         server returned 304 Not Modified.
@@ -66,9 +72,14 @@ class GitHubClient:
 
         for attempt in range(self.settings.retries):
             try:
-                response = await self.client.get(
-                    url, headers={**self.auth_headers, **caching_headers}
-                )
+                if query is None:
+                    response = await self.client.get(
+                        url, headers={**self.auth_headers, **caching_headers}
+                    )
+                else:
+                    response = await self.client.post(
+                        url, headers=self.auth_headers, json={"query": query}
+                    )
             except (NetworkError, RemoteProtocolError, TimeoutException) as err:
                 if attempt == self.settings.retries - 1:
                     raise
@@ -105,8 +116,9 @@ class GitHubClient:
         # if we go to zero.
         total_limit = int(response.headers.get("x-ratelimit-limit", "0"))
         remaining_requests = int(response.headers.get("x-ratelimit-remaining", "0"))
-        if remaining_requests < total_limit * 0.1 or (
-            response.status_code == 403 and remaining_requests == 0
+        if "x-ratelimit-reset" in response.headers and (
+            remaining_requests < total_limit * 0.1
+            or (response.status_code == 403 and remaining_requests == 0)
         ):
             reset = response.headers["x-ratelimit-reset"]
             seconds_to_reset = int(reset) - time.time()
@@ -133,6 +145,96 @@ class GitHubClient:
             logger.info(f"Fetched: {response.url}")
 
         return response.json(), response.headers, str(response.url)
+
+    async def fetch_latest_releases_graphql(
+        self, repos: list[GitHubRepo]
+    ) -> dict[GitHubRepo, list[dict[str, Any]]]:
+        """Fetch the first release for up to 100 repositories.
+
+        Missing entries need a REST lookup; an empty list means the repository
+        has no releases. Keep partial successes when individual lookups fail.
+        """
+        repos = list(dict.fromkeys(repos))
+        if not repos:
+            return {}
+        if len(repos) > 100:
+            raise ValueError("Release batches must contain at most 100 repositories")
+
+        # Alias the fields to their REST names for the existing release parser.
+        # Include prereleases, as the REST release list does.
+        repositories = "\n".join(
+            f"""
+            repo{idx}: repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
+                releases(first: 1, orderBy: {{field: CREATED_AT, direction: DESC}}) {{
+                    nodes {{
+                        tag_name: tagName
+                        name
+                        prerelease: isPrerelease
+                        published_at: publishedAt
+                        html_url: url
+                    }}
+                }}
+            }}
+            """
+            for idx, repo in enumerate(repos)
+        )
+        query = "query {" + repositories + "rateLimit { cost }}"
+        for attempt in range(self.settings.retries):
+            try:
+                payload, headers, _ = await self.fetch_json(
+                    "https://api.github.com/graphql", query=query
+                )
+                assert isinstance(payload, dict)
+                errors = payload.get("errors", [])
+                if any(error.get("type") == "RATE_LIMITED" for error in errors):
+                    raise RateLimitError(float(headers.get("retry-after", 300)))
+            except RateLimitError as err:
+                if attempt == self.settings.retries - 1:
+                    logger.warning(
+                        "GitHub GraphQL rate limit retries exhausted; using REST"
+                    )
+                    return {}
+                logger.info(
+                    f"GitHub GraphQL rate limit, sleeping for {int(err.sleep)}s"
+                )
+                await asyncio.sleep(err.sleep)
+                continue
+            except HTTPError as err:
+                logger.warning(
+                    f"GitHub GraphQL release lookup failed; using REST: {err}"
+                )
+                return {}
+            break
+        else:
+            raise ValueError("retries can't be 0")
+
+        failed = set()
+        for error in errors:
+            logger.warning(f"GitHub GraphQL release lookup: {error['message']}")
+            if not error.get("path"):
+                return {}
+            failed.add(error["path"][0])
+
+        data = payload.get("data") or {}
+        releases = {}
+        for idx, repo in enumerate(repos):
+            alias = f"repo{idx}"
+            repository = data.get(alias)
+            if alias in failed or repository is None:
+                continue
+            connection = repository.get("releases")
+            if connection is None or connection.get("nodes") is None:
+                continue
+            nodes = connection["nodes"]
+            if any(node is None for node in nodes):
+                continue
+            releases[repo] = nodes
+        cost = (data.get("rateLimit") or {}).get("cost")
+        logger.info(
+            f"Fetched latest releases for {len(releases)}/{len(repos)} repositories "
+            f"with GraphQL (cost: {cost})"
+        )
+        return releases
 
 
 @dataclass
