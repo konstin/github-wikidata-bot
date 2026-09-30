@@ -258,8 +258,9 @@ async def update_project_with_retries(
                 )
                 return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.SERVER_LAG)
             except (WikidataError, HTTPError) as err:
+                # NoTracebackFormatter suppresses exception details, so include them here.
                 logger.exception(
-                    f"Failed to update {project.q_value}: {type(err).__name__}: {err}"
+                    f"Failed to update {project.q_value}: {type(err).__name__}: {err}"  # noqa: TRY401
                 )
                 return ProjectResult(
                     ProjectOutcome.FAILED, FailureReason.from_exception(err)
