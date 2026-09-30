@@ -7,6 +7,7 @@ import logging.handlers
 import subprocess
 import textwrap
 import time
+from itertools import batched
 from pathlib import Path
 from subprocess import CalledProcessError
 from typing import Any
@@ -15,6 +16,7 @@ import sentry_sdk
 from httpx import AsyncClient, HTTPError, HTTPStatusError
 
 from github_wikidata_bot.github import (
+    CachedGitHubClient,
     GitHubClient,
     Project,
     RateLimitError,
@@ -23,7 +25,7 @@ from github_wikidata_bot.github import (
     analyse_tag,
     get_data_from_github,
 )
-from github_wikidata_bot.project import InvalidProject, WikidataProject
+from github_wikidata_bot.project import GitHubRepo, InvalidProject, WikidataProject
 from github_wikidata_bot.run_summary import (
     FailureReason,
     ProjectOutcome,
@@ -369,25 +371,37 @@ async def run(
     best_versions = await query_best_versions(cache_sparql, wikidata, settings)
     logger.info("Processing projects")
 
+    projects_by_repo: dict[GitHubRepo, list[WikidataProject]] = {}
+    for project in projects:
+        projects_by_repo.setdefault(project.repo, []).append(project)
+
     summary = RunSummary()
-    for idx, project in enumerate(projects):
-        if idx % 100 == 0:
-            latest_releases = await github_client.fetch_latest_releases_graphql(
-                [p.repo for p in projects[idx : idx + 100] if p.label]
-            )
-        logger.info(
-            f"## [{idx}/{len(projects)}] {project.label}: {project.q_value_url} {project.repo}"
+    idx = 0
+    for repo_batch in batched(projects_by_repo.items(), 100):
+        latest_releases = await github_client.fetch_latest_releases_graphql(
+            [
+                repo
+                for repo, repo_projects in repo_batch
+                if any(project.label for project in repo_projects)
+            ]
         )
-        result = await update_project_with_retries(
-            project,
-            best_versions,
-            allow_stale,
-            settings,
-            wikidata,
-            github_client,
-            latest_releases.get(project.repo),
-        )
-        summary.record(result)
+        for repo, repo_projects in repo_batch:
+            repo_client = CachedGitHubClient(github_client)
+            for project in repo_projects:
+                logger.info(
+                    f"## [{idx}/{len(projects)}] {project.label}: {project.q_value_url} {project.repo}"
+                )
+                result = await update_project_with_retries(
+                    project,
+                    best_versions,
+                    allow_stale,
+                    settings,
+                    wikidata,
+                    repo_client,
+                    latest_releases.get(repo),
+                )
+                summary.record(result)
+                idx += 1
     logger.info(f"# Finished: {summary}")
     return summary
 

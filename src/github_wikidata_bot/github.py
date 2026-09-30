@@ -20,6 +20,7 @@ from httpx import (
     HTTPStatusError,
     NetworkError,
     RemoteProtocolError,
+    Response,
     TimeoutException,
 )
 from pydantic import BaseModel
@@ -40,6 +41,12 @@ class RateLimitError(Exception):
 
 class RepositoryUnavailableError(HTTPStatusError):
     """GitHub has blocked access to the repository."""
+
+
+@dataclass(frozen=True)
+class RequestKey:
+    url: str
+    headers: frozenset[tuple[str, str]]
 
 
 class GitHubClient:
@@ -67,6 +74,19 @@ class GitHubClient:
         Returns `(payload, headers, response_url)`. `payload` is `None` if the
         server returned 304 Not Modified.
         """
+        response = await self._fetch_response(url, caching_headers, query=query)
+        payload = None
+        if response.status_code != 304:
+            payload = response.json()
+        return payload, response.headers, str(response.url)
+
+    async def _fetch_response(
+        self,
+        url: str,
+        caching_headers: dict[str, str] | None = None,
+        *,
+        query: str | None = None,
+    ) -> Response:
         if caching_headers is None:
             caching_headers = {}
 
@@ -134,17 +154,14 @@ class GitHubClient:
 
         if response.status_code == 304:
             logger.info(f"Not modified: {url}")
-            return None, response.headers, str(response.url)
-
-        # Handle other 4xx and 5xx status codes
-        response.raise_for_status()
-
-        if caching_headers:
-            logger.info(f"Fresh response: {response.url}")
         else:
-            logger.info(f"Fetched: {response.url}")
+            response.raise_for_status()
+            if caching_headers:
+                logger.info(f"Fresh response: {response.url}")
+            else:
+                logger.info(f"Fetched: {response.url}")
 
-        return response.json(), response.headers, str(response.url)
+        return response
 
     async def fetch_latest_releases_graphql(
         self, repos: list[GitHubRepo]
@@ -235,6 +252,43 @@ class GitHubClient:
             f"with GraphQL (cost: {cost})"
         )
         return releases
+
+
+class CachedGitHubClient(GitHubClient):
+    """Reuse successful GET responses for one repository group."""
+
+    def __init__(self, client: GitHubClient):
+        self.auth_headers = client.auth_headers
+        self.api_concurrency = client.api_concurrency
+        self.client = client.client
+        self.settings = client.settings
+        self._responses: dict[RequestKey, Response] = {}
+
+    @sentry_sdk.trace
+    async def fetch_json(
+        self,
+        url: str,
+        caching_headers: dict[str, str] | None = None,
+        *,
+        query: str | None = None,
+    ) -> tuple[Any | None, Mapping[str, str], str]:
+        if query is not None:
+            return await super().fetch_json(url, caching_headers, query=query)
+
+        if caching_headers is None:
+            caching_headers = {}
+        cache_key = RequestKey(url, frozenset(caching_headers.items()))
+        if (response := self._responses.get(cache_key)) is None:
+            response = await self._fetch_response(url, caching_headers)
+        else:
+            logger.info(f"Reusing response: {url}")
+
+        payload = None
+        if response.status_code != 304:
+            # Decode on each use so callers cannot mutate another item's payload.
+            payload = response.json()
+        self._responses[cache_key] = response
+        return payload, response.headers, str(response.url)
 
 
 @dataclass
