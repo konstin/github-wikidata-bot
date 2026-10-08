@@ -372,19 +372,26 @@ def _read_cached_response(cache_path: Path) -> CachedResponse | None:
         return None
     except ValidationError as err:
         logger.warning(f"Ignoring invalid GitHub cache: {cache_path}")
+        # Report corruption even though a fresh fetch lets the bot recover.
         sentry_sdk.capture_exception(err)
         return None
 
 
 def _write_cached_response(cache_path: Path, cached: CachedResponse) -> None:
     """Publish a complete cache file without named staging files (Linux only)."""
+    # The unnamed inode is discarded when its last fd closes, even after SIGKILL.
+    # O_EXCL is omitted so we can link the completed file into the cache.
     fd = os.open(cache_path.parent, os.O_TMPFILE | os.O_WRONLY, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as cache_file:
         cache_file.write(cached.model_dump_json())
+        # Flush Python's buffer before making the file visible to readers.
         cache_file.flush()
-        # A missing cache is safe; publishing partial JSON is not.
+        # Hard links cannot replace an existing path. Remove the old cache only
+        # after staging is complete; the brief gap is a safe, refetchable miss.
         cache_path.unlink(missing_ok=True)
         try:
+            # Dereference the procfs fd symlink to link the completed inode,
+            # rather than the symlink itself, directly to the final cache path.
             os.link(
                 f"/proc/self/fd/{cache_file.fileno()}",
                 cache_path,
