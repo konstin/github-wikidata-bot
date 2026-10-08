@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import json
 import logging
+import os
 import textwrap
 import time
 from asyncio import Semaphore
@@ -23,7 +24,7 @@ from httpx import (
     Response,
     TimeoutException,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from github_wikidata_bot.project import GitHubRepo, WikidataProject
 from github_wikidata_bot.settings import Secrets, Settings, cache_root
@@ -325,10 +326,7 @@ async def fetch_cached(
 ) -> tuple[Any, str]:
     """Fetch JSON with caching. Returns `(payload, response_url)`."""
     cache_path.parent.mkdir(exist_ok=True, parents=True)
-    if cache_path.exists():
-        cached: CachedResponse = CachedResponse.model_validate_json(
-            cache_path.read_text()
-        )
+    if (cached := _read_cached_response(cache_path)) is not None:
         if allow_stale:
             logger.info(f"Assumed fresh: {api_url}")
             return cached.payload, cached.metadata.response_url or api_url
@@ -352,7 +350,7 @@ async def fetch_cached(
     cached_release: CachedResponse = CachedResponse(
         metadata=CacheMeta(etag=etag, response_url=response_url), payload=payload
     )
-    cache_path.write_text(cached_release.model_dump_json())
+    _write_cached_response(cache_path, cached_release)
     return payload, response_url
 
 
@@ -365,6 +363,36 @@ class CacheMeta(BaseModel):
 class CachedResponse(BaseModel):
     metadata: CacheMeta
     payload: Any
+
+
+def _read_cached_response(cache_path: Path) -> CachedResponse | None:
+    try:
+        return CachedResponse.model_validate_json(cache_path.read_bytes())
+    except FileNotFoundError:
+        return None
+    except ValidationError as err:
+        logger.warning(f"Ignoring invalid GitHub cache: {cache_path}")
+        sentry_sdk.capture_exception(err)
+        return None
+
+
+def _write_cached_response(cache_path: Path, cached: CachedResponse) -> None:
+    """Publish a complete cache file without named staging files (Linux only)."""
+    fd = os.open(cache_path.parent, os.O_TMPFILE | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as cache_file:
+        cache_file.write(cached.model_dump_json())
+        cache_file.flush()
+        # A missing cache is safe; publishing partial JSON is not.
+        cache_path.unlink(missing_ok=True)
+        try:
+            os.link(
+                f"/proc/self/fd/{cache_file.fileno()}",
+                cache_path,
+                follow_symlinks=True,
+            )
+        except FileExistsError:
+            # Another writer has already published a complete response.
+            pass
 
 
 @sentry_sdk.trace
@@ -403,10 +431,7 @@ async def _get_releases(
     for page_number in range(1, max_pages + 1):
         page_url = f"{repo.api_releases()}?page={page_number}&per_page={per_page}"
         page_cache = releases_cache.joinpath(f"{page_number}.json")
-        if page_cache.exists():
-            cached: CachedResponse = CachedResponse.model_validate_json(
-                page_cache.read_text()
-            )
+        if (cached := _read_cached_response(page_cache)) is not None:
             if allow_stale:
                 logger.info(f"Cache unchecked: {page_url}")
                 all_releases += cached.payload
@@ -448,7 +473,7 @@ async def _get_releases(
         cached_release = CachedResponse(
             metadata=CacheMeta(etag=etag), payload=page_releases
         )
-        page_cache.write_text(cached_release.model_dump_json())
+        _write_cached_response(page_cache, cached_release)
 
         # A short page marks the end of the release history.
         if len(page_releases) < per_page:
