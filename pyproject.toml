@@ -31,3 +31,8 @@ ignore_missing_imports = true
 [build-system]
 requires = ["uv_build >=0.11,<0.12"]
 build-backend = "uv_build"
+
+[tool.uv]
+exclude-newer = "3 days"
+# Include the eMudhra trust-store security fix released inside the cooldown.
+exclude-newer-package = { certifi = "2026-10-20T02:24:17Z" }
