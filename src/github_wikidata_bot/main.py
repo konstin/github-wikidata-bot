@@ -108,52 +108,50 @@ async def check_fast_path(
         else:
             logger.info("No fast path, release failed to analyse")
             return False
-    else:
-        if tags is not None:
-            extracted = [extract_version(tag, project.repo.project) for tag in tags]
-            versions = [match[1] for match in extracted if match is not None]
-        else:
-            try:
-                rest_tags, _, _ = await github_client.fetch_json(
-                    project.repo.api_tags()
-                )
-                assert isinstance(rest_tags, list)  # For the type checker
-            except RepositoryUnavailableError:
-                raise
-            except HTTPStatusError as e:
-                # GitHub raises 404 if there are no tags, 409 for empty repos
-                if e.response.status_code in (404, 409):
-                    if not best_versions.get(project.q_value_url):
-                        logger.info("Fresh, no releases or tags")
-                        return True
-                    else:
-                        logger.info(
-                            f"No fast path, no releases or tags but a wikidata version {project_version}"
-                        )
-                        return False
-                else:
-                    logger.info(f"No fast path, fetch tags errored: {e}")
-                    return False
-            project_info, _, _ = await github_client.fetch_json(project.repo.api_base())
-            assert isinstance(project_info, dict)  # For the type checker
-            extracted_tags = [
-                analyse_tag(release, project_info, []) for release in rest_tags
-            ]
-            versions = [tag.version for tag in extracted_tags if tag is not None]
 
-        versions.sort(key=SimpleSortableVersion)
-        if len(versions) > 0:
-            if versions[-1] == project_version:
-                logger.info(f"Fresh using tags fast path: {project_version}")
-                return True
+    if tags is not None:
+        extracted = [extract_version(tag, project.repo.project) for tag in tags]
+        versions = [match[1] for match in extracted if match is not None]
+    else:
+        try:
+            rest_tags, _, _ = await github_client.fetch_json(project.repo.api_tags())
+            assert isinstance(rest_tags, list)  # For the type checker
+        except RepositoryUnavailableError:
+            raise
+        except HTTPStatusError as e:
+            # GitHub raises 404 if there are no tags, 409 for empty repos
+            if e.response.status_code in (404, 409):
+                if not best_versions.get(project.q_value_url):
+                    logger.info("Fresh, no releases or tags")
+                    return True
+                else:
+                    logger.info(
+                        f"No fast path, no releases or tags but a wikidata version {project_version}"
+                    )
+                    return False
             else:
-                wikidata = ", ".join(best_versions.get(project.q_value_url, []))
-                wikidata = textwrap.shorten(wikidata, width=50, placeholder="...")
-                logger.info(f"No fast path, wikidata: {wikidata}, tags: {versions[-1]}")
+                logger.info(f"No fast path, fetch tags errored: {e}")
                 return False
+        project_info, _, _ = await github_client.fetch_json(project.repo.api_base())
+        assert isinstance(project_info, dict)  # For the type checker
+        extracted_tags = [
+            analyse_tag(release, project_info, []) for release in rest_tags
+        ]
+        versions = [tag.version for tag in extracted_tags if tag is not None]
+
+    versions.sort(key=SimpleSortableVersion)
+    if len(versions) > 0:
+        if versions[-1] == project_version:
+            logger.info(f"Fresh using tags fast path: {project_version}")
+            return True
         else:
-            logger.info("No fast path, tag failed to analyse")
+            wikidata = ", ".join(best_versions.get(project.q_value_url, []))
+            wikidata = textwrap.shorten(wikidata, width=50, placeholder="...")
+            logger.info(f"No fast path, wikidata: {wikidata}, tags: {versions[-1]}")
             return False
+    else:
+        logger.info("No fast path, tag failed to analyse")
+        return False
 
 
 @sentry_sdk.trace
