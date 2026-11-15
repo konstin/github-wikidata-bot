@@ -55,8 +55,27 @@ class APIError(WikidataError):
         return base
 
 
+@dataclass
+class MaxLagStats:
+    """Requested and measured maxlag sleeps, including interrupted sleeps."""
+
+    rejections: int = 0
+    requested_wait_seconds: float = 0.0
+    wait_seconds: float = 0.0
+
+    def __str__(self) -> str:
+        return (
+            f"rejections={self.rejections}, requested_wait={self.requested_wait_seconds:.3f}s, "
+            + f"wait={self.wait_seconds:.3f}s"
+        )
+
+
 class MaxLagError(WikidataError):
     """Server is lagging beyond tolerance."""
+
+
+class MaxLagWaitCancelledError(asyncio.CancelledError):
+    """Cancellation interrupted a maxlag sleep."""
 
 
 class MissingEntityError(WikidataError):
@@ -480,7 +499,9 @@ class WikidataClient:
             await asyncio.sleep(self.edit_throttle - elapsed)
         self.last_edit_time = time.time()
 
-    async def _api_post(self, params: dict[str, str]) -> dict[str, Any]:
+    async def _api_post(
+        self, params: dict[str, str], maxlag: MaxLagStats
+    ) -> dict[str, Any]:
         """Make a POST API call with maxlag handling and retries."""
         params["format"] = "json"
         params["maxlag"] = str(self.max_lag)
@@ -513,16 +534,26 @@ class WikidataClient:
                     retry_after = int(
                         response.headers.get("Retry-After", str(self.max_lag))
                     )
-                    server_lag = float(error["lag"])
-                    logger.info(
-                        f"Server is lagging behind too much ({server_lag:.1f}s), retrying in {retry_after:.1f}s"
-                    )
-                    await asyncio.sleep(retry_after)
                     last_error = MaxLagError(
-                        f"Wikidata edit failed due to server lag of {server_lag:.1f}s"
+                        f"Wikidata server lag: lag={float(error['lag']):.3f}s, "
+                        + f"type={error.get('type')!r}, host={error.get('host')!r}, "
+                        + f"maxlag={params['maxlag']}s, retry_after={retry_after}s, "
+                        + f"info={error.get('info')!r}"
                     )
+                    maxlag.rejections += 1
+                    maxlag.requested_wait_seconds += retry_after
+                    logger.info(f"{last_error}")
+                    wait_start = time.perf_counter()
+                    try:
+                        await asyncio.sleep(retry_after)
+                    except asyncio.CancelledError as err:
+                        raise MaxLagWaitCancelledError(*err.args) from err
+                    finally:
+                        waited = time.perf_counter() - wait_start
+                        maxlag.wait_seconds += waited
+                        logger.info(f"Maxlag wait: {waited:.3f}s")
                     # Double the max lag each time.
-                    params["maxlag"] = self.max_lag * 2 ** (attempt + 1)
+                    params["maxlag"] = str(self.max_lag * 2 ** (attempt + 1))
                     continue
                 elif error.get("code") in (
                     "badtoken",
@@ -634,7 +665,11 @@ class WikidataClient:
 
     @sentry_sdk.trace
     async def save_claims(
-        self, entity_id: str, claims: list[Claim], summary: str = ""
+        self,
+        entity_id: str,
+        claims: list[Claim],
+        maxlag: MaxLagStats,
+        summary: str = "",
     ) -> None:
         """Create or update claims on an entity via wbeditentity.
 
@@ -653,20 +688,32 @@ class WikidataClient:
                 "token": csrf_token,
                 "summary": summary,
                 "bot": "1",
-            }
+            },
+            maxlag,
         )
         # Wikibase puts the nochange flag inside the returned entity.
         if "nochange" not in response.get("entity", {}):
             self.edit_counter += 1
 
     @sentry_sdk.trace
-    async def add_claim(self, item: Item, claim: Claim, summary: str = "") -> None:
+    async def add_claim(
+        self,
+        item: Item,
+        claim: Claim,
+        maxlag: MaxLagStats,
+        summary: str = "",
+    ) -> None:
         """Add a claim to an entity and update the in-memory item."""
-        await self.save_claims(item.id, [claim], summary=summary)
+        await self.save_claims(item.id, [claim], maxlag, summary)
         item.claims.setdefault(claim.property, []).append(claim)
 
     @sentry_sdk.trace
-    async def remove_claim(self, claim: Claim, summary: str = "") -> None:
+    async def remove_claim(
+        self,
+        claim: Claim,
+        maxlag: MaxLagStats,
+        summary: str = "",
+    ) -> None:
         """Remove a claim by its GUID."""
         assert claim.id, "Claim must have an ID to remove"
         await self._throttle()
@@ -677,7 +724,8 @@ class WikidataClient:
                 "token": await self._get_csrf_token(),
                 "summary": summary,
                 "bot": "1",
-            }
+            },
+            maxlag,
         )
         self.edit_counter += 1
 

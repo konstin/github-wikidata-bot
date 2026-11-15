@@ -7,7 +7,7 @@ from typing import Self
 
 from httpx2 import HTTPStatusError
 
-from github_wikidata_bot.wikidata_api import APIError, ServerError
+from github_wikidata_bot.wikidata_api import APIError, MaxLagStats, ServerError
 
 
 class ProjectOutcome(Enum):
@@ -25,6 +25,7 @@ class SkipReason(Enum):
     INVALID_PROJECT = "invalid project"
     SERVER_LAG = "server lag"
     TIMEOUT = "project timeout"
+    TIMEOUT_DURING_MAXLAG = "project timeout during maxlag wait"
     RATE_LIMIT = "rate limit retries exhausted"
     DRY_RUN = "dry run"
     DUPLICATE_RELEASES = "duplicate releases"
@@ -60,6 +61,7 @@ class ProjectResult:
 
     outcome: ProjectOutcome
     reason: SkipReason | FailureReason | None = None
+    maxlag: MaxLagStats = field(default_factory=MaxLagStats)
 
 
 @dataclass
@@ -67,9 +69,16 @@ class RunSummary:
     outcomes: Counter[ProjectOutcome] = field(default_factory=Counter)
     skips: Counter[SkipReason] = field(default_factory=Counter)
     failures: Counter[FailureReason] = field(default_factory=Counter)
+    maxlag_projects: int = 0
+    maxlag: MaxLagStats = field(default_factory=MaxLagStats)
 
     def record(self, result: ProjectResult) -> None:
         self.outcomes[result.outcome] += 1
+        if result.maxlag.rejections:
+            self.maxlag_projects += 1
+        self.maxlag.rejections += result.maxlag.rejections
+        self.maxlag.requested_wait_seconds += result.maxlag.requested_wait_seconds
+        self.maxlag.wait_seconds += result.maxlag.wait_seconds
         if isinstance(result.reason, SkipReason):
             self.skips[result.reason] += 1
         elif isinstance(result.reason, FailureReason):
@@ -100,4 +109,5 @@ class RunSummary:
                     )
                 )
             )
+        details.append(f"maxlag: projects={self.maxlag_projects}, {self.maxlag}")
         return "; ".join(details)

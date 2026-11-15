@@ -9,7 +9,7 @@ from httpx2 import AsyncClient
 from github_wikidata_bot.github import GitHubClient, get_data_from_github
 from github_wikidata_bot.project import GitHubRepo, WikidataProject
 from github_wikidata_bot.settings import Secrets, Settings
-from github_wikidata_bot.wikidata_api import WikidataClient
+from github_wikidata_bot.wikidata_api import MaxLagStats, WikidataClient
 from github_wikidata_bot.wikidata_update import update_wikidata
 
 
@@ -166,7 +166,7 @@ async def test_repo_rename_updates_wikidata(tmp_path, monkeypatch):
         )
         assert project.canonical_repo == GitHubRepo("Raku", "nqp")
 
-        await update_wikidata(project, settings, wikidata)
+        await update_wikidata(project, settings, wikidata, MaxLagStats())
 
     # The final POST should contain the updated repo URL
     body = dict(httpx2.QueryParams(transport.requests[-1].content.decode()))
