@@ -18,6 +18,7 @@ from github_wikidata_bot.wikidata_api import (
     Claim,
     Item,
     ItemValue,
+    MaxLagStats,
     WikibaseMonolingualText,
     WikibaseTime,
     WikidataClient,
@@ -48,6 +49,7 @@ async def normalize_repo_url(
     url_raw: str,
     q_value: str,
     wikidata: WikidataClient,
+    maxlag: MaxLagStats,
 ):
     """Canonicalize the github url to the format `https://github.com/[owner]/[repo]`.
 
@@ -63,11 +65,11 @@ async def normalize_repo_url(
     if source_p in item.claims and len(urls) == 2:
         if urls[0].value == url_normalized and urls[1].value == url_raw:
             logger.info("The old and the new url are already set, removing the old")
-            await wikidata.remove_claim(urls[1], summary=wikidata.edit_summary)
+            await wikidata.remove_claim(urls[1], maxlag, wikidata.edit_summary)
             return
         if urls[0].value == url_raw and urls[1].value == url_normalized:
             logger.info("The old and the new url are already set, removing the old")
-            await wikidata.remove_claim(urls[0], summary=wikidata.edit_summary)
+            await wikidata.remove_claim(urls[0], maxlag, wikidata.edit_summary)
             return
 
     if source_p in item.claims and len(urls) > 1:
@@ -91,7 +93,7 @@ async def normalize_repo_url(
     if Property.web_interface_software.value not in url_claim.qualifiers:
         github = ItemValue("Q364")
         url_claim.add_qualifier(Property.web_interface_software.value, github)
-    await wikidata.save_claims(item.id, [url_claim], summary=wikidata.edit_summary)
+    await wikidata.save_claims(item.id, [url_claim], maxlag, wikidata.edit_summary)
 
 
 async def set_website(project: Project, client: AsyncClient) -> Claim | None:
@@ -143,7 +145,11 @@ def release_to_claim(release: Release, project: Project, rank: str = "normal") -
 
 
 async def update_website_and_license(
-    project: Project, item: Item, wikidata: WikidataClient, settings: Settings
+    project: Project,
+    item: Item,
+    wikidata: WikidataClient,
+    settings: Settings,
+    maxlag: MaxLagStats,
 ):
     urls = item.claims.get(Property.source_code_repository.value, [])
     if len(urls) == 1:
@@ -157,7 +163,12 @@ async def update_website_and_license(
         )
         if is_rename or settings.normalize_repo_url:
             await normalize_repo_url(
-                item, str(repo), url_raw, project.wikidata.q_value, wikidata
+                item,
+                str(repo),
+                url_raw,
+                project.wikidata.q_value,
+                wikidata,
+                maxlag,
             )
     else:
         repo = project.canonical_repo or project.wikidata.repo
@@ -182,17 +193,20 @@ async def update_website_and_license(
         )
         if not item.has_claim(claim, single_valued=True):
             logger.info(f"Updating {kind}")
-            await wikidata.add_claim(item, claim, summary=wikidata.edit_summary)
+            await wikidata.add_claim(item, claim, maxlag, wikidata.edit_summary)
 
 
 @sentry_sdk.trace
 async def update_wikidata(
-    project: Project, settings: Settings, wikidata: WikidataClient
+    project: Project,
+    settings: Settings,
+    wikidata: WikidataClient,
+    maxlag: MaxLagStats,
 ) -> SkipReason | None:
     """Update wikidata entry with data from GitHub"""
     item = await wikidata.get_entity(project.wikidata.q_value)
 
-    await update_website_and_license(project, item, wikidata, settings)
+    await update_website_and_license(project, item, wikidata, settings, maxlag)
 
     # Add all stable releases
     stable_releases = project.stable_release
@@ -303,4 +317,4 @@ async def update_wikidata(
 
     # A single edit per item, each edit can be delayed by maxlag.
     if changes:
-        await wikidata.save_claims(item.id, changes, summary=wikidata.edit_summary)
+        await wikidata.save_claims(item.id, changes, maxlag, wikidata.edit_summary)

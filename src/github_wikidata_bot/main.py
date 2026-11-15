@@ -46,6 +46,8 @@ from github_wikidata_bot.version import SimpleSortableVersion
 from github_wikidata_bot.wikidata_api import (
     APIError,
     MaxLagError,
+    MaxLagStats,
+    MaxLagWaitCancelledError,
     MissingEntityError,
     WikidataClient,
     WikidataError,
@@ -153,6 +155,7 @@ async def update_project(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
+    maxlag: MaxLagStats,
     repository: RepositorySummary | None = None,
 ) -> SkipReason | None:
     # Keep the REST redirect path when GitHub reports a different repository name.
@@ -201,7 +204,7 @@ async def update_project(
         # item as we had to do with pywikibot.
         for attempt in range(settings.retries):
             try:
-                return await update_wikidata(properties, settings, wikidata)
+                return await update_wikidata(properties, settings, wikidata, maxlag)
             except MissingEntityError:
                 logger.warning(
                     f"Wikidata entity {project.q_value} no longer exists, skipping"
@@ -248,11 +251,14 @@ async def update_project_with_retries(
     repository: RepositorySummary | None = None,
 ) -> ProjectResult:
     edits_before = wikidata.edit_counter
+    maxlag = MaxLagStats()
+    duration = 0.0  # Excludes GitHub rate-limit waits between attempts.
     with sentry_sdk.start_transaction(name="Update project") as transaction:
         transaction.set_data("project", project.q_value_url)
         transaction.set_data("project-label", project.label)
+
         for _ in range(settings.retries):
-            start = time.time()
+            start = time.perf_counter()
             try:
                 # Collect profiling data only when actually working, but not during
                 # rate-limit induced sleeps.
@@ -270,16 +276,23 @@ async def update_project_with_retries(
                             settings,
                             wikidata,
                             github_client,
+                            maxlag,
                             repository,
                         ),
                         timeout=5 * 60,
                     )
                 finally:
+                    duration += time.perf_counter() - start
                     if transaction.sampled:
                         stop_profiler()
-            except TimeoutError:
+            except TimeoutError as err:
                 logger.warning(f"Timeout processing {project.label}")
-                return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.TIMEOUT)
+                # wait_for preserves the cancellation as the timeout's cause.
+                if isinstance(err.__cause__, MaxLagWaitCancelledError):
+                    reason = SkipReason.TIMEOUT_DURING_MAXLAG
+                else:
+                    reason = SkipReason.TIMEOUT
+                result = ProjectResult(ProjectOutcome.SKIPPED, reason)
             except RateLimitError as e:
                 # We have to catch this error here to avoid the timeout.
                 logger.info(
@@ -289,34 +302,43 @@ async def update_project_with_retries(
                 continue
             except InvalidProject as e:
                 logger.warning(f"Invalid project, skipping: {e}")
-                return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.INVALID_PROJECT)
+                result = ProjectResult(
+                    ProjectOutcome.SKIPPED, SkipReason.INVALID_PROJECT
+                )
             except MaxLagError as err:
                 logger.warning(
                     f"Wikidata server lag, skipping {project.q_value}: {err}"
                 )
-                return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.SERVER_LAG)
+                result = ProjectResult(ProjectOutcome.SKIPPED, SkipReason.SERVER_LAG)
             except (WikidataError, HTTPError) as err:
                 # NoTracebackFormatter suppresses exception details, so include them here.
                 logger.exception(
                     f"Failed to update {project.q_value}: {type(err).__name__}: {err}"  # noqa: TRY401
                 )
-                return ProjectResult(
+                result = ProjectResult(
                     ProjectOutcome.FAILED, FailureReason.from_exception(err)
                 )
-
-            duration = time.time() - start
-            logger.info(f"{project.label} took {duration:.3f}s")
-            if skip_reason is not None:
-                return ProjectResult(ProjectOutcome.SKIPPED, skip_reason)
-            return ProjectResult(
-                ProjectOutcome.UPDATED
-                if wikidata.edit_counter > edits_before
-                else ProjectOutcome.UNCHANGED
+            else:
+                if skip_reason is not None:
+                    result = ProjectResult(ProjectOutcome.SKIPPED, skip_reason)
+                else:
+                    result = ProjectResult(
+                        ProjectOutcome.UPDATED
+                        if wikidata.edit_counter > edits_before
+                        else ProjectOutcome.UNCHANGED
+                    )
+            break
+        else:
+            logger.warning(
+                f"GitHub rate limit retries exhausted, skipping {project.q_value}"
             )
-        logger.warning(
-            f"GitHub rate limit retries exhausted, skipping {project.q_value}"
+            result = ProjectResult(ProjectOutcome.SKIPPED, SkipReason.RATE_LIMIT)
+
+        logger.info(
+            f"{project.label} took {duration:.3f}s "
+            + f"({duration - maxlag.wait_seconds:.3f}s outside maxlag waits); {maxlag}"
         )
-        return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.RATE_LIMIT)
+        return ProjectResult(result.outcome, result.reason, maxlag)
 
 
 def init_logging(quiet: bool) -> None:

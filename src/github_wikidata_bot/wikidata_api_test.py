@@ -14,6 +14,7 @@ from github_wikidata_bot.wikidata_api import (
     Item,
     ItemValue,
     MaxLagError,
+    MaxLagStats,
     MissingEntityError,
     ServerError,
     WikibaseMonolingualText,
@@ -283,7 +284,7 @@ async def test_save_claim(nochange: bool):
             ]
         )
 
-        await session.save_claims("Q42", [claim], summary="test edit")
+        await session.save_claims("Q42", [claim], MaxLagStats(), "test edit")
         assert session.edit_counter == (0 if nochange else 1)
 
     assert transport.requests == [
@@ -406,7 +407,7 @@ async def test_add_claim():
     async with _make_session(transport) as session:
         item = Item("Q42", {"claims": {}})
         claim = Claim(property="P856", value="https://example.com")
-        await session.add_claim(item, claim, summary="add website")
+        await session.add_claim(item, claim, MaxLagStats(), "add website")
 
     assert "P856" in item.claims
     assert item.claims["P856"][0].value == "https://example.com"
@@ -424,7 +425,7 @@ async def test_remove_claim():
         claim = Claim(
             property="P856", value="https://old.example.com", id="Q42$old-claim"
         )
-        await session.remove_claim(claim, summary="cleanup")
+        await session.remove_claim(claim, MaxLagStats(), "cleanup")
 
     assert transport.requests == [
         RecordedRequest(
@@ -536,7 +537,7 @@ async def test_maxlag_retry():
     )
     async with _make_session(transport) as session:
         claim = Claim(property="P348", value="1.0.0")
-        await session.save_claims("Q42", [claim])
+        await session.save_claims("Q42", [claim], MaxLagStats())
 
     assert len(transport.requests) == 3
     # maxlag doubles from 8 to 16 on retry
@@ -563,7 +564,7 @@ async def test_maxlag_exhausted():
     async with _make_session(transport) as session:
         claim = Claim(property="P348", value="1.0.0")
         with pytest.raises(MaxLagError, match="server lag"):
-            await session.save_claims("Q42", [claim])
+            await session.save_claims("Q42", [claim], MaxLagStats())
 
 
 @pytest.mark.anyio
@@ -586,7 +587,7 @@ async def test_badtoken_retry():
             username="U", bot_name="B", password="P", github_oauth_token=""
         )
         claim = Claim(property="P348", value="1.0.0")
-        await session.save_claims("Q42", [claim])
+        await session.save_claims("Q42", [claim], MaxLagStats())
 
     last_post = transport.requests[-1]
     assert last_post.data["token"] == "new-tok"
@@ -618,7 +619,7 @@ async def test_assertbotfailed_relogin():
             username="U", bot_name="B", password="P", github_oauth_token=""
         )
         claim = Claim(property="P348", value="1.0.0")
-        await session.save_claims("Q42", [claim])
+        await session.save_claims("Q42", [claim], MaxLagStats())
 
     last_post = transport.requests[-1]
     assert last_post.data["token"] == "tok2"
