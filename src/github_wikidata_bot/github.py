@@ -69,6 +69,13 @@ class RequestKey:
     headers: frozenset[tuple[str, str]]
 
 
+@dataclass(frozen=True)
+class RepositorySummary:
+    latest_releases: list[GitHubRelease]
+    has_tags: bool | None
+    name_with_owner: str | None
+
+
 class GitHubClient:
     auth_headers: dict[str, str]
     api_concurrency: Semaphore
@@ -183,25 +190,29 @@ class GitHubClient:
 
         return response
 
-    async def fetch_latest_releases_graphql(
+    async def fetch_repository_summaries_graphql(
         self, repos: list[GitHubRepo]
-    ) -> dict[GitHubRepo, list[GitHubRelease]]:
-        """Fetch the first release for up to 100 repositories.
+    ) -> dict[GitHubRepo, RepositorySummary]:
+        """Fetch the first release, tag presence, and canonical name for up to 100 repositories.
 
-        Missing entries need a REST lookup; an empty list means the repository
-        has no releases. Keep partial successes when individual lookups fail.
+        Missing repository entries, tag presence, or canonical names require
+        REST fallback. Keep partial successes when individual lookups fail.
         """
         repos = list(dict.fromkeys(repos))
         if not repos:
             return {}
         if len(repos) > 100:
-            raise ValueError("Release batches must contain at most 100 repositories")
+            raise ValueError("Repository batches must contain at most 100 repositories")
 
         # Alias the fields to their REST names for the shared release model.
         # Include prereleases, as the REST release list does.
         repositories = "\n".join(
             f"""
             repo{idx}: repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
+                nameWithOwner
+                refs(refPrefix: "refs/tags/", first: 1) {{
+                    nodes {{ name }}
+                }}
                 releases(first: 1, orderBy: {{field: CREATED_AT, direction: DESC}}) {{
                     nodes {{
                         tag_name: tagName
@@ -238,7 +249,7 @@ class GitHubClient:
                 continue
             except HTTPError as err:
                 logger.warning(
-                    f"GitHub GraphQL release lookup failed; using REST: {err}"
+                    f"GitHub GraphQL repository lookup failed; using REST: {err}"
                 )
                 return {}
             break
@@ -247,32 +258,39 @@ class GitHubClient:
 
         failed = set()
         for error in errors:
-            logger.warning(f"GitHub GraphQL release lookup: {error['message']}")
+            logger.warning(f"GitHub GraphQL repository lookup: {error['message']}")
             if not error.get("path"):
                 return {}
             failed.add(error["path"][0])
 
         data = payload.get("data") or {}
-        releases = {}
+        summaries = {}
         for idx, repo in enumerate(repos):
             alias = f"repo{idx}"
             repository = data.get(alias)
             if alias in failed or repository is None:
                 continue
-            connection = repository["releases"]
+            connection = repository.get("releases") or {}
             try:
-                releases[repo] = RELEASE_LIST_ADAPTER.validate_python(
-                    connection["nodes"]
-                )
+                releases = RELEASE_LIST_ADAPTER.validate_python(connection.get("nodes"))
             except ValidationError:
                 # Leave this repository for the REST fallback.
                 continue
+            tag_nodes = (repository.get("refs") or {}).get("nodes")
+            has_tags = (
+                bool(tag_nodes)
+                if isinstance(tag_nodes, list) and None not in tag_nodes
+                else None
+            )
+            summaries[repo] = RepositorySummary(
+                releases, has_tags, repository.get("nameWithOwner")
+            )
         cost = (data.get("rateLimit") or {}).get("cost")
         logger.info(
-            f"Fetched latest releases for {len(releases)}/{len(repos)} repositories "
+            f"Fetched repository summaries for {len(summaries)}/{len(repos)} repositories "
             f"with GraphQL (cost: {cost})"
         )
-        return releases
+        return summaries
 
 
 class CachedGitHubClient(GitHubClient):
@@ -660,6 +678,7 @@ async def get_data_from_github(
     settings: Settings,
     # This is data from wikidata
     tags_over_releases: list[str],
+    no_tags: bool,
 ) -> Project:
     """
     Retrieve the following data from github:
@@ -722,17 +741,19 @@ async def get_data_from_github(
         len(extracted) == 0 or project.q_value in tags_over_releases
     ):
         logger.info("Falling back to tags")
-        try:
-            cache_file = repo_cache_root.joinpath("tags-index").joinpath("index.json")
-            tags, _tags_url = await fetch_cached(
-                project.repo.api_tags(), cache_file, client, allow_stale
-            )
-        except HTTPStatusError as e:
-            # GitHub raises 404 if there are no tags, 409 for empty repos
-            if e.response.status_code in (404, 409):
-                tags = []
-            else:
-                raise
+        tags = []
+        if not no_tags:
+            try:
+                cache_file = repo_cache_root.joinpath("tags-index").joinpath(
+                    "index.json"
+                )
+                tags, _tags_url = await fetch_cached(
+                    project.repo.api_tags(), cache_file, client, allow_stale
+                )
+            except HTTPStatusError as e:
+                # GitHub raises 404 if there are no tags, 409 for empty repos
+                if e.response.status_code not in (404, 409):
+                    raise
 
         invalid_version_strings: list[str] = []
         extracted_tags = [
