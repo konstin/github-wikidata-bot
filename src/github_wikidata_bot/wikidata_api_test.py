@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
@@ -68,7 +68,7 @@ def _json_response(
 
 
 @asynccontextmanager
-async def _make_session(transport: MockTransport) -> AsyncIterator[WikidataClient]:
+async def _make_session(transport: MockTransport) -> AsyncGenerator[WikidataClient]:
     settings = Settings()
     settings.retries = 2
     async with AsyncClient(
