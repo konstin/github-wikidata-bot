@@ -72,7 +72,8 @@ class RequestKey:
 @dataclass(frozen=True)
 class RepositorySummary:
     latest_releases: list[GitHubRelease]
-    has_tags: bool | None
+    # All tag names, `None` if unknown or if there are more than fit in one page.
+    tags: list[str] | None
     name_with_owner: str | None
 
 
@@ -193,9 +194,9 @@ class GitHubClient:
     async def fetch_repository_summaries_graphql(
         self, repos: list[GitHubRepo]
     ) -> dict[GitHubRepo, RepositorySummary]:
-        """Fetch the first release, tag presence, and canonical name for up to 100 repositories.
+        """Fetch the first release, tag names, and canonical name for up to 100 repositories.
 
-        Missing repository entries, tag presence, or canonical names require
+        Missing repository entries, tag names, or canonical names require
         REST fallback. Keep partial successes when individual lookups fail.
         """
         repos = list(dict.fromkeys(repos))
@@ -206,12 +207,14 @@ class GitHubClient:
 
         # Alias the fields to their REST names for the shared release model.
         # Include prereleases, as the REST release list does.
+        # A full page of tags costs the same as a single tag.
         repositories = "\n".join(
             f"""
             repo{idx}: repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
                 nameWithOwner
-                refs(refPrefix: "refs/tags/", first: 1) {{
+                refs(refPrefix: "refs/tags/", first: 100) {{
                     nodes {{ name }}
+                    pageInfo {{ hasNextPage }}
                 }}
                 releases(first: 1, orderBy: {{field: CREATED_AT, direction: DESC}}) {{
                     nodes {{
@@ -276,14 +279,20 @@ class GitHubClient:
             except ValidationError:
                 # Leave this repository for the REST fallback.
                 continue
-            tag_nodes = (repository.get("refs") or {}).get("nodes")
-            has_tags = (
-                bool(tag_nodes)
-                if isinstance(tag_nodes, list) and None not in tag_nodes
-                else None
-            )
+            refs = repository.get("refs") or {}
+            tag_nodes = refs.get("nodes")
+            # Leave repositories with more than one page of tags for the REST fallback.
+            if (
+                isinstance(tag_nodes, list)
+                and None not in tag_nodes
+                and (refs.get("pageInfo") or {}).get("hasNextPage") is False
+            ):
+                # The REST tag list is sorted by name, GraphQL sorts by version.
+                tags = sorted(node["name"] for node in tag_nodes)
+            else:
+                tags = None
             summaries[repo] = RepositorySummary(
-                releases, has_tags, repository.get("nameWithOwner")
+                releases, tags, repository.get("nameWithOwner")
             )
         cost = (data.get("rateLimit") or {}).get("cost")
         logger.info(
