@@ -24,6 +24,7 @@ from github_wikidata_bot.github import (
     GitHubRelease,
     Project,
     RateLimitError,
+    RepositorySummary,
     RepositoryUnavailableError,
     analyse_release,
     analyse_tag,
@@ -151,16 +152,37 @@ async def update_project(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
-    latest_releases: list[GitHubRelease] | None = None,
+    repository: RepositorySummary | None = None,
 ) -> SkipReason | None:
+    # Keep the REST redirect path when GitHub reports a different repository name.
+    no_releases_or_tags = (
+        bool(project.label)
+        and repository is not None
+        and not repository.latest_releases
+        and repository.has_tags is False
+        and repository.name_with_owner == f"{project.repo.org}/{project.repo.project}"
+    )
     try:
-        if await check_fast_path(
-            project, best_versions, github_client, latest_releases
+        if no_releases_or_tags:
+            if not best_versions.get(project.q_value_url):
+                logger.info("Fresh, no releases or tags")
+                return
+            logger.info("No fast path, no releases or tags but Wikidata has a version")
+        elif await check_fast_path(
+            project,
+            best_versions,
+            github_client,
+            repository.latest_releases if repository is not None else None,
         ):
             return
 
         properties: Project = await get_data_from_github(
-            project, allow_stale, github_client, settings, wikidata.tags_over_releases
+            project,
+            allow_stale,
+            github_client,
+            settings,
+            wikidata.tags_over_releases,
+            no_tags=no_releases_or_tags,
         )
     except RepositoryUnavailableError as err:
         logger.warning(f"GitHub repository unavailable, skipping: {err}")
@@ -222,7 +244,7 @@ async def update_project_with_retries(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
-    latest_releases: list[GitHubRelease] | None = None,
+    repository: RepositorySummary | None = None,
 ) -> ProjectResult:
     edits_before = wikidata.edit_counter
     with sentry_sdk.start_transaction(name="Update project") as transaction:
@@ -245,7 +267,7 @@ async def update_project_with_retries(
                             settings,
                             wikidata,
                             github_client,
-                            latest_releases,
+                            repository,
                         ),
                         timeout=5 * 60,
                     )
@@ -387,7 +409,7 @@ async def run(
     summary = RunSummary()
     idx = 0
     for repo_batch in batched(projects_by_repo.items(), 100):
-        latest_releases = await github_client.fetch_latest_releases_graphql(
+        repository_summaries = await github_client.fetch_repository_summaries_graphql(
             [
                 repo
                 for repo, repo_projects in repo_batch
@@ -407,7 +429,7 @@ async def run(
                     settings,
                     wikidata,
                     repo_client,
-                    latest_releases.get(repo),
+                    repository_summaries.get(repo),
                 )
                 summary.record(result)
                 idx += 1

@@ -162,6 +162,7 @@ async def test_repo_rename_updates_wikidata(tmp_path, monkeypatch):
             client=github_client,
             settings=settings,
             tags_over_releases=[],
+            no_tags=False,
         )
         assert project.canonical_repo == GitHubRepo("Raku", "nqp")
 
