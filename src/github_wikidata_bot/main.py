@@ -42,7 +42,7 @@ from github_wikidata_bot.run_summary import (
 )
 from github_wikidata_bot.settings import Secrets, Settings
 from github_wikidata_bot.sparql import cached_projects_query, query_best_versions
-from github_wikidata_bot.version import SimpleSortableVersion
+from github_wikidata_bot.version import SimpleSortableVersion, extract_version
 from github_wikidata_bot.wikidata_api import (
     APIError,
     MaxLagError,
@@ -62,9 +62,14 @@ async def check_fast_path(
     best_versions: dict[str, list[str]],
     github_client: GitHubClient,
     releases: list[GitHubRelease] | None = None,
+    tags: list[str] | None = None,
 ) -> bool:
     """Check whether the latest GitHub release matches the latest version on wikidata, and if so,
-    skip the expensive processing."""
+    skip the expensive processing.
+
+    `releases` and `tags` are fetched if missing. `tags` must be all tag names, and only for
+    a repository that was not renamed.
+    """
     if not project.label:
         logger.info(f"No fast path, no project label: {project.label}")
         return False
@@ -104,47 +109,51 @@ async def check_fast_path(
             logger.info("No fast path, release failed to analyse")
             return False
     else:
-        try:
-            tags, _, _ = await github_client.fetch_json(project.repo.api_tags())
-            assert isinstance(tags, list)  # For the type checker
-        except RepositoryUnavailableError:
-            raise
-        except HTTPStatusError as e:
-            # GitHub raises 404 if there are no tags, 409 for empty repos
-            if e.response.status_code in (404, 409):
-                if not best_versions.get(project.q_value_url):
-                    logger.info("Fresh, no releases or tags")
-                    return True
-                else:
-                    logger.info(
-                        f"No fast path, no releases or tags but a wikidata version {project_version}"
-                    )
-                    return False
-            else:
-                logger.info(f"No fast path, fetch tags errored: {e}")
-                return False
+        if tags is not None:
+            extracted = [extract_version(tag, project.repo.project) for tag in tags]
+            versions = [match[1] for match in extracted if match is not None]
         else:
+            try:
+                rest_tags, _, _ = await github_client.fetch_json(
+                    project.repo.api_tags()
+                )
+                assert isinstance(rest_tags, list)  # For the type checker
+            except RepositoryUnavailableError:
+                raise
+            except HTTPStatusError as e:
+                # GitHub raises 404 if there are no tags, 409 for empty repos
+                if e.response.status_code in (404, 409):
+                    if not best_versions.get(project.q_value_url):
+                        logger.info("Fresh, no releases or tags")
+                        return True
+                    else:
+                        logger.info(
+                            f"No fast path, no releases or tags but a wikidata version {project_version}"
+                        )
+                        return False
+                else:
+                    logger.info(f"No fast path, fetch tags errored: {e}")
+                    return False
             project_info, _, _ = await github_client.fetch_json(project.repo.api_base())
             assert isinstance(project_info, dict)  # For the type checker
             extracted_tags = [
-                analyse_tag(release, project_info, []) for release in tags
+                analyse_tag(release, project_info, []) for release in rest_tags
             ]
-            filtered = [v for v in extracted_tags if v is not None]
-            filtered.sort(key=lambda x: SimpleSortableVersion(x.version))
-            if len(filtered) > 0:
-                if filtered[-1].version == project_version:
-                    logger.info(f"Fresh using tags fast path: {project_version}")
-                    return True
-                else:
-                    wikidata = ", ".join(best_versions.get(project.q_value_url, []))
-                    wikidata = textwrap.shorten(wikidata, width=50, placeholder="...")
-                    logger.info(
-                        f"No fast path, wikidata: {wikidata}, tags: {filtered[-1].version}"
-                    )
-                    return False
+            versions = [tag.version for tag in extracted_tags if tag is not None]
+
+        versions.sort(key=SimpleSortableVersion)
+        if len(versions) > 0:
+            if versions[-1] == project_version:
+                logger.info(f"Fresh using tags fast path: {project_version}")
+                return True
             else:
-                logger.info("No fast path, tag failed to analyse")
+                wikidata = ", ".join(best_versions.get(project.q_value_url, []))
+                wikidata = textwrap.shorten(wikidata, width=50, placeholder="...")
+                logger.info(f"No fast path, wikidata: {wikidata}, tags: {versions[-1]}")
                 return False
+        else:
+            logger.info("No fast path, tag failed to analyse")
+            return False
 
 
 @sentry_sdk.trace
@@ -159,12 +168,17 @@ async def update_project(
     repository: RepositorySummary | None = None,
 ) -> SkipReason | None:
     # Keep the REST redirect path when GitHub reports a different repository name.
+    tags = None
+    if (
+        repository is not None
+        and repository.name_with_owner == f"{project.repo.org}/{project.repo.project}"
+    ):
+        tags = repository.tags
     no_releases_or_tags = (
         bool(project.label)
         and repository is not None
         and not repository.latest_releases
-        and repository.has_tags is False
-        and repository.name_with_owner == f"{project.repo.org}/{project.repo.project}"
+        and tags == []
     )
     try:
         if no_releases_or_tags:
@@ -177,6 +191,7 @@ async def update_project(
             best_versions,
             github_client,
             repository.latest_releases if repository is not None else None,
+            tags,
         ):
             return
 
