@@ -26,7 +26,7 @@ from httpx2 import (
     Response,
     TimeoutException,
 )
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from sentry_sdk import metrics
 
 from github_wikidata_bot.project import GitHubRepo, WikidataProject
@@ -185,7 +185,7 @@ class GitHubClient:
 
     async def fetch_latest_releases_graphql(
         self, repos: list[GitHubRepo]
-    ) -> dict[GitHubRepo, list[dict[str, Any]]]:
+    ) -> dict[GitHubRepo, list[GitHubRelease]]:
         """Fetch the first release for up to 100 repositories.
 
         Missing entries need a REST lookup; an empty list means the repository
@@ -197,7 +197,7 @@ class GitHubClient:
         if len(repos) > 100:
             raise ValueError("Release batches must contain at most 100 repositories")
 
-        # Alias the fields to their REST names for the existing release parser.
+        # Alias the fields to their REST names for the shared release model.
         # Include prereleases, as the REST release list does.
         repositories = "\n".join(
             f"""
@@ -259,13 +259,14 @@ class GitHubClient:
             repository = data.get(alias)
             if alias in failed or repository is None:
                 continue
-            connection = repository.get("releases")
-            if connection is None or connection.get("nodes") is None:
+            connection = repository["releases"]
+            try:
+                releases[repo] = RELEASE_LIST_ADAPTER.validate_python(
+                    connection["nodes"]
+                )
+            except ValidationError:
+                # Leave this repository for the REST fallback.
                 continue
-            nodes = connection["nodes"]
-            if any(node is None for node in nodes):
-                continue
-            releases[repo] = nodes
         cost = (data.get("rateLimit") or {}).get("cost")
         logger.info(
             f"Fetched latest releases for {len(releases)}/{len(repos)} repositories "
@@ -345,7 +346,7 @@ async def fetch_cached(
 ) -> tuple[Any, str]:
     """Fetch JSON with caching. Returns `(payload, response_url)`."""
     cache_path.parent.mkdir(exist_ok=True, parents=True)
-    if (cached := _read_cached_response(cache_path)) is not None:
+    if (cached := _read_cached_response(cache_path, CachedResponse)) is not None:
         if allow_stale:
             logger.info(f"Assumed fresh: {api_url}")
             return cached.payload, cached.metadata.response_url or api_url
@@ -384,9 +385,28 @@ class CachedResponse(BaseModel):
     payload: Any
 
 
-def _read_cached_response(cache_path: Path) -> CachedResponse | None:
+class GitHubRelease(BaseModel):
+    """The fields needed to analyse a GitHub release."""
+
+    tag_name: str | None = None
+    name: str | None = None
+    prerelease: bool
+    published_at: str | None
+    html_url: str
+
+
+RELEASE_LIST_ADAPTER = TypeAdapter(list[GitHubRelease])
+
+
+class CachedReleasePage(CachedResponse):
+    payload: list[GitHubRelease]
+
+
+def _read_cached_response[Cache: CachedResponse](
+    cache_path: Path, cache_type: type[Cache]
+) -> Cache | None:
     try:
-        return CachedResponse.model_validate_json(cache_path.read_bytes())
+        return cache_type.model_validate_json(cache_path.read_bytes())
     except FileNotFoundError:
         return None
     except ValidationError as err:
@@ -444,7 +464,7 @@ def _write_cached_response(cache_path: Path, cached: CachedResponse) -> None:
 @sentry_sdk.trace
 async def get_releases(
     repo: GitHubRepo, repo_cache_root: Path, client: GitHubClient, allow_stale: bool
-) -> list[dict[str, Any]]:
+) -> list[GitHubRelease]:
     """Fetch releases, reducing the page size if GitHub cannot serve larger pages."""
     try:
         return await _get_releases(repo, repo_cache_root, client, allow_stale, 100)
@@ -466,18 +486,18 @@ async def _get_releases(
     client: GitHubClient,
     allow_stale: bool,
     per_page: int,
-) -> list[dict[str, Any]]:
+) -> list[GitHubRelease]:
     releases_cache = repo_cache_root.joinpath(f"releases-{per_page}")
     releases_cache.mkdir(exist_ok=True, parents=True)
 
     # Preserve the 1000-release limit even when the page size does not divide it.
     max_releases = 1000
     max_pages = (max_releases + per_page - 1) // per_page
-    all_releases: list[dict[str, Any]] = []
+    all_releases: list[GitHubRelease] = []
     for page_number in range(1, max_pages + 1):
         page_url = f"{repo.api_releases()}?page={page_number}&per_page={per_page}"
         page_cache = releases_cache.joinpath(f"{page_number}.json")
-        if (cached := _read_cached_response(page_cache)) is not None:
+        if (cached := _read_cached_response(page_cache, CachedReleasePage)) is not None:
             if allow_stale:
                 logger.info(f"Cache unchecked: {page_url}")
                 all_releases += cached.payload
@@ -509,34 +529,30 @@ async def _get_releases(
 
         logger.info(f"Fresh response: {page_url}")
 
-        assert isinstance(page_releases, list)  # For the type checker
-        all_releases += page_releases
-
         etag = headers["etag"]
         if etag.startswith("W/"):
             # Bad etag parsing
             etag = etag.removeprefix("W/")
-        cached_release = CachedResponse(
+        cached_release = CachedReleasePage(
             metadata=CacheMeta(etag=etag), payload=page_releases
         )
         _write_cached_response(page_cache, cached_release)
+        all_releases += cached_release.payload
 
         # A short page marks the end of the release history.
-        if len(page_releases) < per_page:
+        if len(cached_release.payload) < per_page:
             break
 
     return all_releases[:max_releases]
 
 
-def analyse_release(
-    release: dict[str, Any], project_name: str | None
-) -> Release | None:
+def analyse_release(release: GitHubRelease, project_name: str | None) -> Release | None:
     """
     Heuristics to find the version number and according metadata for a release
     marked with github's release-feature
     """
-    match_tag_name = extract_version(release.get("tag_name") or "", project_name)
-    match_name = extract_version(release.get("name") or "", project_name)
+    match_tag_name = extract_version(release.tag_name or "", project_name)
+    match_name = extract_version(release.name or "", project_name)
     if (
         match_tag_name is not None
         and match_name is not None
@@ -544,31 +560,33 @@ def analyse_release(
     ):
         logger.debug(
             f"Conflicting versions {match_tag_name} and {match_name} "
-            f"for tag {release['tag_name']} and name {release['name']} in {project_name}"
+            f"for tag {release.tag_name} and name {release.name} in {project_name}"
         )
         return None
     elif match_tag_name is not None:
         release_type, version = match_tag_name
-        original_version = release["tag_name"]
+        original_version = release.tag_name
     elif match_name is not None:
         release_type, version = match_name
-        original_version = release["name"]
+        original_version = release.name
     else:
         return None
 
     # Often prereleases aren't marked as such, so we need manually catch those cases
-    if not release["prerelease"] and release_type != "stable":
+    if not release.prerelease and release_type != "stable":
         logger.debug(f"Diverting release type: {original_version}")
         release_type = "unstable"
-    elif release["prerelease"] and release_type == "stable":
+    elif release.prerelease and release_type == "stable":
         release_type = "unstable"
 
-    timestamp = datetime.datetime.fromisoformat(release["published_at"])
+    if release.published_at is None:
+        raise TypeError("GitHub release has no published_at timestamp")
+    timestamp = datetime.datetime.fromisoformat(release.published_at)
 
     return Release(
         version=version,
         timestamp=timestamp,
-        page=release["html_url"],
+        page=release.html_url,
         release_type=release_type,
     )
 
@@ -693,7 +711,7 @@ async def get_data_from_github(
         if result:
             extracted.append(result)
         else:
-            invalid_releases.append((release["tag_name"], release["name"]))
+            invalid_releases.append((release.tag_name, release.name))
 
     if invalid_releases:
         message = ", ".join(str(i) for i in invalid_releases)
