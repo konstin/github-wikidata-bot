@@ -5,7 +5,7 @@ import logging
 from asyncio import Semaphore
 
 import tqdm
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from github_wikidata_bot.github import GitHubClient
 from github_wikidata_bot.settings import Secrets, Settings

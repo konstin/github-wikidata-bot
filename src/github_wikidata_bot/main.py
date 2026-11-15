@@ -13,7 +13,7 @@ from subprocess import CalledProcessError
 from typing import Any
 
 import sentry_sdk
-from httpx import AsyncClient, HTTPError, HTTPStatusError
+from httpx2 import AsyncClient, HTTPError, HTTPStatusError
 
 from github_wikidata_bot.github import (
     CachedGitHubClient,

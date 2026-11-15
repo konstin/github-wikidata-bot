@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar, Self
 
 import sentry_sdk
-from httpx import AsyncClient, NetworkError, RemoteProtocolError, TimeoutException
+from httpx2 import AsyncClient, NetworkError, RemoteProtocolError, TimeoutException
 
 from github_wikidata_bot.settings import Secrets, Settings, sparql_dir
 

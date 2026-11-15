@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import quote_plus
 
 import sentry_sdk
-from httpx import (
+from httpx2 import (
     AsyncClient,
     HTTPError,
     HTTPStatusError,

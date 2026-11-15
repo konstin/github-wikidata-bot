@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from github_wikidata_bot.settings import Settings
@@ -27,7 +27,7 @@ async def test_cached_sparql_query_retries_transport_errors(monkeypatch, tmp_pat
     expected_response = [{"project": "http://www.wikidata.org/entity/Q42"}]
     wikidata = MagicMock()
     wikidata.sparql_query = AsyncMock(
-        side_effect=[httpx.ReadTimeout("timed out"), expected_response]
+        side_effect=[httpx2.ReadTimeout("timed out"), expected_response]
     )
     settings = Settings()
     settings.retries = 2

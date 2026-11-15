@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-import httpx
+import httpx2
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from github_wikidata_bot.github import GitHubClient, get_data_from_github
 from github_wikidata_bot.project import GitHubRepo, WikidataProject
@@ -32,23 +32,23 @@ def test_repo_normalization():
     assert actual == expected
 
 
-def _json_response(body: dict | list) -> httpx.Response:
-    return httpx.Response(status_code=200, json=body, headers={"etag": '"fake-etag"'})
+def _json_response(body: dict | list) -> httpx2.Response:
+    return httpx2.Response(status_code=200, json=body, headers={"etag": '"fake-etag"'})
 
 
-def _redirect(location: str) -> httpx.Response:
-    return httpx.Response(status_code=301, headers={"Location": location})
+def _redirect(location: str) -> httpx2.Response:
+    return httpx2.Response(status_code=301, headers={"Location": location})
 
 
-class SequentialTransport(httpx.AsyncBaseTransport):
+class SequentialTransport(httpx2.AsyncBaseTransport):
     """Returns canned responses in order, asserting each request URL matches."""
 
-    def __init__(self, responses: list[tuple[str, httpx.Response]]):
+    def __init__(self, responses: list[tuple[str, httpx2.Response]]):
         self.responses = responses
-        self.requests: list[httpx.Request] = []
+        self.requests: list[httpx2.Request] = []
         self._index = 0
 
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
         expected_url, resp = self.responses[self._index]
         self._index += 1
@@ -63,7 +63,7 @@ async def test_repo_rename_updates_wikidata(tmp_path, monkeypatch):
     """End-to-end: GitHub reports perl6/nqp -> Raku/nqp rename, Wikidata P1324 is updated."""
     monkeypatch.setattr("github_wikidata_bot.github.cache_root", lambda: tmp_path)
 
-    # Responses in request order. httpx follows 301s automatically, so each
+    # Responses in request order. httpx2 follows 301s automatically, so each
     # redirect is immediately followed by the response at the new URL.
     transport = SequentialTransport(
         [
@@ -168,6 +168,6 @@ async def test_repo_rename_updates_wikidata(tmp_path, monkeypatch):
         await update_wikidata(project, settings, wikidata)
 
     # The final POST should contain the updated repo URL
-    body = dict(httpx.QueryParams(transport.requests[-1].content.decode()))
+    body = dict(httpx2.QueryParams(transport.requests[-1].content.decode()))
     claims = json.loads(body["data"])["claims"]
     assert claims[0]["mainsnak"]["datavalue"]["value"] == "https://github.com/Raku/nqp"

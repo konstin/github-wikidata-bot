@@ -5,7 +5,7 @@ import argparse
 import asyncio
 from random import sample
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from github_wikidata_bot.github import GitHubClient, analyse_release, get_releases
 from github_wikidata_bot.main import logger

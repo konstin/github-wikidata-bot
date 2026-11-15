@@ -5,7 +5,7 @@ import logging
 import textwrap
 
 import sentry_sdk
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from github_wikidata_bot.github import Project, Release
 from github_wikidata_bot.project import GitHubRepo

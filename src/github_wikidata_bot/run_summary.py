@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Self
 
-from httpx import HTTPStatusError
+from httpx2 import HTTPStatusError
 
 from github_wikidata_bot.wikidata_api import APIError, ServerError
 
