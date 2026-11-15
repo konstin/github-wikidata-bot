@@ -16,6 +16,7 @@ import sentry_sdk
 from httpx2 import AsyncClient, HTTPError, HTTPStatusError
 from sentry_sdk import metrics
 from sentry_sdk.profiler import start_profiler, stop_profiler
+from sentry_sdk.profiler.continuous_profiler import get_profiler_id
 
 from github_wikidata_bot.github import (
     RELEASE_LIST_ADAPTER,
@@ -255,9 +256,11 @@ async def update_project_with_retries(
             try:
                 # Collect profiling data only when actually working, but not during
                 # rate-limit induced sleeps.
-                if transaction.sampled:
-                    start_profiler()
                 try:
+                    if transaction.sampled:
+                        start_profiler()
+                        # The transaction was created before the profiler started.
+                        transaction.set_profiler_id(get_profiler_id())
                     # If a project takes over 5min, skip it for performance.
                     skip_reason = await asyncio.wait_for(
                         update_project(
