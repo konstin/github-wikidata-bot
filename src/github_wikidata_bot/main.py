@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging.config
-import logging.handlers
+import os
 import subprocess
 import textwrap
 import time
+from datetime import UTC, datetime
 from itertools import batched
 from pathlib import Path
 from subprocess import CalledProcessError
@@ -287,12 +288,14 @@ def init_logging(quiet: bool) -> None:
     therefore the quiet option allows disabling that.
     """
     if quiet:
-        handlers = ["all", "error"]
+        handlers = ["file"]
     else:
-        handlers = ["console", "all", "error"]
+        handlers = ["console", "file"]
 
     log_dir = Path("log")
     log_dir.mkdir(exist_ok=True)
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
+    log_path = log_dir / f"run-{timestamp}-{os.getpid()}.log"
 
     def _qualified(cls: type) -> str:
         return f"{cls.__module__}.{cls.__qualname__}"
@@ -310,20 +313,11 @@ def init_logging(quiet: bool) -> None:
                 "class": _qualified(logging.StreamHandler),
                 "formatter": "extended",
             },
-            "all": {
-                "class": _qualified(logging.handlers.RotatingFileHandler),
-                "filename": str(log_dir.joinpath("all.log")),
+            "file": {
+                "class": _qualified(logging.FileHandler),
+                "filename": str(log_path),
                 "formatter": "extended",
-                "maxBytes": 32 * 1024 * 1024,
-                "backupCount": 10,
-            },
-            "error": {
-                "class": _qualified(logging.handlers.RotatingFileHandler),
-                "filename": str(log_dir.joinpath("error.log")),
-                "formatter": "extended",
-                "level": "WARN",
-                "maxBytes": 32 * 1024 * 1024,
-                "backupCount": 10,
+                "mode": "x",
             },
         },
         "loggers": {"github_wikidata_bot": {"handlers": handlers, "level": "INFO"}},
@@ -331,6 +325,9 @@ def init_logging(quiet: bool) -> None:
 
     logging.config.dictConfig(conf)
     logger.info("Starting")
+    # Each run creates a log file, so keep only the five newest to limit disk use.
+    for old_log in sorted(log_dir.glob("run-*.log"))[:-5]:
+        old_log.unlink(missing_ok=True)
 
 
 def init_sentry(dsn: str):
