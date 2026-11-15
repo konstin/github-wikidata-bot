@@ -50,9 +50,9 @@ async def debug_version_handling(
                 "{:15} | {:10} | {:20} | {:25} | {}".format(
                     release.version if release else "---",
                     release.release_type if release else "---",
-                    github_release["tag_name"],
+                    github_release.tag_name,
                     repr(project.label),
-                    github_release["name"],
+                    github_release.name,
                 )
             )
 

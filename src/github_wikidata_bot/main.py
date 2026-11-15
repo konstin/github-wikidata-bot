@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from itertools import batched
 from pathlib import Path
 from subprocess import CalledProcessError
-from typing import Any
 
 import sentry_sdk
 from httpx2 import AsyncClient, HTTPError, HTTPStatusError
@@ -19,8 +18,10 @@ from sentry_sdk import metrics
 from sentry_sdk.profiler import start_profiler, stop_profiler
 
 from github_wikidata_bot.github import (
+    RELEASE_LIST_ADAPTER,
     CachedGitHubClient,
     GitHubClient,
+    GitHubRelease,
     Project,
     RateLimitError,
     RepositoryUnavailableError,
@@ -56,7 +57,7 @@ async def check_fast_path(
     project: WikidataProject,
     best_versions: dict[str, list[str]],
     github_client: GitHubClient,
-    releases: list[dict[str, Any]] | None = None,
+    releases: list[GitHubRelease] | None = None,
 ) -> bool:
     """Check whether the latest GitHub release matches the latest version on wikidata, and if so,
     skip the expensive processing."""
@@ -71,10 +72,10 @@ async def check_fast_path(
 
     if releases is None:
         try:
-            releases, _, _ = await github_client.fetch_json(
+            payload, _, _ = await github_client.fetch_json(
                 project.repo.api_releases() + "?per_page=1"
             )
-            assert isinstance(releases, list)  # For the type checker
+            releases = RELEASE_LIST_ADAPTER.validate_python(payload)
         except RepositoryUnavailableError:
             raise
         except HTTPError as e:
@@ -150,7 +151,7 @@ async def update_project(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
-    latest_releases: list[dict[str, Any]] | None = None,
+    latest_releases: list[GitHubRelease] | None = None,
 ) -> SkipReason | None:
     try:
         if await check_fast_path(
@@ -221,7 +222,7 @@ async def update_project_with_retries(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
-    latest_releases: list[dict[str, Any]] | None = None,
+    latest_releases: list[GitHubRelease] | None = None,
 ) -> ProjectResult:
     edits_before = wikidata.edit_counter
     with sentry_sdk.start_transaction(name="Update project") as transaction:
