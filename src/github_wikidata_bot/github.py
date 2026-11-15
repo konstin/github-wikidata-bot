@@ -27,6 +27,7 @@ from httpx2 import (
     TimeoutException,
 )
 from pydantic import BaseModel, ValidationError
+from sentry_sdk import metrics
 
 from github_wikidata_bot.project import GitHubRepo, WikidataProject
 from github_wikidata_bot.settings import Secrets, Settings, cache_root
@@ -40,6 +41,22 @@ class RateLimitError(Exception):
 
     def __init__(self, sleep: float):
         self.sleep = sleep
+
+
+async def wait_for_rate_limit(seconds: float, api: str) -> None:
+    with sentry_sdk.start_span(
+        op="github.rate_limit_wait", description=f"GitHub {api} rate-limit wait"
+    ):
+        start = time.perf_counter()
+        try:
+            await asyncio.sleep(seconds)
+        finally:
+            metrics.distribution(
+                "bot.github.rate_limit_wait",
+                time.perf_counter() - start,
+                unit="second",
+                attributes={"github.api": api},
+            )
 
 
 class RepositoryUnavailableError(HTTPStatusError):
@@ -217,7 +234,7 @@ class GitHubClient:
                 logger.info(
                     f"GitHub GraphQL rate limit, sleeping for {int(err.sleep)}s"
                 )
-                await asyncio.sleep(err.sleep)
+                await wait_for_rate_limit(err.sleep, "graphql")
                 continue
             except HTTPError as err:
                 logger.warning(

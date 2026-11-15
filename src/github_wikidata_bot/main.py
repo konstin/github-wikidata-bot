@@ -15,6 +15,8 @@ from typing import Any
 
 import sentry_sdk
 from httpx2 import AsyncClient, HTTPError, HTTPStatusError
+from sentry_sdk import metrics
+from sentry_sdk.profiler import start_profiler, stop_profiler
 
 from github_wikidata_bot.github import (
     CachedGitHubClient,
@@ -25,6 +27,7 @@ from github_wikidata_bot.github import (
     analyse_release,
     analyse_tag,
     get_data_from_github,
+    wait_for_rate_limit,
 )
 from github_wikidata_bot.project import GitHubRepo, InvalidProject, WikidataProject
 from github_wikidata_bot.run_summary import (
@@ -227,19 +230,27 @@ async def update_project_with_retries(
         for _ in range(settings.retries):
             start = time.time()
             try:
-                # If a project takes over 5min, skip it for performance.
-                skip_reason = await asyncio.wait_for(
-                    update_project(
-                        project,
-                        best_versions,
-                        allow_stale,
-                        settings,
-                        wikidata,
-                        github_client,
-                        latest_releases,
-                    ),
-                    timeout=5 * 60,
-                )
+                # Collect profiling data only when actually working, but not during
+                # rate-limit induced sleeps.
+                if transaction.sampled:
+                    start_profiler()
+                try:
+                    # If a project takes over 5min, skip it for performance.
+                    skip_reason = await asyncio.wait_for(
+                        update_project(
+                            project,
+                            best_versions,
+                            allow_stale,
+                            settings,
+                            wikidata,
+                            github_client,
+                            latest_releases,
+                        ),
+                        timeout=5 * 60,
+                    )
+                finally:
+                    if transaction.sampled:
+                        stop_profiler()
             except TimeoutError:
                 logger.warning(f"Timeout processing {project.label}")
                 return ProjectResult(ProjectOutcome.SKIPPED, SkipReason.TIMEOUT)
@@ -248,7 +259,7 @@ async def update_project_with_retries(
                 logger.info(
                     f"github rate limit exceed, sleeping until reset in {int(e.sleep)}s"
                 )
-                await asyncio.sleep(e.sleep)
+                await wait_for_rate_limit(e.sleep, "rest")
                 continue
             except InvalidProject as e:
                 logger.warning(f"Invalid project, skipping: {e}")
@@ -346,9 +357,8 @@ def init_sentry(dsn: str):
         dsn=dsn,
         release=release,
         ignore_errors=[KeyboardInterrupt, MaxLagError],
-        traces_sample_rate=1.0,
+        traces_sample_rate=0.1,
         profile_session_sample_rate=1.0,
-        profile_lifecycle="trace",
     )
 
 
@@ -428,6 +438,12 @@ async def main():
     if secrets.sentry_dsn:
         init_sentry(secrets.sentry_dsn)
     settings = Settings()
+    wall_start = time.perf_counter()
+    cpu_start = time.process_time()
+    run_attributes: dict[str, str | int] = {
+        "run.mode": "filtered" if args.filter else "full",
+        "run.status": "incomplete",
+    }
     try:
         async with AsyncClient(
             timeout=settings.http_timeout,
@@ -438,7 +454,7 @@ async def main():
             await wikidata.connect(settings)
             github_client = GitHubClient(secrets, client, settings)
 
-            await run(
+            summary = await run(
                 args.filter,
                 args.cache_sparql,
                 args.allow_stale,
@@ -447,7 +463,30 @@ async def main():
                 github_client,
             )
             logger.info(f"Made {wikidata.request_counter} wikidata requests")
+        run_attributes.update(
+            {
+                "run.status": "completed",
+                "run.projects": summary.outcomes.total(),
+                "run.wikidata_requests": wikidata.request_counter,
+            }
+        )
     finally:
+        wall_time = time.perf_counter() - wall_start
+        cpu_time = time.process_time() - cpu_start
+        logger.info(
+            "Run performance (%s, %s): wall=%.3fs, cpu=%.3fs",
+            run_attributes["run.mode"],
+            run_attributes["run.status"],
+            wall_time,
+            cpu_time,
+        )
+        if secrets.sentry_dsn:
+            metrics.distribution(
+                "bot.run.duration", wall_time, unit="second", attributes=run_attributes
+            )
+            metrics.distribution(
+                "bot.run.cpu_time", cpu_time, unit="second", attributes=run_attributes
+            )
         # Close the client so the atexit handler early-returns instead of
         # printing "Sentry is attempting to send N pending events". flush()
         # alone leaves the client alive, and events queued during teardown
