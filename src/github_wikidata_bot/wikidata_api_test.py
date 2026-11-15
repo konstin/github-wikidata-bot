@@ -4,9 +4,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
-import httpx
+import httpx2
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from github_wikidata_bot.settings import Secrets, Settings
 from github_wikidata_bot.wikidata_api import (
@@ -34,18 +34,18 @@ class RecordedRequest:
     data: dict[str, str]
 
 
-class MockTransport(httpx.AsyncBaseTransport):
+class MockTransport(httpx2.AsyncBaseTransport):
     """Records requests and returns canned responses."""
 
-    def __init__(self, responses: list[httpx.Response] | None = None):
+    def __init__(self, responses: list[httpx2.Response] | None = None):
         self.responses = responses or []
         self.requests: list[RecordedRequest] = []
         self._call_index = 0
 
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
         params = dict(request.url.params)
         if request.content:
-            data = dict(httpx.QueryParams(request.content.decode()))
+            data = dict(httpx2.QueryParams(request.content.decode()))
         else:
             data = {}
         self.requests.append(
@@ -63,8 +63,8 @@ class MockTransport(httpx.AsyncBaseTransport):
 
 def _json_response(
     body: dict, status_code: int = 200, headers: dict | None = None
-) -> httpx.Response:
-    return httpx.Response(status_code=status_code, json=body, headers=headers or {})
+) -> httpx2.Response:
+    return httpx2.Response(status_code=status_code, json=body, headers=headers or {})
 
 
 @asynccontextmanager
@@ -496,7 +496,7 @@ async def test_sparql_query():
 @pytest.mark.anyio
 @pytest.mark.parametrize("status_code", [429, 500])
 async def test_sparql_server_error(status_code):
-    transport = MockTransport(responses=[httpx.Response(status_code=status_code)])
+    transport = MockTransport(responses=[httpx2.Response(status_code=status_code)])
     async with _make_session(transport) as session:
         with pytest.raises(ServerError):
             await session.sparql_query("SELECT ...")

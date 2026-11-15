@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import ClassVar
 
-from httpx import AsyncClient, HTTPError
+from httpx2 import AsyncClient, HTTPError
 
 from github_wikidata_bot.settings import cache_root
 
