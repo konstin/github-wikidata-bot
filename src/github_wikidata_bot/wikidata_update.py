@@ -255,7 +255,8 @@ async def update_wikidata(
             )
             latest_version = None
 
-    # Create all missing releases that get a normal rank (which exclude the latest release, if any)
+    # Collect all missing releases that get a normal rank (which exclude the latest release, if any)
+    changes: list[Claim] = []
     for release in stable_releases:
         if release.version == latest_version:
             continue
@@ -263,9 +264,9 @@ async def update_wikidata(
         if item.has_claim(claim):
             continue
         logger.info(f"Creating {release.version}")
-        await wikidata.add_claim(item, claim, summary=wikidata.edit_summary)
+        changes.append(claim)
 
-    # In a single api call, demote non-latest preferred to normal and promote or create the latest with preferred rank,
+    # In the same api call, demote non-latest preferred to normal and promote or create the latest with preferred rank,
     # to avoid a project having zero or two preferred ranks.
     # https://www.wikidata.org/w/index.php?title=Topic%3AY3yzaiuczuywkbgr&topic_showPostId=y3z03mkycwf3s6b4
     if latest_version:
@@ -298,6 +299,8 @@ async def update_wikidata(
                 rank_changes.append(claim)
         if rank_changes:
             logger.info(f"Rank changes: {', '.join(change_summaries)}")
-            await wikidata.save_claims(
-                item.id, rank_changes, summary=wikidata.edit_summary
-            )
+            changes.extend(rank_changes)
+
+    # A single edit per item, each edit can be delayed by maxlag.
+    if changes:
+        await wikidata.save_claims(item.id, changes, summary=wikidata.edit_summary)
