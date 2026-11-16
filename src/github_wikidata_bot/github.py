@@ -10,7 +10,7 @@ import textwrap
 import time
 from asyncio import Semaphore
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -194,37 +194,80 @@ class GitHubClient:
     async def fetch_repository_summaries_graphql(
         self, repos: list[GitHubRepo]
     ) -> dict[GitHubRepo, RepositorySummary]:
-        """Fetch the first release, tag names, and canonical name for up to 100 repositories.
-
-        Missing repository entries, tag names, or canonical names require
-        REST fallback. Keep partial successes when individual lookups fail.
-        """
+        """Fetch release summaries and complete tag lists where the fast path needs them."""
         repos = list(dict.fromkeys(repos))
         if not repos:
             return {}
         if len(repos) > 100:
             raise ValueError("Repository batches must contain at most 100 repositories")
 
-        # Alias the fields to their REST names for the shared release model.
-        # Include prereleases, as the REST release list does.
-        # A full page of tags costs the same as a single tag.
-        repositories = "\n".join(
-            f"""
-            repo{idx}: repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
-                nameWithOwner
-                refs(refPrefix: "refs/tags/", first: 100) {{
-                    nodes {{ name }}
-                    pageInfo {{ hasNextPage }}
-                }}
-                releases(first: 1, orderBy: {{field: CREATED_AT, direction: DESC}}) {{
-                    nodes {{
+        repositories = await self._fetch_graphql_repositories(
+            repos, tag_limit=1, include_releases=True
+        )
+        summaries = {}
+        repos_needing_tags = []
+        for repo, repository in repositories.items():
+            connection = repository.get("releases") or {}
+            try:
+                releases = RELEASE_LIST_ADAPTER.validate_python(connection.get("nodes"))
+            except ValidationError:
+                # Leave this repository for the REST fallback.
+                continue
+            name = repository.get("nameWithOwner")
+            refs = repository.get("refs") or {}
+            summaries[repo] = RepositorySummary(
+                releases, _complete_graphql_tags(refs), name
+            )
+            if (
+                not releases
+                and name == f"{repo.org}/{repo.project}"
+                and (refs.get("pageInfo") or {}).get("hasNextPage") is True
+            ):
+                repos_needing_tags.append(repo)
+
+        if repos_needing_tags:
+            repositories = await self._fetch_graphql_repositories(
+                repos_needing_tags, tag_limit=100
+            )
+            for repo, repository in repositories.items():
+                summary = summaries[repo]
+                if repository.get("nameWithOwner") != summary.name_with_owner:
+                    continue
+                tags = _complete_graphql_tags(repository.get("refs") or {})
+                summaries[repo] = replace(summary, tags=tags)
+
+        return summaries
+
+    async def _fetch_graphql_repositories(
+        self,
+        repos: list[GitHubRepo],
+        *,
+        tag_limit: int,
+        include_releases: bool = False,
+    ) -> dict[GitHubRepo, dict[str, Any]]:
+        release_fields = ""
+        if include_releases:
+            # Use REST field names for the shared model and include prereleases.
+            release_fields = """
+                releases(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
+                    nodes {
                         tag_name: tagName
                         name
                         prerelease: isPrerelease
                         published_at: publishedAt
                         html_url: url
-                    }}
+                    }
+                }
+            """
+        repositories = "\n".join(
+            f"""
+            repo{idx}: repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
+                nameWithOwner
+                refs(refPrefix: "refs/tags/", first: {tag_limit}) {{
+                    nodes {{ name }}
+                    pageInfo {{ hasNextPage }}
                 }}
+                {release_fields}
             }}
             """
             for idx, repo in enumerate(repos)
@@ -250,7 +293,7 @@ class GitHubClient:
                 )
                 await wait_for_rate_limit(err.sleep, "graphql")
                 continue
-            except HTTPError as err:
+            except (HTTPError, json.JSONDecodeError, UnicodeDecodeError) as err:
                 logger.warning(
                     f"GitHub GraphQL repository lookup failed; using REST: {err}"
                 )
@@ -267,39 +310,30 @@ class GitHubClient:
             failed.add(error["path"][0])
 
         data = payload.get("data") or {}
-        summaries = {}
+        repositories_by_repo = {}
         for idx, repo in enumerate(repos):
             alias = f"repo{idx}"
             repository = data.get(alias)
-            if alias in failed or repository is None:
-                continue
-            connection = repository.get("releases") or {}
-            try:
-                releases = RELEASE_LIST_ADAPTER.validate_python(connection.get("nodes"))
-            except ValidationError:
-                # Leave this repository for the REST fallback.
-                continue
-            refs = repository.get("refs") or {}
-            tag_nodes = refs.get("nodes")
-            # Leave repositories with more than one page of tags for the REST fallback.
-            if (
-                isinstance(tag_nodes, list)
-                and None not in tag_nodes
-                and (refs.get("pageInfo") or {}).get("hasNextPage") is False
-            ):
-                # The REST tag list is sorted by name, GraphQL sorts by version.
-                tags = sorted(node["name"] for node in tag_nodes)
-            else:
-                tags = None
-            summaries[repo] = RepositorySummary(
-                releases, tags, repository.get("nameWithOwner")
-            )
+            if alias not in failed and repository is not None:
+                repositories_by_repo[repo] = repository
         cost = (data.get("rateLimit") or {}).get("cost")
         logger.info(
-            f"Fetched repository summaries for {len(summaries)}/{len(repos)} repositories "
-            f"with GraphQL (cost: {cost})"
+            f"Fetched GraphQL data for {len(repositories_by_repo)}/{len(repos)} repositories "
+            f"(tag limit: {tag_limit}, cost: {cost})"
         )
-        return summaries
+        return repositories_by_repo
+
+
+def _complete_graphql_tags(refs: dict[str, Any]) -> list[str] | None:
+    if (refs.get("pageInfo") or {}).get("hasNextPage") is not False:
+        return None
+    nodes = refs.get("nodes")
+    if not isinstance(nodes, list) or not all(
+        isinstance(node, dict) and isinstance(node.get("name"), str) for node in nodes
+    ):
+        return None
+    # Match the order of the REST tag list.
+    return sorted(node["name"] for node in nodes)
 
 
 class CachedGitHubClient(GitHubClient):
