@@ -293,7 +293,20 @@ class GitHubClient:
                 )
                 await wait_for_rate_limit(err.sleep, "graphql")
                 continue
-            except (HTTPError, json.JSONDecodeError, UnicodeDecodeError) as err:
+            except (json.JSONDecodeError, UnicodeDecodeError) as err:
+                if attempt == self.settings.retries - 1:
+                    logger.warning(
+                        f"GitHub GraphQL response was not valid JSON; using REST: {err}"
+                    )
+                    return {}
+                backoff = 2**attempt
+                logger.warning(
+                    f"GitHub GraphQL response was not valid JSON, "
+                    f"retrying after {backoff}s: {err}"
+                )
+                await asyncio.sleep(backoff)
+                continue
+            except HTTPError as err:
                 logger.warning(
                     f"GitHub GraphQL repository lookup failed; using REST: {err}"
                 )
