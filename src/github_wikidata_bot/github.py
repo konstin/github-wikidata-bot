@@ -207,12 +207,11 @@ class GitHubClient:
         summaries = {}
         repos_needing_tags = []
         for repo, repository in repositories.items():
-            connection = repository.get("releases") or {}
-            try:
-                releases = RELEASE_LIST_ADAPTER.validate_python(connection.get("nodes"))
-            except ValidationError:
-                # Leave this repository for the REST fallback.
+            nodes = repository["releases"]["nodes"]
+            # The list and its single requested node are both nullable.
+            if nodes is None or nodes == [None]:
                 continue
+            releases = RELEASE_LIST_ADAPTER.validate_python(nodes)
             name = repository.get("nameWithOwner")
             refs = repository.get("refs") or {}
             summaries[repo] = RepositorySummary(
