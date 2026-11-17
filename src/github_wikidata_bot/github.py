@@ -262,16 +262,17 @@ class GitHubClient:
     async def _fetch_graphql_repositories(
         self, repos: list[GitHubRepo], fields: str
     ) -> dict[GitHubRepo, dict[str, Any]]:
-        repositories = "\n".join(
+        repo_by_alias = {f"repo{idx}": repo for idx, repo in enumerate(repos)}
+        selection = "\n".join(
             f"""
-            repo{idx}: repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
+            {alias}: repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
                 nameWithOwner
                 {fields}
             }}
             """
-            for idx, repo in enumerate(repos)
+            for alias, repo in repo_by_alias.items()
         )
-        query = "query {" + repositories + "rateLimit { cost }}"
+        query = f"query {{ {selection} rateLimit {{ cost }} }}"
         for attempt in range(self.settings.retries):
             try:
                 payload, headers, _ = await self.fetch_json(
@@ -301,20 +302,19 @@ class GitHubClient:
         else:
             raise ValueError("retries can't be 0")
 
-        failed = set()
         for error in errors:
             logger.warning(f"GitHub GraphQL repository lookup: {error['message']}")
-            if not error.get("path"):
+            path = error.get("path")
+            if not path:
                 return {}
-            failed.add(error["path"][0])
+            repo_by_alias.pop(path[0], None)
 
         data = payload.get("data") or {}
-        repositories_by_repo = {}
-        for idx, repo in enumerate(repos):
-            alias = f"repo{idx}"
-            repository = data.get(alias)
-            if alias not in failed and repository is not None:
-                repositories_by_repo[repo] = repository
+        repositories_by_repo = {
+            repo: data[alias]
+            for alias, repo in repo_by_alias.items()
+            if data.get(alias) is not None
+        }
         cost = (data.get("rateLimit") or {}).get("cost")
         logger.info(
             f"Fetched GraphQL data for {len(repositories_by_repo)}/{len(repos)} repositories "
