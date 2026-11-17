@@ -211,10 +211,16 @@ async def update_wikidata(
     # Add all stable releases
     stable_releases = project.stable_release
     stable_releases.sort(key=lambda x: SimpleSortableVersion(x.version))
+    existing_claims = item.claims.get(Property.software_version.value, [])
 
-    if len(stable_releases) == 0:
-        logger.info("No stable releases")
-        return
+    if not stable_releases:
+        reason = project.no_stable_release_reason or SkipReason.NO_USABLE_STABLE_RELEASE
+        if reason is SkipReason.NO_RELEASES_OR_TAGS and not any(
+            claim.rank != "deprecated" and claim.snaktype == "value"
+            for claim in existing_claims
+        ):
+            return
+        return reason
 
     versions = [release.version for release in stable_releases]
     if len(versions) != len(set(versions)):
@@ -237,7 +243,6 @@ async def update_wikidata(
 
     latest_version = stable_releases[-1].version
 
-    existing_claims = item.claims.get(Property.software_version.value, [])
     github_versions = [release.version for release in stable_releases]
     existing_preferred_ranks = [
         claim for claim in existing_claims if claim.rank == "preferred"
@@ -247,12 +252,14 @@ async def update_wikidata(
         f"existing preferred ranks: {' '.join(str(i.value) for i in existing_preferred_ranks)}"
     )
 
+    skip_reason = None
     for claim in existing_preferred_ranks:
         if claim.value not in github_versions:
             logger.warning(
                 f"A version which is not in the github page has a preferred rank: {claim.value}"
             )
             latest_version = None
+            skip_reason = SkipReason.PREFERRED_VERSION_NOT_ON_GITHUB
 
     # A single version should have a normal rank, not a preferred rank.
     # https://www.wikidata.org/w/index.php?title=Topic%3AY3yzaiuczuywkbgr&topic_showPostId=y3z03mkycwf3s6b4
@@ -318,3 +325,4 @@ async def update_wikidata(
     # A single edit per item, each edit can be delayed by maxlag.
     if changes:
         await wikidata.save_claims(item.id, changes, maxlag, wikidata.edit_summary)
+    return skip_reason

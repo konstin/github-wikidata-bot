@@ -30,6 +30,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from sentry_sdk import metrics
 
 from github_wikidata_bot.project import GitHubRepo, WikidataProject
+from github_wikidata_bot.run_summary import SkipReason
 from github_wikidata_bot.settings import Secrets, Settings, cache_root
 from github_wikidata_bot.version import SimpleSortableVersion, extract_version
 
@@ -60,7 +61,7 @@ async def wait_for_rate_limit(seconds: float, api: str) -> None:
 
 
 class RepositoryUnavailableError(HTTPStatusError):
-    """GitHub has blocked access to the repository."""
+    """GitHub reports that the repository is missing or access is blocked."""
 
 
 @dataclass(frozen=True)
@@ -399,6 +400,7 @@ class Project:
     retrieved: datetime.datetime
     # The repo from the response url, to track renames (through redirects).
     canonical_repo: GitHubRepo | None = None
+    no_stable_release_reason: SkipReason | None = None
 
 
 async def fetch_cached(
@@ -743,9 +745,16 @@ async def get_data_from_github(
 
     # General project information
     api_url = project.repo.api_base()
-    project_info, response_url = await fetch_cached(
-        api_url, repo_cache_root.joinpath("index.json"), client, allow_stale
-    )
+    try:
+        project_info, response_url = await fetch_cached(
+            api_url, repo_cache_root.joinpath("index.json"), client, allow_stale
+        )
+    except HTTPStatusError as err:
+        if err.response.status_code == 404:
+            raise RepositoryUnavailableError(
+                str(err), request=err.request, response=err.response
+            ) from err
+        raise
 
     website = project_info.get("homepage")
     if project_license := project_info.get("license"):
@@ -767,18 +776,24 @@ async def get_data_from_github(
 
     invalid_releases = []
     extracted: list[Release | None] = []
+    only_prereleases = True
     for release in releases:
         result = analyse_release(release, project_info["name"])
         if result:
             extracted.append(result)
         else:
             invalid_releases.append((release.tag_name, release.name))
+        if not release.prerelease and (
+            result is None or result.release_type == "stable"
+        ):
+            only_prereleases = False
 
     if invalid_releases:
         message = ", ".join(str(i) for i in invalid_releases)
         message = textwrap.shorten(message, width=200, placeholder="...")
         logger.info(f"{len(invalid_releases)} invalid releases: {message}")
 
+    tags = [] if no_tags else None
     if settings.read_tags and (
         len(extracted) == 0 or project.q_value in tags_over_releases
     ):
@@ -802,6 +817,9 @@ async def get_data_from_github(
             analyse_tag(release, project_info, invalid_version_strings)
             for release in tags
         ]
+        only_prereleases = only_prereleases and all(
+            tag is not None and tag.release_type != "stable" for tag in extracted_tags
+        )
         filtered = [v for v in extracted_tags if v is not None]
         filtered.sort(key=lambda x: SimpleSortableVersion(x.version))
         if len(filtered) > settings.max_tags:
@@ -837,6 +855,15 @@ async def get_data_from_github(
         if extract and extract.release_type == "stable":
             stable_release.append(extract)
 
+    no_stable_release_reason = None
+    if not stable_release:
+        if (releases or tags) and only_prereleases:
+            no_stable_release_reason = SkipReason.PRERELEASES_ONLY
+        elif not releases and tags == []:
+            no_stable_release_reason = SkipReason.NO_RELEASES_OR_TAGS
+        else:
+            no_stable_release_reason = SkipReason.NO_USABLE_STABLE_RELEASE
+
     return Project(
         wikidata=project,
         stable_release=stable_release,
@@ -844,4 +871,5 @@ async def get_data_from_github(
         license=spdx_id,
         retrieved=retrieved,
         canonical_repo=canonical_repo,
+        no_stable_release_reason=no_stable_release_reason,
     )

@@ -7,28 +7,39 @@ from typing import Self
 
 from httpx2 import HTTPStatusError
 
-from github_wikidata_bot.wikidata_api import APIError, MaxLagStats, ServerError
+from github_wikidata_bot.wikidata_api import (
+    APIError,
+    MaxLagStats,
+    MaxLagWaitCancelledError,
+    ServerError,
+)
 
 
 class ProjectOutcome(Enum):
+    UP_TO_DATE = "up-to-date"
     UPDATED = "updated"
-    UNCHANGED = "unchanged"
     SKIPPED = "skipped"
+    UNAVAILABLE = "unavailable"
     FAILED = "failed"
 
 
 class SkipReason(Enum):
+    INVALID_PROJECT = "invalid project"
+    DRY_RUN = "dry run"
+    DUPLICATE_RELEASES = "duplicate releases"
+    NO_RELEASES_OR_TAGS = "no GitHub releases or tags"
+    PRERELEASES_ONLY = "only prereleases"
+    NO_USABLE_STABLE_RELEASE = "no usable stable release"
+    PREFERRED_VERSION_NOT_ON_GITHUB = (
+        "preferred Wikidata version absent from GitHub results"
+    )
+
+
+class UnavailableReason(Enum):
     REPOSITORY_NOT_FOUND = "repository not found"
     REPOSITORY_UNAVAILABLE = "repository unavailable"
     MISSING_ENTITY = "missing entity"
     ENTITY_TOO_BIG = "entity too big"
-    INVALID_PROJECT = "invalid project"
-    SERVER_LAG = "server lag"
-    TIMEOUT = "project timeout"
-    TIMEOUT_DURING_MAXLAG = "project timeout during maxlag wait"
-    RATE_LIMIT = "rate limit retries exhausted"
-    DRY_RUN = "dry run"
-    DUPLICATE_RELEASES = "duplicate releases"
 
 
 @dataclass(frozen=True)
@@ -44,6 +55,11 @@ class FailureReason:
             return cls(type(error), error.status_code)
         if isinstance(error, APIError):
             return cls(type(error), error.code)
+        # asyncio.wait_for preserves the interrupted wait as the timeout's cause.
+        if isinstance(error, TimeoutError) and isinstance(
+            error.__cause__, MaxLagWaitCancelledError
+        ):
+            return cls(type(error), "maxlag wait")
         return cls(type(error))
 
     def __str__(self) -> str:
@@ -56,18 +72,31 @@ class FailureReason:
 class ProjectResult:
     """A project's final outcome, including any retries.
 
-    A skipped or failed project may have made some edits before stopping.
+    A project may have made some edits before stopping early.
     """
 
     outcome: ProjectOutcome
-    reason: SkipReason | FailureReason | None = None
+    reason: SkipReason | UnavailableReason | FailureReason | None = None
     maxlag: MaxLagStats = field(default_factory=MaxLagStats)
+
+    def __str__(self) -> str:
+        if self.reason is None:
+            return self.outcome.value
+        reason = (
+            self.reason.value
+            if isinstance(self.reason, (SkipReason, UnavailableReason))
+            else str(self.reason)
+        )
+        if self.outcome is ProjectOutcome.UPDATED:
+            return f"updated (latest version left unchanged: {reason})"
+        return f"{self.outcome.value} ({reason})"
 
 
 @dataclass
 class RunSummary:
     outcomes: Counter[ProjectOutcome] = field(default_factory=Counter)
     skips: Counter[SkipReason] = field(default_factory=Counter)
+    unavailable: Counter[UnavailableReason] = field(default_factory=Counter)
     failures: Counter[FailureReason] = field(default_factory=Counter)
     maxlag_projects: int = 0
     maxlag: MaxLagStats = field(default_factory=MaxLagStats)
@@ -79,8 +108,12 @@ class RunSummary:
         self.maxlag.rejections += result.maxlag.rejections
         self.maxlag.requested_wait_seconds += result.maxlag.requested_wait_seconds
         self.maxlag.wait_seconds += result.maxlag.wait_seconds
-        if isinstance(result.reason, SkipReason):
+        if result.outcome is ProjectOutcome.SKIPPED and isinstance(
+            result.reason, SkipReason
+        ):
             self.skips[result.reason] += 1
+        elif isinstance(result.reason, UnavailableReason):
+            self.unavailable[result.reason] += 1
         elif isinstance(result.reason, FailureReason):
             self.failures[result.reason] += 1
 
@@ -89,13 +122,18 @@ class RunSummary:
             f"{outcome.value}={self.outcomes[outcome]}" for outcome in ProjectOutcome
         )
         details = [totals]
-        if self.skips:
+        for heading, reasons in (
+            ("skip reasons", self.skips),
+            ("unavailable reasons", self.unavailable),
+        ):
+            if not reasons:
+                continue
             details.append(
-                "skip reasons: "
+                f"{heading}: "
                 + ", ".join(
                     f"{reason.value}={count}"
                     for reason, count in sorted(
-                        self.skips.items(), key=lambda entry: entry[0].value
+                        reasons.items(), key=lambda entry: entry[0].value
                     )
                 )
             )
