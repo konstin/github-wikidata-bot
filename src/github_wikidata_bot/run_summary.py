@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Self
 
 from httpx2 import HTTPStatusError
 
@@ -42,30 +41,20 @@ class UnavailableReason(Enum):
     ENTITY_TOO_BIG = "entity too big"
 
 
-@dataclass(frozen=True)
-class FailureReason:
-    error_type: type[Exception]
-    code: int | str | None = None
-
-    @classmethod
-    def from_exception(cls, error: Exception) -> Self:
-        if isinstance(error, HTTPStatusError):
-            return cls(type(error), error.response.status_code)
-        if isinstance(error, ServerError):
-            return cls(type(error), error.status_code)
-        if isinstance(error, APIError):
-            return cls(type(error), error.code)
-        # asyncio.wait_for preserves the interrupted wait as the timeout's cause.
-        if isinstance(error, TimeoutError) and isinstance(
-            error.__cause__, MaxLagWaitCancelledError
-        ):
-            return cls(type(error), "maxlag wait")
-        return cls(type(error))
-
-    def __str__(self) -> str:
-        if self.code is not None:
-            return f"{self.error_type.__name__} ({self.code})"
-        return self.error_type.__name__
+def format_failure_reason(error: Exception) -> str:
+    name = type(error).__name__
+    if isinstance(error, HTTPStatusError):
+        return f"{name} ({error.response.status_code})"
+    if isinstance(error, ServerError):
+        return f"{name} ({error.status_code})"
+    if isinstance(error, APIError):
+        return f"{name} ({error.code})"
+    # asyncio.wait_for preserves the interrupted wait as the timeout's cause.
+    if isinstance(error, TimeoutError) and isinstance(
+        error.__cause__, MaxLagWaitCancelledError
+    ):
+        return f"{name} (maxlag wait)"
+    return name
 
 
 @dataclass(frozen=True)
@@ -76,17 +65,15 @@ class ProjectResult:
     """
 
     outcome: ProjectOutcome
-    reason: SkipReason | UnavailableReason | FailureReason | None = None
+    reason: SkipReason | UnavailableReason | str | None = None
     maxlag: MaxLagStats = field(default_factory=MaxLagStats)
 
     def __str__(self) -> str:
-        if self.reason is None:
+        reason = self.reason
+        if reason is None:
             return self.outcome.value
-        reason = (
-            self.reason.value
-            if isinstance(self.reason, (SkipReason, UnavailableReason))
-            else str(self.reason)
-        )
+        if isinstance(reason, (SkipReason, UnavailableReason)):
+            reason = reason.value
         if self.outcome is ProjectOutcome.UPDATED:
             return f"updated (latest version left unchanged: {reason})"
         return f"{self.outcome.value} ({reason})"
@@ -97,7 +84,7 @@ class RunSummary:
     outcomes: Counter[ProjectOutcome] = field(default_factory=Counter)
     skips: Counter[SkipReason] = field(default_factory=Counter)
     unavailable: Counter[UnavailableReason] = field(default_factory=Counter)
-    failures: Counter[FailureReason] = field(default_factory=Counter)
+    failures: Counter[str] = field(default_factory=Counter)
     maxlag_projects: int = 0
     maxlag: MaxLagStats = field(default_factory=MaxLagStats)
 
@@ -114,7 +101,7 @@ class RunSummary:
             self.skips[result.reason] += 1
         elif isinstance(result.reason, UnavailableReason):
             self.unavailable[result.reason] += 1
-        elif isinstance(result.reason, FailureReason):
+        elif isinstance(result.reason, str):
             self.failures[result.reason] += 1
 
     def __str__(self) -> str:
@@ -142,9 +129,7 @@ class RunSummary:
                 "failure reasons: "
                 + ", ".join(
                     f"{reason}={count}"
-                    for reason, count in sorted(
-                        self.failures.items(), key=lambda entry: str(entry[0])
-                    )
+                    for reason, count in sorted(self.failures.items())
                 )
             )
         details.append(f"maxlag: projects={self.maxlag_projects}, {self.maxlag}")
