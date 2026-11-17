@@ -34,11 +34,13 @@ from github_wikidata_bot.github import (
 )
 from github_wikidata_bot.project import GitHubRepo, InvalidProject, WikidataProject
 from github_wikidata_bot.run_summary import (
-    FailureReason,
+    ExceptionFailure,
     ProjectOutcome,
     ProjectResult,
     RunSummary,
     SkipReason,
+    UnavailableReason,
+    classify_failure,
 )
 from github_wikidata_bot.settings import Secrets, Settings
 from github_wikidata_bot.sparql import cached_projects_query, query_best_versions
@@ -47,7 +49,6 @@ from github_wikidata_bot.wikidata_api import (
     APIError,
     MaxLagError,
     MaxLagStats,
-    MaxLagWaitCancelledError,
     MissingEntityError,
     WikidataClient,
     WikidataError,
@@ -92,7 +93,7 @@ async def check_fast_path(
             return False
     if len(releases) == 1:
         result = analyse_release(releases[0], project.label)
-        if result:
+        if result and result.release_type == "stable":
             if result.version == project_version:
                 logger.info(f"Fresh using releases fast path: {project_version}")
                 return True
@@ -106,12 +107,15 @@ async def check_fast_path(
                 )
                 return False
         else:
-            logger.info("No fast path, release failed to analyse")
+            logger.info("No fast path, release is unstable or could not be parsed")
             return False
 
     if tags is not None:
-        extracted = [extract_version(tag, project.repo.project) for tag in tags]
-        versions = [match[1] for match in extracted if match is not None]
+        versions = [
+            match
+            for tag in tags
+            if (match := extract_version(tag, project.repo.project)) is not None
+        ]
     else:
         try:
             rest_tags, _, _ = await github_client.fetch_json(project.repo.api_tags())
@@ -119,8 +123,8 @@ async def check_fast_path(
         except RepositoryUnavailableError:
             raise
         except HTTPStatusError as e:
-            # GitHub raises 404 if there are no tags, 409 for empty repos
-            if e.response.status_code in (404, 409):
+            # A tags 404 can also mean the repository is gone. Check it on the full path.
+            if e.response.status_code == 409:
                 if not best_versions.get(project.q_value_url):
                     logger.info("Fresh, no releases or tags")
                     return True
@@ -132,22 +136,30 @@ async def check_fast_path(
             else:
                 logger.info(f"No fast path, fetch tags errored: {e}")
                 return False
-        project_info, _, _ = await github_client.fetch_json(project.repo.api_base())
+        try:
+            project_info, _, _ = await github_client.fetch_json(project.repo.api_base())
+        except HTTPStatusError as err:
+            if err.response.status_code == 404:
+                return False
+            raise
         assert isinstance(project_info, dict)  # For the type checker
         extracted_tags = [
             analyse_tag(release, project_info, []) for release in rest_tags
         ]
-        versions = [tag.version for tag in extracted_tags if tag is not None]
+        versions = [
+            (tag.release_type, tag.version) for tag in extracted_tags if tag is not None
+        ]
 
-    versions.sort(key=SimpleSortableVersion)
-    if len(versions) > 0:
-        if versions[-1] == project_version:
+    versions.sort(key=lambda version: SimpleSortableVersion(version[1]))
+    if versions:
+        release_type, latest_version = versions[-1]
+        if release_type == "stable" and latest_version == project_version:
             logger.info(f"Fresh using tags fast path: {project_version}")
             return True
         else:
             wikidata = ", ".join(best_versions.get(project.q_value_url, []))
             wikidata = textwrap.shorten(wikidata, width=50, placeholder="...")
-            logger.info(f"No fast path, wikidata: {wikidata}, tags: {versions[-1]}")
+            logger.info(f"No fast path, wikidata: {wikidata}, tags: {latest_version}")
             return False
     else:
         logger.info("No fast path, tag failed to analyse")
@@ -164,7 +176,7 @@ async def update_project(
     github_client: GitHubClient,
     maxlag: MaxLagStats,
     repository: RepositorySummary | None = None,
-) -> SkipReason | None:
+) -> SkipReason | UnavailableReason | None:
     tags = repository.tags if repository is not None else None
     no_releases_or_tags = (
         bool(project.label)
@@ -196,15 +208,11 @@ async def update_project(
             no_tags=no_releases_or_tags,
         )
     except RepositoryUnavailableError as err:
-        logger.warning(f"GitHub repository unavailable, skipping: {err}")
-        return SkipReason.REPOSITORY_UNAVAILABLE
-    except HTTPStatusError as err:
-        # TODO: Figure out what update wikidata should get when a project was deleted.
         if err.response.status_code == 404:
             logger.warning(f"GitHub repo not found: {err}")
-            return SkipReason.REPOSITORY_NOT_FOUND
-        else:
-            raise
+            return UnavailableReason.REPOSITORY_NOT_FOUND
+        logger.warning(f"GitHub repository unavailable: {err}")
+        return UnavailableReason.REPOSITORY_UNAVAILABLE
 
     if not settings.dry_run:
         # TODO: Move retries to the http calls themselves, we want to retry individual network requests, not the whole
@@ -213,18 +221,18 @@ async def update_project(
             try:
                 return await update_wikidata(properties, settings, wikidata, maxlag)
             except MissingEntityError:
-                logger.warning(
-                    f"Wikidata entity {project.q_value} no longer exists, skipping"
-                )
-                return SkipReason.MISSING_ENTITY
+                logger.warning(f"Wikidata entity {project.q_value} no longer exists")
+                return UnavailableReason.MISSING_ENTITY
             except APIError as err:
                 if err.is_entity_too_big():
                     # Wikidata has a hard 3 MiB entity size limit (maxSerializedEntitySize=3000 KB).
                     # https://www.wikidata.org/wiki/Wikidata:WikiProject_Limits_of_Wikidata
                     # https://doc.wikimedia.org/Wikibase/master/php/docs_topics_options.html
                     # TODO: Remove old version claims to make room for new ones.
-                    logger.warning("Entity too big, skipping")
-                    return SkipReason.ENTITY_TOO_BIG
+                    logger.warning(
+                        f"Wikidata entity {project.q_value} exceeds the size limit"
+                    )
+                    return UnavailableReason.ENTITY_TOO_BIG
                 if attempt < settings.retries - 1:
                     backoff = 2**attempt + 2
                     logger.warning(
@@ -274,8 +282,7 @@ async def update_project_with_retries(
                         start_profiler()
                         # The transaction was created before the profiler started.
                         transaction.set_profiler_id(get_profiler_id())
-                    # If a project takes over 5min, skip it for performance.
-                    skip_reason = await asyncio.wait_for(
+                    reason = await asyncio.wait_for(
                         update_project(
                             project,
                             best_versions,
@@ -292,14 +299,6 @@ async def update_project_with_retries(
                     duration += time.perf_counter() - start
                     if transaction.sampled:
                         stop_profiler()
-            except TimeoutError as err:
-                logger.warning(f"Timeout processing {project.label}")
-                # wait_for preserves the cancellation as the timeout's cause.
-                if isinstance(err.__cause__, MaxLagWaitCancelledError):
-                    reason = SkipReason.TIMEOUT_DURING_MAXLAG
-                else:
-                    reason = SkipReason.TIMEOUT
-                result = ProjectResult(ProjectOutcome.SKIPPED, reason)
             except RateLimitError as e:
                 # We have to catch this error here to avoid the timeout.
                 logger.info(
@@ -312,35 +311,41 @@ async def update_project_with_retries(
                 result = ProjectResult(
                     ProjectOutcome.SKIPPED, SkipReason.INVALID_PROJECT
                 )
-            except MaxLagError as err:
-                logger.warning(
-                    f"Wikidata server lag, skipping {project.q_value}: {err}"
-                )
-                result = ProjectResult(ProjectOutcome.SKIPPED, SkipReason.SERVER_LAG)
-            except (WikidataError, HTTPError) as err:
+            except Exception as err:
                 # NoTracebackFormatter suppresses exception details, so include them here.
                 logger.exception(
                     f"Failed to update {project.q_value}: {type(err).__name__}: {err}"  # noqa: TRY401
                 )
-                result = ProjectResult(
-                    ProjectOutcome.FAILED, FailureReason.from_exception(err)
-                )
+                result = ProjectResult(ProjectOutcome.FAILED, classify_failure(err))
             else:
-                if skip_reason is not None:
-                    result = ProjectResult(ProjectOutcome.SKIPPED, skip_reason)
+                if isinstance(reason, UnavailableReason):
+                    result = ProjectResult(ProjectOutcome.UNAVAILABLE, reason)
+                elif wikidata.edit_counter > edits_before:
+                    result = ProjectResult(ProjectOutcome.UPDATED, reason)
+                elif reason is not None:
+                    result = ProjectResult(ProjectOutcome.SKIPPED, reason)
                 else:
-                    result = ProjectResult(
-                        ProjectOutcome.UPDATED
-                        if wikidata.edit_counter > edits_before
-                        else ProjectOutcome.UNCHANGED
-                    )
+                    result = ProjectResult(ProjectOutcome.UP_TO_DATE)
             break
         else:
-            logger.warning(
-                f"GitHub rate limit retries exhausted, skipping {project.q_value}"
+            logger.error(
+                "Failed to update %s: GitHub rate limit retries exhausted",
+                project.q_value,
             )
-            result = ProjectResult(ProjectOutcome.SKIPPED, SkipReason.RATE_LIMIT)
+            result = ProjectResult(
+                ProjectOutcome.FAILED, ExceptionFailure(RateLimitError)
+            )
 
+        edits = wikidata.edit_counter - edits_before
+        if edits and result.outcome is not ProjectOutcome.UPDATED:
+            logger.info(
+                "Project %s: %s (%s Wikidata edits saved before stopping)",
+                project.q_value,
+                result,
+                edits,
+            )
+        else:
+            logger.info("Project %s: %s", project.q_value, result)
         logger.info(
             f"{project.label} took {duration:.3f}s "
             + f"({duration - maxlag.wait_seconds:.3f}s outside maxlag waits); {maxlag}"
