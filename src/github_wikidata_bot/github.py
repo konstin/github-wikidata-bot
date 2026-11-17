@@ -10,7 +10,7 @@ import textwrap
 import time
 from asyncio import Semaphore
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -201,8 +201,24 @@ class GitHubClient:
         if len(repos) > 100:
             raise ValueError("Repository batches must contain at most 100 repositories")
 
+        # Use REST field names for the shared model and include prereleases.
+        release_and_tag_preview = """
+            refs(refPrefix: "refs/tags/", first: 1) {
+                nodes { name }
+                pageInfo { hasNextPage }
+            }
+            releases(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
+                nodes {
+                    tag_name: tagName
+                    name
+                    prerelease: isPrerelease
+                    published_at: publishedAt
+                    html_url: url
+                }
+            }
+        """
         repositories = await self._fetch_graphql_repositories(
-            repos, tag_limit=1, include_releases=True
+            repos, release_and_tag_preview
         )
         summaries = {}
         repos_needing_tags = []
@@ -225,48 +241,34 @@ class GitHubClient:
                 repos_needing_tags.append(repo)
 
         if repos_needing_tags:
+            tag_page = """
+                refs(refPrefix: "refs/tags/", first: 100) {
+                    nodes { name }
+                    pageInfo { hasNextPage }
+                }
+            """
             repositories = await self._fetch_graphql_repositories(
-                repos_needing_tags, tag_limit=100
+                repos_needing_tags, tag_page
             )
             for repo, repository in repositories.items():
                 summary = summaries[repo]
                 if repository.get("nameWithOwner") != summary.name_with_owner:
                     continue
                 tags = _complete_graphql_tags(repository.get("refs") or {})
-                summaries[repo] = replace(summary, tags=tags)
+                summaries[repo] = RepositorySummary(
+                    summary.latest_releases, tags, summary.name_with_owner
+                )
 
         return summaries
 
     async def _fetch_graphql_repositories(
-        self,
-        repos: list[GitHubRepo],
-        *,
-        tag_limit: int,
-        include_releases: bool = False,
+        self, repos: list[GitHubRepo], fields: str
     ) -> dict[GitHubRepo, dict[str, Any]]:
-        release_fields = ""
-        if include_releases:
-            # Use REST field names for the shared model and include prereleases.
-            release_fields = """
-                releases(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
-                    nodes {
-                        tag_name: tagName
-                        name
-                        prerelease: isPrerelease
-                        published_at: publishedAt
-                        html_url: url
-                    }
-                }
-            """
         repositories = "\n".join(
             f"""
             repo{idx}: repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
                 nameWithOwner
-                refs(refPrefix: "refs/tags/", first: {tag_limit}) {{
-                    nodes {{ name }}
-                    pageInfo {{ hasNextPage }}
-                }}
-                {release_fields}
+                {fields}
             }}
             """
             for idx, repo in enumerate(repos)
@@ -318,7 +320,7 @@ class GitHubClient:
         cost = (data.get("rateLimit") or {}).get("cost")
         logger.info(
             f"Fetched GraphQL data for {len(repositories_by_repo)}/{len(repos)} repositories "
-            f"(tag limit: {tag_limit}, cost: {cost})"
+            f"(cost: {cost})"
         )
         return repositories_by_repo
 
