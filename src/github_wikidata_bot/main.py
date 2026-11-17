@@ -34,12 +34,12 @@ from github_wikidata_bot.github import (
 )
 from github_wikidata_bot.project import GitHubRepo, InvalidProject, WikidataProject
 from github_wikidata_bot.run_summary import (
+    FailureReason,
     ProjectOutcome,
     ProjectResult,
     RunSummary,
     SkipReason,
     UnavailableReason,
-    format_failure_reason,
 )
 from github_wikidata_bot.settings import Secrets, Settings
 from github_wikidata_bot.sparql import cached_projects_query, query_best_versions
@@ -316,7 +316,7 @@ async def update_project_with_retries(
                     f"Failed to update {project.q_value}: {type(err).__name__}: {err}"  # noqa: TRY401
                 )
                 result = ProjectResult(
-                    ProjectOutcome.FAILED, format_failure_reason(err)
+                    ProjectOutcome.FAILED, FailureReason.from_exception(err)
                 )
             else:
                 if isinstance(reason, UnavailableReason):
@@ -333,7 +333,7 @@ async def update_project_with_retries(
                 "Failed to update %s: GitHub rate limit retries exhausted",
                 project.q_value,
             )
-            result = ProjectResult(ProjectOutcome.FAILED, RateLimitError.__name__)
+            result = ProjectResult(ProjectOutcome.FAILED, FailureReason(RateLimitError))
 
         edits = wikidata.edit_counter - edits_before
         if edits and result.outcome is not ProjectOutcome.UPDATED:

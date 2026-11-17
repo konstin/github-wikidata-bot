@@ -41,20 +41,37 @@ class UnavailableReason(Enum):
     ENTITY_TOO_BIG = "entity too big"
 
 
-def format_failure_reason(error: Exception) -> str:
-    name = type(error).__name__
-    if isinstance(error, HTTPStatusError):
-        return f"{name} ({error.response.status_code})"
-    if isinstance(error, ServerError):
-        return f"{name} ({error.status_code})"
-    if isinstance(error, APIError):
-        return f"{name} ({error.code})"
-    # asyncio.wait_for preserves the interrupted wait as the timeout's cause.
-    if isinstance(error, TimeoutError) and isinstance(
-        error.__cause__, MaxLagWaitCancelledError
-    ):
-        return f"{name} (maxlag wait)"
-    return name
+@dataclass(frozen=True)
+class FailureReason:
+    exception_type: type[Exception]
+    http_status: int | None = None
+    api_code: str | None = None
+    timed_out_during_maxlag: bool = False
+
+    @classmethod
+    def from_exception(cls, error: Exception) -> FailureReason:
+        if isinstance(error, HTTPStatusError):
+            return cls(type(error), http_status=error.response.status_code)
+        if isinstance(error, ServerError):
+            return cls(type(error), http_status=error.status_code)
+        if isinstance(error, APIError):
+            return cls(type(error), api_code=error.code)
+        # asyncio.wait_for preserves the interrupted wait as the timeout's cause.
+        if isinstance(error, TimeoutError) and isinstance(
+            error.__cause__, MaxLagWaitCancelledError
+        ):
+            return cls(type(error), timed_out_during_maxlag=True)
+        return cls(type(error))
+
+    def __str__(self) -> str:
+        name = self.exception_type.__name__
+        if self.http_status is not None:
+            return f"{name} ({self.http_status})"
+        if self.api_code is not None:
+            return f"{name} ({self.api_code})"
+        if self.timed_out_during_maxlag:
+            return f"{name} (maxlag wait)"
+        return name
 
 
 @dataclass(frozen=True)
@@ -65,7 +82,7 @@ class ProjectResult:
     """
 
     outcome: ProjectOutcome
-    reason: SkipReason | UnavailableReason | str | None = None
+    reason: SkipReason | UnavailableReason | FailureReason | None = None
     maxlag: MaxLagStats = field(default_factory=MaxLagStats)
 
     def __str__(self) -> str:
@@ -84,7 +101,7 @@ class RunSummary:
     outcomes: Counter[ProjectOutcome] = field(default_factory=Counter)
     skips: Counter[SkipReason] = field(default_factory=Counter)
     unavailable: Counter[UnavailableReason] = field(default_factory=Counter)
-    failures: Counter[str] = field(default_factory=Counter)
+    failures: Counter[FailureReason] = field(default_factory=Counter)
     maxlag_projects: int = 0
     maxlag: MaxLagStats = field(default_factory=MaxLagStats)
 
@@ -101,7 +118,7 @@ class RunSummary:
             self.skips[result.reason] += 1
         elif isinstance(result.reason, UnavailableReason):
             self.unavailable[result.reason] += 1
-        elif isinstance(result.reason, str):
+        elif isinstance(result.reason, FailureReason):
             self.failures[result.reason] += 1
 
     def __str__(self) -> str:
@@ -129,7 +146,9 @@ class RunSummary:
                 "failure reasons: "
                 + ", ".join(
                     f"{reason}={count}"
-                    for reason, count in sorted(self.failures.items())
+                    for reason, count in sorted(
+                        self.failures.items(), key=lambda entry: str(entry[0])
+                    )
                 )
             )
         details.append(f"maxlag: projects={self.maxlag_projects}, {self.maxlag}")
