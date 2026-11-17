@@ -42,36 +42,57 @@ class UnavailableReason(Enum):
 
 
 @dataclass(frozen=True)
-class FailureReason:
+class ExceptionFailure:
     exception_type: type[Exception]
-    http_status: int | None = None
-    api_code: str | None = None
-    timed_out_during_maxlag: bool = False
-
-    @classmethod
-    def from_exception(cls, error: Exception) -> FailureReason:
-        if isinstance(error, HTTPStatusError):
-            return cls(type(error), http_status=error.response.status_code)
-        if isinstance(error, ServerError):
-            return cls(type(error), http_status=error.status_code)
-        if isinstance(error, APIError):
-            return cls(type(error), api_code=error.code)
-        # asyncio.wait_for preserves the interrupted wait as the timeout's cause.
-        if isinstance(error, TimeoutError) and isinstance(
-            error.__cause__, MaxLagWaitCancelledError
-        ):
-            return cls(type(error), timed_out_during_maxlag=True)
-        return cls(type(error))
 
     def __str__(self) -> str:
-        name = self.exception_type.__name__
-        if self.http_status is not None:
-            return f"{name} ({self.http_status})"
-        if self.api_code is not None:
-            return f"{name} ({self.api_code})"
-        if self.timed_out_during_maxlag:
-            return f"{name} (maxlag wait)"
-        return name
+        return self.exception_type.__name__
+
+
+@dataclass(frozen=True)
+class HTTPStatusFailure:
+    exception_type: type[HTTPStatusError | ServerError]
+    status_code: int
+
+    def __str__(self) -> str:
+        return f"{self.exception_type.__name__} ({self.status_code})"
+
+
+@dataclass(frozen=True)
+class WikidataAPIFailure:
+    exception_type: type[APIError]
+    api_code: str
+
+    def __str__(self) -> str:
+        return f"{self.exception_type.__name__} ({self.api_code})"
+
+
+@dataclass(frozen=True)
+class MaxLagTimeoutFailure:
+    exception_type: type[TimeoutError]
+
+    def __str__(self) -> str:
+        return f"{self.exception_type.__name__} (maxlag wait)"
+
+
+type FailureReason = (
+    ExceptionFailure | HTTPStatusFailure | WikidataAPIFailure | MaxLagTimeoutFailure
+)
+
+
+def classify_failure(error: Exception) -> FailureReason:
+    if isinstance(error, HTTPStatusError):
+        return HTTPStatusFailure(type(error), error.response.status_code)
+    if isinstance(error, ServerError):
+        return HTTPStatusFailure(type(error), error.status_code)
+    if isinstance(error, APIError) and error.code is not None:
+        return WikidataAPIFailure(type(error), error.code)
+    # asyncio.wait_for preserves the interrupted wait as the timeout's cause.
+    if isinstance(error, TimeoutError) and isinstance(
+        error.__cause__, MaxLagWaitCancelledError
+    ):
+        return MaxLagTimeoutFailure(type(error))
+    return ExceptionFailure(type(error))
 
 
 @dataclass(frozen=True)
@@ -112,14 +133,14 @@ class RunSummary:
         self.maxlag.rejections += result.maxlag.rejections
         self.maxlag.requested_wait_seconds += result.maxlag.requested_wait_seconds
         self.maxlag.wait_seconds += result.maxlag.wait_seconds
-        if result.outcome is ProjectOutcome.SKIPPED and isinstance(
-            result.reason, SkipReason
-        ):
-            self.skips[result.reason] += 1
-        elif isinstance(result.reason, UnavailableReason):
-            self.unavailable[result.reason] += 1
-        elif isinstance(result.reason, FailureReason):
-            self.failures[result.reason] += 1
+        reason = result.reason
+        if isinstance(reason, SkipReason):
+            if result.outcome is ProjectOutcome.SKIPPED:
+                self.skips[reason] += 1
+        elif isinstance(reason, UnavailableReason):
+            self.unavailable[reason] += 1
+        elif reason is not None:
+            self.failures[reason] += 1
 
     def __str__(self) -> str:
         totals = ", ".join(
