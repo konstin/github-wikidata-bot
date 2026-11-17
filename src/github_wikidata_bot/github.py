@@ -72,9 +72,8 @@ class RequestKey:
 @dataclass(frozen=True)
 class RepositorySummary:
     latest_releases: list[GitHubRelease]
-    # All tag names, `None` if unknown or if there are more than fit in one page.
+    # Complete tag names from the requested repository, when available.
     tags: list[str] | None
-    name_with_owner: str | None
 
 
 class GitHubClient:
@@ -228,17 +227,18 @@ class GitHubClient:
             if nodes is None or nodes == [None]:
                 continue
             releases = RELEASE_LIST_ADAPTER.validate_python(nodes)
-            name = repository.get("nameWithOwner")
-            refs = repository.get("refs") or {}
-            summaries[repo] = RepositorySummary(
-                releases, _complete_graphql_tags(refs), name
-            )
+            tags = None
+            # The fast path only uses tags for release-free repositories at the requested name.
             if (
                 not releases
-                and name == f"{repo.org}/{repo.project}"
-                and (refs.get("pageInfo") or {}).get("hasNextPage") is True
+                and repository.get("nameWithOwner") == f"{repo.org}/{repo.project}"
             ):
-                repos_needing_tags.append(repo)
+                refs = repository.get("refs") or {}
+                if (refs.get("pageInfo") or {}).get("hasNextPage") is True:
+                    repos_needing_tags.append(repo)
+                else:
+                    tags = _complete_graphql_tags(refs)
+            summaries[repo] = RepositorySummary(releases, tags)
 
         if repos_needing_tags:
             tag_page = """
@@ -251,13 +251,11 @@ class GitHubClient:
                 repos_needing_tags, tag_page
             )
             for repo, repository in repositories.items():
-                summary = summaries[repo]
-                if repository.get("nameWithOwner") != summary.name_with_owner:
+                if repository.get("nameWithOwner") != f"{repo.org}/{repo.project}":
                     continue
                 tags = _complete_graphql_tags(repository.get("refs") or {})
-                summaries[repo] = RepositorySummary(
-                    summary.latest_releases, tags, summary.name_with_owner
-                )
+                if tags is not None:
+                    summaries[repo] = RepositorySummary([], tags)
 
         return summaries
 

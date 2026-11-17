@@ -165,13 +165,7 @@ async def update_project(
     maxlag: MaxLagStats,
     repository: RepositorySummary | None = None,
 ) -> SkipReason | None:
-    # Keep the REST redirect path when GitHub reports a different repository name.
-    tags = None
-    if (
-        repository is not None
-        and repository.name_with_owner == f"{project.repo.org}/{project.repo.project}"
-    ):
-        tags = repository.tags
+    tags = repository.tags if repository is not None else None
     no_releases_or_tags = (
         bool(project.label)
         and repository is not None
