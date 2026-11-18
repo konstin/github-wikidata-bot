@@ -25,6 +25,7 @@ from github_wikidata_bot.github import (
     GitHubRelease,
     Project,
     RateLimitError,
+    RepositoryMetadata,
     RepositorySummary,
     RepositoryUnavailableError,
     analyse_release,
@@ -64,6 +65,7 @@ async def check_fast_path(
     github_client: GitHubClient,
     releases: list[GitHubRelease] | None = None,
     tags: list[str] | None = None,
+    metadata: RepositoryMetadata | None = None,
 ) -> bool:
     """Check whether the latest GitHub release matches the latest version on wikidata, and if so,
     skip the expensive processing.
@@ -136,13 +138,18 @@ async def check_fast_path(
             else:
                 logger.info(f"No fast path, fetch tags errored: {e}")
                 return False
-        try:
-            project_info, _, _ = await github_client.fetch_json(project.repo.api_base())
-        except HTTPStatusError as err:
-            if err.response.status_code == 404:
-                return False
-            raise
-        assert isinstance(project_info, dict)  # For the type checker
+        if metadata is None:
+            try:
+                project_info, _, _ = await github_client.fetch_json(
+                    project.repo.api_base()
+                )
+            except HTTPStatusError as err:
+                if err.response.status_code == 404:
+                    return False
+                raise
+            assert isinstance(project_info, dict)  # For the type checker
+        else:
+            project_info = metadata
         extracted_tags = [
             analyse_tag(release, project_info, []) for release in rest_tags
         ]
@@ -178,6 +185,7 @@ async def update_project(
     repository: RepositorySummary | None = None,
 ) -> SkipReason | UnavailableReason | None:
     tags = repository.tags if repository is not None else None
+    metadata = repository.metadata if repository is not None else None
     no_releases_or_tags = (
         bool(project.label)
         and repository is not None
@@ -196,6 +204,7 @@ async def update_project(
             github_client,
             repository.latest_releases if repository is not None else None,
             tags,
+            metadata,
         ):
             return
 
@@ -206,6 +215,7 @@ async def update_project(
             settings,
             wikidata.tags_over_releases,
             no_tags=no_releases_or_tags,
+            metadata=metadata,
         )
     except RepositoryUnavailableError as err:
         if err.response.status_code == 404:
