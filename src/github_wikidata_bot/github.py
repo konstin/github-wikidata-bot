@@ -10,10 +10,10 @@ import textwrap
 import time
 from asyncio import Semaphore
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, TypedDict
 from urllib.parse import quote_plus
 
 import sentry_sdk
@@ -70,11 +70,26 @@ class RequestKey:
     headers: frozenset[tuple[str, str]]
 
 
+class RepositoryLicense(TypedDict):
+    spdx_id: str | None
+
+
+class RepositoryMetadata(TypedDict):
+    name: str
+    html_url: str
+    homepage: str | None
+    license: RepositoryLicense | None
+
+
+REPOSITORY_METADATA_ADAPTER = TypeAdapter(RepositoryMetadata)
+
+
 @dataclass(frozen=True)
 class RepositorySummary:
     latest_releases: list[GitHubRelease]
     # Complete tag names from the requested repository, when available.
     tags: list[str] | None
+    metadata: RepositoryMetadata | None = None
 
 
 class GitHubClient:
@@ -194,7 +209,7 @@ class GitHubClient:
     async def fetch_repository_summaries_graphql(
         self, repos: list[GitHubRepo]
     ) -> dict[GitHubRepo, RepositorySummary]:
-        """Fetch release summaries and complete tag lists where the fast path needs them."""
+        """Fetch repository metadata, release previews, and selective full tag lists."""
         repos = list(dict.fromkeys(repos))
         if not repos:
             return {}
@@ -203,6 +218,10 @@ class GitHubClient:
 
         # Use REST field names for the shared model and include prereleases.
         release_and_tag_preview = """
+            name
+            html_url: url
+            homepage: homepageUrl
+            license: licenseInfo { spdx_id: spdxId }
             refs(refPrefix: "refs/tags/", first: 1) {
                 nodes { name }
                 pageInfo { hasNextPage }
@@ -229,17 +248,22 @@ class GitHubClient:
                 continue
             releases = RELEASE_LIST_ADAPTER.validate_python(nodes)
             tags = None
+            metadata = None
+            same_repo = repository.get("nameWithOwner") == f"{repo.org}/{repo.project}"
+            if same_repo:
+                try:
+                    metadata = REPOSITORY_METADATA_ADAPTER.validate_python(repository)
+                except ValidationError:
+                    pass  # Incomplete metadata falls back to the REST lookup.
+
             # The fast path only uses tags for release-free repositories at the requested name.
-            if (
-                not releases
-                and repository.get("nameWithOwner") == f"{repo.org}/{repo.project}"
-            ):
+            if not releases and same_repo:
                 refs = repository.get("refs") or {}
                 if (refs.get("pageInfo") or {}).get("hasNextPage") is True:
                     repos_needing_tags.append(repo)
                 else:
                     tags = _complete_graphql_tags(refs)
-            summaries[repo] = RepositorySummary(releases, tags)
+            summaries[repo] = RepositorySummary(releases, tags, metadata)
 
         if repos_needing_tags:
             tag_page = """
@@ -256,7 +280,7 @@ class GitHubClient:
                     continue
                 tags = _complete_graphql_tags(repository.get("refs") or {})
                 if tags is not None:
-                    summaries[repo] = RepositorySummary([], tags)
+                    summaries[repo] = replace(summaries[repo], tags=tags)
 
         return summaries
 
@@ -654,7 +678,7 @@ def analyse_release(release: GitHubRelease, project_name: str | None) -> Release
 
 
 def analyse_tag(
-    release: dict, project_info: dict, invalid_version_strings: list[str]
+    release: dict, project_info: Mapping[str, Any], invalid_version_strings: list[str]
 ) -> ReleaseTag | None:
     """
     Heuristics to find the version number and according meta-data for a release
@@ -723,6 +747,7 @@ async def get_data_from_github(
     # This is data from wikidata
     tags_over_releases: list[str],
     no_tags: bool,
+    metadata: RepositoryMetadata | None = None,
 ) -> Project:
     """
     Retrieve the following data from github:
@@ -743,34 +768,34 @@ async def get_data_from_github(
         cache_root().joinpath(project.repo.org).joinpath(project.repo.project)
     )
 
-    # General project information
-    api_url = project.repo.api_base()
-    try:
-        project_info, response_url = await fetch_cached(
-            api_url, repo_cache_root.joinpath("index.json"), client, allow_stale
-        )
-    except HTTPStatusError as err:
-        if err.response.status_code == 404:
-            raise RepositoryUnavailableError(
-                str(err), request=err.request, response=err.response
-            ) from err
-        raise
+    canonical_repo = None
+    if metadata is None:
+        api_url = project.repo.api_base()
+        try:
+            project_info, response_url = await fetch_cached(
+                api_url, repo_cache_root.joinpath("index.json"), client, allow_stale
+            )
+        except HTTPStatusError as err:
+            if err.response.status_code == 404:
+                raise RepositoryUnavailableError(
+                    str(err), request=err.request, response=err.response
+                ) from err
+            raise
+
+        # GitHub redirects renamed repositories to an API URL containing their numeric ID.
+        if response_url != api_url:
+            canonical_repo = GitHubRepo(
+                project_info["owner"]["login"], project_info["name"]
+            )
+            logger.info(f"Repo renamed: {project.repo} -> {canonical_repo}")
+    else:
+        project_info = metadata
 
     website = project_info.get("homepage")
     if project_license := project_info.get("license"):
         spdx_id = project_license["spdx_id"]
     else:
         spdx_id = None
-
-    # Detect repo renames. We need to use the response body as the redirect goes to
-    # `https://api.github.com/repositories/<id>`.
-    if response_url != api_url:
-        canonical_repo = GitHubRepo(
-            project_info["owner"]["login"], project_info["name"]
-        )
-        logger.info(f"Repo renamed: {project.repo} -> {canonical_repo}")
-    else:
-        canonical_repo = None
 
     releases = await get_releases(project.repo, repo_cache_root, client, allow_stale)
 
