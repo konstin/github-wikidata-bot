@@ -67,6 +67,9 @@ def extract_version(string: str, name: str | None = None) -> tuple[str, str] | N
         r"(^|[._ -])(final|release)([._ -]|$)", "", string, flags=re.IGNORECASE
     )
 
+    # Remove strings which could be misinterpreted
+    string = re.sub(r"presentation", "", string, flags=re.IGNORECASE)
+
     # Replace underscore/hyphen with dots if only underscores/hyphens are used
     if re.fullmatch(r"[0-9_]*", string):
         string = string.replace("_", ".")
