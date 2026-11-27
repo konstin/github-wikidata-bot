@@ -8,9 +8,11 @@ import logging
 import os
 import textwrap
 import time
+import zlib
 from asyncio import Semaphore
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, TypedDict
@@ -37,16 +39,41 @@ from github_wikidata_bot.version import SimpleSortableVersion, extract_version
 logger = logging.getLogger(__name__)
 
 
+class GitHubApi(Enum):
+    """The APIs have separate rate limits."""
+
+    REST = "rest"
+    GRAPHQL = "graphql"
+
+
 class RateLimitError(Exception):
     sleep: float
+    api: GitHubApi
 
-    def __init__(self, sleep: float):
+    def __init__(self, sleep: float, api: GitHubApi):
         self.sleep = sleep
+        self.api = api
 
 
-async def wait_for_rate_limit(seconds: float, api: str) -> None:
+class GraphQLError(Exception):
+    """GitHub GraphQL answered without usable data."""
+
+
+# Use REST field names for the shared model.
+GRAPHQL_RELEASE_FIELDS = """
+    tag_name: tagName
+    name
+    prerelease: isPrerelease
+    published_at: publishedAt
+    html_url: url
+"""
+# Only the newest releases are fetched.
+MAX_RELEASES_FETCHED = 1000
+
+
+async def wait_for_rate_limit(seconds: float, api: GitHubApi) -> None:
     with sentry_sdk.start_span(
-        op="github.rate_limit_wait", description=f"GitHub {api} rate-limit wait"
+        op="github.rate_limit_wait", description=f"GitHub {api.value} rate-limit wait"
     ):
         start = time.perf_counter()
         try:
@@ -56,7 +83,7 @@ async def wait_for_rate_limit(seconds: float, api: str) -> None:
                 "bot.github.rate_limit_wait",
                 time.perf_counter() - start,
                 unit="second",
-                attributes={"github.api": api},
+                attributes={"github.api": api.value},
             )
 
 
@@ -90,6 +117,7 @@ class RepositorySummary:
     # Complete tag names from the requested repository, when available.
     tags: list[str] | None
     metadata: RepositoryMetadata | None = None
+    release_fingerprint: ReleaseFingerprint | None = None
 
 
 def _decode_json_response(response: Response) -> Any | None:
@@ -166,6 +194,7 @@ class GitHubClient:
     ) -> Response:
         if caching_headers is None:
             caching_headers = {}
+        api = GitHubApi.REST if query is None else GitHubApi.GRAPHQL
 
         for attempt in range(self.settings.retries):
             try:
@@ -223,11 +252,11 @@ class GitHubClient:
             for key, value in response.headers.items():
                 if key.startswith("x-ratelimit"):
                     logger.info(f"header {key}: {value}")
-            raise RateLimitError(seconds_to_reset + 1)
+            raise RateLimitError(seconds_to_reset + 1, api)
 
         if response.status_code == 429:
             # We've hit github's abuse limits, wait 5min and try again
-            raise RateLimitError(5 * 60)
+            raise RateLimitError(5 * 60, api)
 
         if response.status_code == 304:
             logger.info(f"Not modified: {url}")
@@ -251,24 +280,19 @@ class GitHubClient:
             raise ValueError("Repository batches must contain at most 100 repositories")
 
         # Use REST field names for the shared model and include prereleases.
-        release_and_tag_preview = """
+        release_and_tag_preview = f"""
             name
             html_url: url
             homepage: homepageUrl
-            license: licenseInfo { spdx_id: spdxId }
-            refs(refPrefix: "refs/tags/", first: 1) {
-                nodes { name }
-                pageInfo { hasNextPage }
-            }
-            releases(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
-                nodes {
-                    tag_name: tagName
-                    name
-                    prerelease: isPrerelease
-                    published_at: publishedAt
-                    html_url: url
-                }
-            }
+            license: licenseInfo {{ spdx_id: spdxId }}
+            refs(refPrefix: "refs/tags/", first: 1) {{
+                nodes {{ name }}
+                pageInfo {{ hasNextPage }}
+            }}
+            releases(first: 1, orderBy: {{field: CREATED_AT, direction: DESC}}) {{
+                totalCount
+                nodes {{ {GRAPHQL_RELEASE_FIELDS} }}
+            }}
         """
         repositories = await self._fetch_graphql_repositories(
             repos, release_and_tag_preview
@@ -281,6 +305,10 @@ class GitHubClient:
             if nodes is None or nodes == [None]:
                 continue
             releases = RELEASE_LIST_ADAPTER.validate_python(nodes)
+            fingerprint = ReleaseFingerprint(
+                count=repository["releases"]["totalCount"],
+                latest=releases[0] if releases else None,
+            )
             tags = None
             metadata = None
             same_repo = repository.get("nameWithOwner") == f"{repo.org}/{repo.project}"
@@ -297,7 +325,7 @@ class GitHubClient:
                     repos_needing_tags.append(repo)
                 else:
                     tags = _complete_graphql_tags(refs)
-            summaries[repo] = RepositorySummary(releases, tags, metadata)
+            summaries[repo] = RepositorySummary(releases, tags, metadata, fingerprint)
 
         if repos_needing_tags:
             tag_page = """
@@ -340,7 +368,9 @@ class GitHubClient:
                 assert isinstance(payload, dict)
                 errors = payload.get("errors", [])
                 if any(error.get("type") == "RATE_LIMITED" for error in errors):
-                    raise RateLimitError(float(headers.get("retry-after", 300)))
+                    raise RateLimitError(
+                        float(headers.get("retry-after", 300)), GitHubApi.GRAPHQL
+                    )
             except RateLimitError as err:
                 if attempt == self.settings.retries - 1:
                     logger.warning(
@@ -350,7 +380,7 @@ class GitHubClient:
                 logger.info(
                     f"GitHub GraphQL rate limit, sleeping for {int(err.sleep)}s"
                 )
-                await wait_for_rate_limit(err.sleep, "graphql")
+                await wait_for_rate_limit(err.sleep, GitHubApi.GRAPHQL)
                 continue
             except HTTPError as err:
                 logger.warning(
@@ -380,6 +410,68 @@ class GitHubClient:
             f"(cost: {cost})"
         )
         return repositories_by_repo
+
+    async def fetch_releases_graphql(
+        self, repo: GitHubRepo
+    ) -> tuple[ReleaseFingerprint, list[GitHubRelease]]:
+        """Fetch the newest releases without their assets, and their fingerprint.
+
+        Asset download counts change the REST etags all the time, and assets make
+        the REST pages too large for some repositories.
+        """
+        fingerprint: ReleaseFingerprint | None = None
+        releases: list[GitHubRelease] = []
+        cursor = None
+        while True:
+            after = f", after: {json.dumps(cursor)}" if cursor else ""
+            query = f"""query {{
+                repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
+                    releases(first: 100{after}, orderBy: {{field: CREATED_AT, direction: DESC}}) {{
+                        total_count: totalCount
+                        page_info: pageInfo {{
+                            has_next_page: hasNextPage
+                            end_cursor: endCursor
+                        }}
+                        nodes {{ {GRAPHQL_RELEASE_FIELDS} tag {{ id }} }}
+                    }}
+                }}
+            }}"""
+            payload, headers, _ = await self.fetch_json(
+                "https://api.github.com/graphql", query=query
+            )
+            assert isinstance(payload, dict)  # For the type checker
+            if errors := payload.get("errors"):
+                if any(error.get("type") == "RATE_LIMITED" for error in errors):
+                    raise RateLimitError(
+                        float(headers.get("retry-after", 300)), GitHubApi.GRAPHQL
+                    )
+                raise GraphQLError(", ".join(error["message"] for error in errors))
+            repository = (payload.get("data") or {}).get("repository") or {}
+            try:
+                page = GraphQLReleasePage.model_validate(repository.get("releases"))
+            except ValidationError as err:
+                # The repository, the list and its nodes are nullable.
+                raise GraphQLError(f"Incomplete releases for {repo}") from err
+
+            if fingerprint is None:
+                fingerprint = ReleaseFingerprint(
+                    count=page.total_count,
+                    latest=page.nodes[0].release() if page.nodes else None,
+                )
+            for node in page.nodes:
+                # REST doesn't list releases whose tag was deleted.
+                if node.tag is not None:
+                    releases.append(node.release())
+            if (
+                not page.page_info.has_next_page
+                or len(releases) >= MAX_RELEASES_FETCHED
+            ):
+                break
+            cursor = page.page_info.end_cursor
+
+        assert fingerprint is not None  # For the type checker
+        logger.info(f"Fetched {len(releases)} releases through GraphQL for {repo}")
+        return fingerprint, releases[:MAX_RELEASES_FETCHED]
 
 
 def _complete_graphql_tags(refs: dict[str, Any]) -> list[str] | None:
@@ -520,7 +612,43 @@ class CachedReleasePage(CachedResponse):
     payload: list[GitHubRelease]
 
 
-def _read_cached_response[Cache: CachedResponse](
+class GraphQLTag(BaseModel):
+    id: str
+
+
+class GraphQLRelease(GitHubRelease):
+    # Null if the tag was deleted.
+    tag: GraphQLTag | None
+
+    def release(self) -> GitHubRelease:
+        return GitHubRelease(**self.model_dump(exclude={"tag"}))
+
+
+class GraphQLPageInfo(BaseModel):
+    has_next_page: bool
+    end_cursor: str | None
+
+
+class GraphQLReleasePage(BaseModel):
+    total_count: int
+    page_info: GraphQLPageInfo
+    nodes: list[GraphQLRelease]
+
+
+class ReleaseFingerprint(BaseModel):
+    """Changes when a release is added or removed, or the latest release is edited."""
+
+    count: int
+    latest: GitHubRelease | None
+
+
+class CachedReleases(BaseModel):
+    fingerprint: ReleaseFingerprint
+    fetched: datetime.datetime
+    releases: list[GitHubRelease]
+
+
+def _read_cached_response[Cache: BaseModel](
     cache_path: Path, cache_type: type[Cache]
 ) -> Cache | None:
     try:
@@ -547,7 +675,7 @@ def _open_unnamed_cache_file(cache_dir: Path) -> int | None:
         return None
 
 
-def _write_cached_response(cache_path: Path, cached: CachedResponse) -> None:
+def _write_cached_response(cache_path: Path, cached: BaseModel) -> None:
     """Publish the cache only after the complete response has been written."""
     fd = _open_unnamed_cache_file(cache_path.parent)
     if fd is None:
@@ -581,6 +709,66 @@ def _write_cached_response(cache_path: Path, cached: CachedResponse) -> None:
 
 @sentry_sdk.trace
 async def get_releases(
+    repo: GitHubRepo,
+    repo_cache_root: Path,
+    client: GitHubClient,
+    allow_stale: bool,
+    fingerprint: ReleaseFingerprint | None = None,
+) -> list[GitHubRelease]:
+    """Fetch releases through GraphQL, or through REST without a fingerprint."""
+    if fingerprint is not None:
+        try:
+            return await _get_releases_graphql(
+                repo, repo_cache_root, client, allow_stale, fingerprint
+            )
+        except (GraphQLError, HTTPError) as err:
+            logger.warning(
+                f"GitHub GraphQL release lookup for {repo} failed; using REST: {err}"
+            )
+    return await _get_releases_rest(repo, repo_cache_root, client, allow_stale)
+
+
+def _release_cache_max_age(repo: GitHubRepo) -> datetime.timedelta:
+    """The fingerprint misses edits to older releases, so refresh every one to two weeks.
+
+    The age depends on the repository to spread the refreshes over the runs.
+    """
+    return datetime.timedelta(days=7 + zlib.crc32(str(repo).encode()) % 7)
+
+
+async def _get_releases_graphql(
+    repo: GitHubRepo,
+    repo_cache_root: Path,
+    client: GitHubClient,
+    allow_stale: bool,
+    fingerprint: ReleaseFingerprint,
+) -> list[GitHubRelease]:
+    """Fetch releases through GraphQL, unless the cache matches the fingerprint."""
+    cache_path = repo_cache_root.joinpath("releases.json")
+    now = datetime.datetime.now(datetime.UTC)
+    cached = _read_cached_response(cache_path, CachedReleases)
+    if cached is not None and allow_stale:
+        logger.info(f"Cache unchecked: releases of {repo}")
+        return cached.releases
+    if (
+        cached is not None
+        and cached.fingerprint == fingerprint
+        and now - cached.fetched < _release_cache_max_age(repo)
+    ):
+        logger.info(f"Releases unchanged: {repo}")
+        return cached.releases
+
+    # The releases may be newer than the fingerprint from the start of the batch.
+    fingerprint, releases = await client.fetch_releases_graphql(repo)
+    repo_cache_root.mkdir(exist_ok=True, parents=True)
+    _write_cached_response(
+        cache_path,
+        CachedReleases(fingerprint=fingerprint, fetched=now, releases=releases),
+    )
+    return releases
+
+
+async def _get_releases_rest(
     repo: GitHubRepo, repo_cache_root: Path, client: GitHubClient, allow_stale: bool
 ) -> list[GitHubRelease]:
     """Fetch releases, reducing the page size if GitHub cannot serve larger pages."""
@@ -609,7 +797,7 @@ async def _get_releases(
     releases_cache.mkdir(exist_ok=True, parents=True)
 
     # Preserve the 1000-release limit even when the page size does not divide it.
-    max_releases = 1000
+    max_releases = MAX_RELEASES_FETCHED
     max_pages = (max_releases + per_page - 1) // per_page
     all_releases: list[GitHubRelease] = []
     for page_number in range(1, max_pages + 1):
@@ -780,6 +968,7 @@ async def get_data_from_github(
     tags_over_releases: list[str],
     no_tags: bool,
     metadata: RepositoryMetadata | None = None,
+    release_fingerprint: ReleaseFingerprint | None = None,
 ) -> Project:
     """
     Retrieve the following data from github:
@@ -829,7 +1018,9 @@ async def get_data_from_github(
     else:
         spdx_id = None
 
-    releases = await get_releases(project.repo, repo_cache_root, client, allow_stale)
+    releases = await get_releases(
+        project.repo, repo_cache_root, client, allow_stale, release_fingerprint
+    )
 
     invalid_releases = []
     extracted: list[Release | None] = []
