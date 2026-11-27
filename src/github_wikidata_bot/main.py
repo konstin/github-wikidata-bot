@@ -186,6 +186,9 @@ async def update_project(
 ) -> SkipReason | UnavailableReason | None:
     tags = repository.tags if repository is not None else None
     metadata = repository.metadata if repository is not None else None
+    release_fingerprint = (
+        repository.release_fingerprint if repository is not None else None
+    )
     no_releases_or_tags = (
         bool(project.label)
         and repository is not None
@@ -216,6 +219,7 @@ async def update_project(
             wikidata.tags_over_releases,
             no_tags=no_releases_or_tags,
             metadata=metadata,
+            release_fingerprint=release_fingerprint,
         )
     except RepositoryUnavailableError as err:
         if err.response.status_code == 404:
@@ -314,7 +318,7 @@ async def update_project_with_retries(
                 logger.info(
                     f"github rate limit exceed, sleeping until reset in {int(e.sleep)}s"
                 )
-                await wait_for_rate_limit(e.sleep, "rest")
+                await wait_for_rate_limit(e.sleep, e.api)
                 continue
             except InvalidProject as e:
                 logger.warning(f"Invalid project, skipping: {e}")
