@@ -360,10 +360,11 @@ async def update_project_with_retries(
             f"{project.label} took {duration:.3f}s "
             + f"({duration - maxlag.wait_seconds:.3f}s outside maxlag waits); {maxlag}"
         )
+        transaction.set_tag("project.outcome", result.outcome.value)
         return ProjectResult(result.outcome, result.reason, maxlag)
 
 
-def init_logging(quiet: bool) -> None:
+def init_logging(quiet: bool) -> str:
     """
     In cron jobs you do not want logging to stdout / stderr,
     therefore the quiet option allows disabling that.
@@ -376,7 +377,8 @@ def init_logging(quiet: bool) -> None:
     log_dir = Path("log")
     log_dir.mkdir(exist_ok=True)
     timestamp = datetime.now(UTC).isoformat(timespec="seconds")
-    log_path = log_dir / f"run-{timestamp}-{os.getpid()}.log"
+    run_id = f"{timestamp}-{os.getpid()}"
+    log_path = log_dir / f"run-{run_id}.log"
 
     def _qualified(cls: type) -> str:
         return f"{cls.__module__}.{cls.__qualname__}"
@@ -406,12 +408,14 @@ def init_logging(quiet: bool) -> None:
 
     logging.config.dictConfig(conf)
     logger.info("Starting")
+    logger.info("Run ID: %s", run_id)
     # Each run creates a log file, so keep only the five newest to limit disk use.
     for old_log in sorted(log_dir.glob("run-*.log"))[:-5]:
         old_log.unlink(missing_ok=True)
+    return run_id
 
 
-def init_sentry(dsn: str):
+def init_sentry(dsn: str, run_id: str, run_mode: str) -> None:
     try:
         git_version = (
             subprocess.check_output(
@@ -430,6 +434,15 @@ def init_sentry(dsn: str):
         traces_sample_rate=0.1,
         profile_session_sample_rate=1.0,
     )
+    scope = sentry_sdk.get_isolation_scope()
+    for key, value in {"run.id": run_id, "run.mode": run_mode}.items():
+        scope.set_tag(key, value)
+        scope.set_attribute(key, value)
+
+
+def trace_stage(name: str):
+    # Capture every stage so Sentry can sum its duration across a run.
+    return sentry_sdk.start_transaction(name=name, op="bot.stage", sampled=True)
 
 
 async def run(
@@ -439,30 +452,34 @@ async def run(
     settings: Settings,
     wikidata: WikidataClient,
     github_client: GitHubClient,
-) -> RunSummary:
+    summary: RunSummary,
+) -> None:
     logger.info("Querying Projects")
-    projects = await cached_projects_query(
-        cache_sparql, wikidata, settings, project_filter
-    )
+    with trace_stage("Query projects (SPARQL)"):
+        projects = await cached_projects_query(
+            cache_sparql, wikidata, settings, project_filter
+        )
     logger.info(f"Found {len(projects)} projects")
     logger.info("Querying versions")
-    best_versions = await query_best_versions(cache_sparql, wikidata, settings)
+    with trace_stage("Query versions (SPARQL)"):
+        best_versions = await query_best_versions(cache_sparql, wikidata, settings)
     logger.info("Processing projects")
 
     projects_by_repo: dict[GitHubRepo, list[WikidataProject]] = {}
     for project in projects:
         projects_by_repo.setdefault(project.repo, []).append(project)
 
-    summary = RunSummary()
     idx = 0
     for repo_batch in batched(projects_by_repo.items(), 100):
-        repository_summaries = await github_client.fetch_repository_summaries_graphql(
-            [
-                repo
-                for repo, repo_projects in repo_batch
-                if any(project.label for project in repo_projects)
-            ]
-        )
+        repos = [
+            repo
+            for repo, repo_projects in repo_batch
+            if any(project.label for project in repo_projects)
+        ]
+        with trace_stage("Fetch GitHub GraphQL batch"):
+            repository_summaries = (
+                await github_client.fetch_repository_summaries_graphql(repos)
+            )
         for repo, repo_projects in repo_batch:
             repo_client = CachedGitHubClient(github_client)
             for project in repo_projects:
@@ -481,7 +498,6 @@ async def run(
                 summary.record(result)
                 idx += 1
     logger.info(f"# Finished: {summary}")
-    return summary
 
 
 async def main():
@@ -502,18 +518,18 @@ async def main():
     )
     args = parser.parse_args()
 
-    init_logging(args.quiet)
+    run_id = init_logging(args.quiet)
+    run_mode = "filtered" if args.filter else "full"
 
     secrets = Secrets.load()
     if secrets.sentry_dsn:
-        init_sentry(secrets.sentry_dsn)
+        init_sentry(secrets.sentry_dsn, run_id, run_mode)
     settings = Settings()
+    summary = RunSummary()
     wall_start = time.perf_counter()
     cpu_start = time.process_time()
-    run_attributes: dict[str, str | int] = {
-        "run.mode": "filtered" if args.filter else "full",
-        "run.status": "incomplete",
-    }
+    run_status = "incomplete"
+    performance_attributes: dict[str, str | int] = {}
     try:
         async with AsyncClient(
             timeout=settings.http_timeout,
@@ -524,38 +540,54 @@ async def main():
             await wikidata.connect(settings)
             github_client = GitHubClient(secrets, client, settings)
 
-            summary = await run(
+            await run(
                 args.filter,
                 args.cache_sparql,
                 args.allow_stale,
                 settings,
                 wikidata,
                 github_client,
+                summary,
             )
             logger.info(f"Made {wikidata.request_counter} wikidata requests")
-        run_attributes.update(
-            {
-                "run.status": "completed",
-                "run.projects": summary.outcomes.total(),
-                "run.wikidata_requests": wikidata.request_counter,
-            }
-        )
+        performance_attributes["run.projects"] = summary.outcomes.total()
+        performance_attributes["run.wikidata_requests"] = wikidata.request_counter
+        run_status = "completed"
     finally:
         wall_time = time.perf_counter() - wall_start
         cpu_time = time.process_time() - cpu_start
         logger.info(
             "Run performance (%s, %s): wall=%.3fs, cpu=%.3fs",
-            run_attributes["run.mode"],
-            run_attributes["run.status"],
+            run_mode,
+            run_status,
             wall_time,
             cpu_time,
         )
         if secrets.sentry_dsn:
+            run_attributes = {"run.status": run_status}
+            performance_attributes.update(run_attributes)
             metrics.distribution(
-                "bot.run.duration", wall_time, unit="second", attributes=run_attributes
+                "bot.run.duration",
+                wall_time,
+                unit="second",
+                attributes=performance_attributes,
             )
             metrics.distribution(
-                "bot.run.cpu_time", cpu_time, unit="second", attributes=run_attributes
+                "bot.run.cpu_time",
+                cpu_time,
+                unit="second",
+                attributes=performance_attributes,
+            )
+            for outcome in ProjectOutcome:
+                metrics.count(
+                    "bot.run.project_outcomes",
+                    summary.outcomes[outcome],
+                    attributes={**run_attributes, "project.outcome": outcome.value},
+                )
+            metrics.count(
+                "bot.run.maxlag_exhausted",
+                summary.failures[ExceptionFailure(MaxLagError)],
+                attributes=run_attributes,
             )
         # Close the client so the atexit handler early-returns instead of
         # printing "Sentry is attempting to send N pending events". flush()
