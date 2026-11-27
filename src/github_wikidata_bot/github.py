@@ -12,6 +12,7 @@ import zlib
 from asyncio import Semaphore
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, TypedDict
@@ -38,12 +39,18 @@ from github_wikidata_bot.version import SimpleSortableVersion, extract_version
 logger = logging.getLogger(__name__)
 
 
+class GitHubApi(Enum):
+    """The APIs have separate rate limits."""
+
+    REST = "rest"
+    GRAPHQL = "graphql"
+
+
 class RateLimitError(Exception):
     sleep: float
-    # `rest` or `graphql`, they have separate rate limits.
-    api: str
+    api: GitHubApi
 
-    def __init__(self, sleep: float, api: str = "rest"):
+    def __init__(self, sleep: float, api: GitHubApi):
         self.sleep = sleep
         self.api = api
 
@@ -64,9 +71,9 @@ GRAPHQL_RELEASE_FIELDS = """
 MAX_RELEASES_FETCHED = 1000
 
 
-async def wait_for_rate_limit(seconds: float, api: str) -> None:
+async def wait_for_rate_limit(seconds: float, api: GitHubApi) -> None:
     with sentry_sdk.start_span(
-        op="github.rate_limit_wait", description=f"GitHub {api} rate-limit wait"
+        op="github.rate_limit_wait", description=f"GitHub {api.value} rate-limit wait"
     ):
         start = time.perf_counter()
         try:
@@ -76,7 +83,7 @@ async def wait_for_rate_limit(seconds: float, api: str) -> None:
                 "bot.github.rate_limit_wait",
                 time.perf_counter() - start,
                 unit="second",
-                attributes={"github.api": api},
+                attributes={"github.api": api.value},
             )
 
 
@@ -187,7 +194,7 @@ class GitHubClient:
     ) -> Response:
         if caching_headers is None:
             caching_headers = {}
-        api = "rest" if query is None else "graphql"
+        api = GitHubApi.REST if query is None else GitHubApi.GRAPHQL
 
         for attempt in range(self.settings.retries):
             try:
@@ -362,7 +369,7 @@ class GitHubClient:
                 errors = payload.get("errors", [])
                 if any(error.get("type") == "RATE_LIMITED" for error in errors):
                     raise RateLimitError(
-                        float(headers.get("retry-after", 300)), "graphql"
+                        float(headers.get("retry-after", 300)), GitHubApi.GRAPHQL
                     )
             except RateLimitError as err:
                 if attempt == self.settings.retries - 1:
@@ -373,7 +380,7 @@ class GitHubClient:
                 logger.info(
                     f"GitHub GraphQL rate limit, sleeping for {int(err.sleep)}s"
                 )
-                await wait_for_rate_limit(err.sleep, "graphql")
+                await wait_for_rate_limit(err.sleep, GitHubApi.GRAPHQL)
                 continue
             except HTTPError as err:
                 logger.warning(
@@ -417,12 +424,14 @@ class GitHubClient:
         cursor = None
         while True:
             after = f", after: {json.dumps(cursor)}" if cursor else ""
-            # `tag` is null if the tag was deleted, REST doesn't list those releases.
             query = f"""query {{
                 repository(owner: {json.dumps(repo.org)}, name: {json.dumps(repo.project)}) {{
                     releases(first: 100{after}, orderBy: {{field: CREATED_AT, direction: DESC}}) {{
-                        totalCount
-                        pageInfo {{ hasNextPage endCursor }}
+                        total_count: totalCount
+                        page_info: pageInfo {{
+                            has_next_page: hasNextPage
+                            end_cursor: endCursor
+                        }}
                         nodes {{ {GRAPHQL_RELEASE_FIELDS} tag {{ id }} }}
                     }}
                 }}
@@ -434,33 +443,31 @@ class GitHubClient:
             if errors := payload.get("errors"):
                 if any(error.get("type") == "RATE_LIMITED" for error in errors):
                     raise RateLimitError(
-                        float(headers.get("retry-after", 300)), "graphql"
+                        float(headers.get("retry-after", 300)), GitHubApi.GRAPHQL
                     )
                 raise GraphQLError(", ".join(error["message"] for error in errors))
             repository = (payload.get("data") or {}).get("repository") or {}
-            page = repository.get("releases") or {}
-            nodes = page.get("nodes")
-            # The list and its nodes are nullable.
-            if nodes is None or None in nodes:
-                raise GraphQLError(f"Incomplete releases for {repo}")
+            try:
+                page = GraphQLReleasePage.model_validate(repository.get("releases"))
+            except ValidationError as err:
+                # The repository, the list and its nodes are nullable.
+                raise GraphQLError(f"Incomplete releases for {repo}") from err
 
-            page_releases = RELEASE_LIST_ADAPTER.validate_python(nodes)
             if fingerprint is None:
                 fingerprint = ReleaseFingerprint(
-                    count=page["totalCount"],
-                    latest=page_releases[0] if page_releases else None,
+                    count=page.total_count,
+                    latest=page.nodes[0].release() if page.nodes else None,
                 )
-            releases += [
-                release
-                for release, node in zip(page_releases, nodes)
-                if node["tag"] is not None
-            ]
+            for node in page.nodes:
+                # REST doesn't list releases whose tag was deleted.
+                if node.tag is not None:
+                    releases.append(node.release())
             if (
-                not page["pageInfo"]["hasNextPage"]
+                not page.page_info.has_next_page
                 or len(releases) >= MAX_RELEASES_FETCHED
             ):
                 break
-            cursor = page["pageInfo"]["endCursor"]
+            cursor = page.page_info.end_cursor
 
         assert fingerprint is not None  # For the type checker
         logger.info(f"Fetched {len(releases)} releases through GraphQL for {repo}")
@@ -605,6 +612,29 @@ class CachedReleasePage(CachedResponse):
     payload: list[GitHubRelease]
 
 
+class GraphQLTag(BaseModel):
+    id: str
+
+
+class GraphQLRelease(GitHubRelease):
+    # Null if the tag was deleted.
+    tag: GraphQLTag | None
+
+    def release(self) -> GitHubRelease:
+        return GitHubRelease(**self.model_dump(exclude={"tag"}))
+
+
+class GraphQLPageInfo(BaseModel):
+    has_next_page: bool
+    end_cursor: str | None
+
+
+class GraphQLReleasePage(BaseModel):
+    total_count: int
+    page_info: GraphQLPageInfo
+    nodes: list[GraphQLRelease]
+
+
 class ReleaseFingerprint(BaseModel):
     """Changes when a release is added or removed, or the latest release is edited."""
 
@@ -716,16 +746,17 @@ async def _get_releases_graphql(
     """Fetch releases through GraphQL, unless the cache matches the fingerprint."""
     cache_path = repo_cache_root.joinpath("releases.json")
     now = datetime.datetime.now(datetime.UTC)
-    if (cached := _read_cached_response(cache_path, CachedReleases)) is not None:
-        if allow_stale:
-            logger.info(f"Cache unchecked: releases of {repo}")
-            return cached.releases
-        if (
-            cached.fingerprint == fingerprint
-            and now - cached.fetched < _release_cache_max_age(repo)
-        ):
-            logger.info(f"Releases unchanged: {repo}")
-            return cached.releases
+    cached = _read_cached_response(cache_path, CachedReleases)
+    if cached is not None and allow_stale:
+        logger.info(f"Cache unchecked: releases of {repo}")
+        return cached.releases
+    if (
+        cached is not None
+        and cached.fingerprint == fingerprint
+        and now - cached.fetched < _release_cache_max_age(repo)
+    ):
+        logger.info(f"Releases unchanged: {repo}")
+        return cached.releases
 
     # The releases may be newer than the fingerprint from the start of the batch.
     fingerprint, releases = await client.fetch_releases_graphql(repo)
