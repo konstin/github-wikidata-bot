@@ -40,6 +40,9 @@ class APIError(WikidataError):
         """Check if this error is due to entity size limit."""
         return self._has_message("wikibase-error-entity-too-big")
 
+    def is_spam_blacklisted_link(self) -> bool:
+        return self._has_message("spam-blacklisted-link")
+
     def _has_message(self, name: str) -> bool:
         if messages := self.other.get("messages"):
             for message in messages:

@@ -15,6 +15,7 @@ from github_wikidata_bot.settings import Settings
 from github_wikidata_bot.version import SimpleSortableVersion
 from github_wikidata_bot.website import is_website_other_property
 from github_wikidata_bot.wikidata_api import (
+    APIError,
     Claim,
     Item,
     ItemValue,
@@ -193,7 +194,14 @@ async def update_website_and_license(
         )
         if not item.has_claim(claim, single_valued=True):
             logger.info(f"Updating {kind}")
-            await wikidata.add_claim(item, claim, maxlag, wikidata.edit_summary)
+            try:
+                await wikidata.add_claim(item, claim, maxlag, wikidata.edit_summary)
+            except APIError as err:
+                if kind != "website" or not err.is_spam_blacklisted_link():
+                    raise
+                logger.warning(
+                    "Wikidata spam filter blocked the homepage edit for %s", item.id
+                )
 
 
 @sentry_sdk.trace
