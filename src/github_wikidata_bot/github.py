@@ -92,6 +92,42 @@ class RepositorySummary:
     metadata: RepositoryMetadata | None = None
 
 
+def _decode_json_response(response: Response) -> Any | None:
+    """Decode a GitHub response, or return None for a 304 cache hit.
+
+    The bot crashed while decoding a GitHub response that had passed the HTTP
+    status check. If this happens again, log the status, headers, and first
+    256 bytes of the body so we can see what GitHub sent. Re-raise the original
+    error.
+    """
+    if response.status_code == 304:
+        return None
+
+    try:
+        return response.json()
+    except json.JSONDecodeError, UnicodeDecodeError:
+        sensitive_headers = {
+            "authorization",
+            "proxy-authorization",
+            "cookie",
+            "set-cookie",
+        }
+        headers = [
+            (name, "[redacted]" if name.lower() in sensitive_headers else value)
+            for name, value in response.headers.multi_items()
+        ]
+        logger.warning(
+            "GitHub response JSON decoding failed for %s (status=%d, headers=%r, "
+            "body_bytes=%d, body_preview=%r)",
+            response.url,
+            response.status_code,
+            headers,
+            len(response.content),
+            response.content[:256],
+        )
+        raise
+
+
 class GitHubClient:
     auth_headers: dict[str, str]
     api_concurrency: Semaphore
@@ -118,9 +154,7 @@ class GitHubClient:
         server returned 304 Not Modified.
         """
         response = await self._fetch_response(url, caching_headers, query=query)
-        payload = None
-        if response.status_code != 304:
-            payload = response.json()
+        payload = _decode_json_response(response)
         return payload, response.headers, str(response.url)
 
     async def _fetch_response(
@@ -389,10 +423,8 @@ class CachedGitHubClient(GitHubClient):
         else:
             logger.info(f"Reusing response: {url}")
 
-        payload = None
-        if response.status_code != 304:
-            # Decode on each use so callers cannot mutate another item's payload.
-            payload = response.json()
+        # Decode on each use so callers cannot mutate another item's payload.
+        payload = _decode_json_response(response)
         self._responses[cache_key] = response
         return payload, response.headers, str(response.url)
 

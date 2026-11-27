@@ -59,6 +59,39 @@ class SequentialTransport(httpx2.AsyncBaseTransport):
 
 
 @pytest.mark.anyio
+async def test_graphql_logs_invalid_json_response_and_propagates_error(caplog):
+    body = b"<html>\n" + b"x" * 256 + b"outside-preview"
+    response = httpx2.Response(
+        200,
+        headers={
+            "Content-Type": "text/html",
+            "X-GitHub-Request-Id": "sample-request-id",
+            "Set-Cookie": "session=secret-cookie",
+        },
+        content=body,
+    )
+    transport = SequentialTransport([("https://api.github.com/graphql", response)])
+    secrets = Secrets("test", "test", "test", "fake")
+
+    async with AsyncClient(transport=transport) as client:
+        github_client = GitHubClient(secrets, client, Settings())
+        with pytest.raises(json.JSONDecodeError) as exc:
+            await github_client.fetch_repository_summaries_graphql(
+                [GitHubRepo("perl6", "nqp")]
+            )
+
+    assert exc.value.doc == body.decode()
+    assert "status=200" in caplog.text
+    assert "('content-type', 'text/html')" in caplog.text
+    assert "('x-github-request-id', 'sample-request-id')" in caplog.text
+    assert "('set-cookie', '[redacted]')" in caplog.text
+    assert "secret-cookie" not in caplog.text
+    assert f"body_bytes={len(body)}" in caplog.text
+    assert f"body_preview={body[:256]!r}" in caplog.text
+    assert "outside-preview" not in caplog.text
+
+
+@pytest.mark.anyio
 async def test_repo_rename_updates_wikidata(tmp_path, monkeypatch):
     """End-to-end: GitHub reports perl6/nqp -> Raku/nqp rename, Wikidata P1324 is updated."""
     monkeypatch.setattr("github_wikidata_bot.github.cache_root", lambda: tmp_path)
